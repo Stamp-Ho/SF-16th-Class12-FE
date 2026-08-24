@@ -86,7 +86,7 @@ export default function RecordModal({
                     <div className="flex flex-col min-w-0 mr-3">
                       <div className="flex items-center gap-2 mb-0.5">
                         <span className="font-bold text-slate-700 text-sm truncate">
-                          {record.name}
+                          {record.user_name}
                         </span>
                       </div>
                       {record.song_name && (

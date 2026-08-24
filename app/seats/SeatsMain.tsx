@@ -201,14 +201,14 @@ export default function SeatsMain({ profile }: { profile: any }) {
 	return (
 		<main className="min-h-screen bg-slate-50 p-6 md:p-6">
 			<div className="max-w-6xl mx-auto space-y-6">
+				<Link
+					href="/"
+					className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 transition-colors w-fit py-2 m-0"
+				>
+					<ArrowLeft className="w-4 h-4" /> 메인 화면으로
+				</Link>
 				{/* 1. 상단 헤더 */}
 				<div className="flex flex-col sm:flex-row sm:items-center gap-4">
-					<Link
-						href="/"
-						className="flex items-center -ml-15 mr-2.5 gap-2 text-sm text-slate-600 hover:text-slate-900 transition-colors mb-2 py-2"
-					>
-						<ArrowLeft className="w-4 h-4" /> 홈
-					</Link>
 					<div>
 						<h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
 							<Armchair className="w-7 h-7 text-indigo-600" />
