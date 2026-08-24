@@ -42,12 +42,11 @@ export async function searchSongAtYouTube(query: string) {
   }));
 }
 /** 1. 반 id 기반 전체 노래 기록/대기열 불러오기 */
-export async function getSongRecords(classId: string) {
+export async function getSongRecords() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("song_records")
     .select("*")
-    .eq("class_id", classId)
     .order("display_order", { ascending: true }); // order 오름차순 정렬
 
   if (error) {
@@ -57,12 +56,11 @@ export async function getSongRecords(classId: string) {
 }
 
 /** 2. 큐의 가장 앞(1순위) 노래 조회 */
-export async function getTopSongRecord(classId: string) {
+export async function getTopSongRecord() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("song_records")
     .select("*")
-    .eq("class_id", classId)
     .eq("status", "pending")
     .order("display_order", { ascending: true })
     .limit(1)
@@ -76,7 +74,6 @@ export async function getTopSongRecord(classId: string) {
 
 /** 3. 노래 큐 추가 (Deque: Front 추가 / Back 추가) */
 export async function addSongRecord(
-  classId: string | number,
   name: string,
   reason: string,
   isFront: boolean = false // true면 맨 앞(우선 예약), false면 맨 뒤(일반 예약)
@@ -87,7 +84,6 @@ export async function addSongRecord(
   const { data: borderRecords } = await supabase
     .from("song_records")
     .select("display_order")
-    .eq("class_id", classId)
     .eq("status", "pending")
     .order("display_order", { ascending: true });
 
@@ -105,8 +101,7 @@ export async function addSongRecord(
 
   const { data, error } = await supabase.from("song_records").insert([
     {
-      class_id: classId,
-      name,
+      user_name: name,
       reason,
       display_order: newOrder,
       status: "pending"
@@ -117,7 +112,6 @@ export async function addSongRecord(
     throw new Error(`노래 큐 추가 실패: ${error.message}`);
   }
 
-  revalidatePath(`/class/${classId}`);
   return { data, error };
 }
 
@@ -125,8 +119,7 @@ export async function addSongRecord(
 export async function startTopSongRecord({
   id,
   songName,
-  youtubeUrl,
-  youtubeVideoId
+  youtubeUrl
 }: {
   id: string;
   songName: string;
@@ -140,7 +133,6 @@ export async function startTopSongRecord({
     .update({
       song_name: songName,
       youtube_url: youtubeUrl,
-      youtube_video_id: youtubeVideoId,
       status: "singing"
     })
     .eq("id", id);
@@ -152,7 +144,7 @@ export async function startTopSongRecord({
 }
 
 /** 5. 가장 앞의 노래 종료/완료 처리 (Pop Front) */
-export async function completeSongRecord(id: string, classId: string) {
+export async function completeSongRecord(id: string) {
   const supabase = await createClient();
 
   const { data, error } = await supabase
@@ -166,12 +158,11 @@ export async function completeSongRecord(id: string, classId: string) {
     throw new Error(`노래 완료 처리 실패: ${error.message}`);
   }
 
-  revalidatePath(`/class/${classId}`);
   return { data, error };
 }
 
 /** 6. 기록 삭제 대신 cancel 처리 */
-export async function cancelSongRecord(id: string, classId: string) {
+export async function cancelSongRecord(id: string) {
   const supabase = await createClient();
 
   const { data, error } = await supabase
@@ -185,7 +176,6 @@ export async function cancelSongRecord(id: string, classId: string) {
     throw new Error(`노래 취소 처리 실패: ${error.message}`);
   }
 
-  revalidatePath(`/class/${classId}`);
   return { data, error };
 }
 
@@ -193,7 +183,7 @@ export async function cancelSongRecord(id: string, classId: string) {
 export async function getChatMessages(songId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
-    .from("karaoke_chats")
+    .from("song_chats")
     .select("*")
     .eq("song_id", songId)
     .order("created_at", { ascending: true });
@@ -209,17 +199,20 @@ export async function getChatMessages(songId: string) {
 export async function sendChatMessage({
   songId,
   senderName,
+  nickname,
   message
 }: {
   songId: string;
   senderName: string;
+  nickname: string;
   message: string;
 }) {
   const supabase = await createClient();
-  const { error } = await supabase.from("karaoke_chats").insert([
+  const { error } = await supabase.from("song_chats").insert([
     {
-      song_id: songId,
-      sender_name: senderName,
+      song_record_id: songId,
+      user_name: senderName,
+      nickname: nickname,
       message
     }
   ]);
@@ -231,7 +224,6 @@ export async function sendChatMessage({
 /** 드래그 앤 드롭 후 전체 대기열 순서 일괄 재정렬 */
 export async function reorderSongRecords(
   orderedSingers: { id: string; display_order: number }[],
-  classId: string | number
 ) {
   const supabase = await createClient();
 
@@ -245,6 +237,5 @@ export async function reorderSongRecords(
 
   await Promise.all(updates);
 
-  revalidatePath(`/class/${classId}`);
   return { success: true };
 }

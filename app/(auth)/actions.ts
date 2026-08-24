@@ -4,20 +4,18 @@
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
 
-export async function getUsers(classId: string) {
+export async function getUsers() {
   const supabase = await createClient();
   const { data: users, error } = await supabase
-    .from("profiles")
-    .select("id, name, email, class_id")
-    .eq("class_id", classId);
+    .from("users")
+    .select("id, username, email")
   if (error) {
     throw new Error(`Failed to fetch users: ${error.message}`);
   }
-  return users.sort((a, b) => a.name.localeCompare(b.name));
+  return users.sort((a, b) => a.username.localeCompare(b.username));
 }
 
 export async function loginWithName(formData: FormData) {
-  const classId = formData.get("classId") as string;
   const name = formData.get("name") as string;
   const password = formData.get("password") as string;
 
@@ -27,18 +25,18 @@ export async function loginWithName(formData: FormData) {
 
   const supabase = await createClient();
 
-  // 1. 이름(name)으로 profiles 테이블에서 유저의 가상 이메일 조회
+  // 1. 이름(name)으로 users 테이블에서 유저의 가상 이메일 조회
   const { data: profile, error: profileError } = await supabase
-    .from("profiles")
+    .from("users")
     .select("email")
-    .eq("class_id", classId.trim())
-    .eq("name", name.trim())
+    .eq("username", name.trim())
     .single();
   if (profileError || !profile || !profile.email) {
     return {
-      error: "반과 이름이 정확한지 확인해 주세요."
+      error: "이름이 정확한지 확인해 주세요."
     };
   }
+  console.log("Found user email:", profile.email);
 
   // 2. DB에서 조회해온 가상 이메일로 Supabase Auth 로그인 실행
   const { error: signInError } = await supabase.auth.signInWithPassword({

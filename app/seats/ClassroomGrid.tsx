@@ -2,12 +2,13 @@
 
 import { useState, useTransition, useEffect } from "react";
 import {
-  deleteSeatInfo,
-  placeOrMoveSeatBid,
-  swapSeatPositions,
-  toggleSeatLock
+  assignDetailedSeat,
+  deleteAllocation,
+  placeBid,
+  toggleLockSeat,
 } from "./actions";
 import { ArrowLeftRight, Lock, LockOpen, Sparkles, Star, Trash } from "lucide-react";
+import BidRecordModal from "./BidRecordModal";
 
 interface SeatData {
   id: string;
@@ -15,48 +16,86 @@ interface SeatData {
   current_group_id: string | null;
   current_group_name: string | null;
   member_left: string | null;
+  member_middle: string | null;
   member_right: string | null;
   current_bid_price: number;
   is_closed: boolean;
-  locked: boolean;
+  is_locked : boolean;
 }
 
+const positions = ["left", "middle", "right"] as const;
 const SEAT_MAP = [
-  { num: 1, type: "seat", code: "가", pos: "R"},
-  { num: 2, type: "seat", code: "A", pos: "L" },
-  { num: 3, type: "seat", code: "A", pos: "R" },
-  { num: 4, type: "seat", code: "B", pos: "L" },
-  { num: 5, type: "seat", code: "B", pos: "R" },
-  { num: 6, type: "seat", code: "나", pos: "R" },
+  { num: 1, type: "seat", code: "가", pos: 1},
+  { num: 2, type: "seat", code: "A", pos: 0 },
+  { num: 3, type: "seat", code: "A", pos: 1 },
+  { num: 4, type: "seat", code: "B", pos: 0 },
+  { num: 5, type: "seat", code: "B", pos: 1 },
+  { num: 6, type: "seat", code: "나", pos: 1 },
 
-  { num: 7, type: "seat", code: "C", pos: "L" },
-  { num: 8, type: "seat", code: "C", pos: "R" },
-  { num: 9, type: "seat", code: "D", pos: "L" },
-  { num: 10, type: "seat", code: "D", pos: "R" },
-  { num: 11, type: "seat", code: "E", pos: "L" },
-  { num: 12, type: "seat", code: "E", pos: "R" },
+  { num: 7, type: "seat", code: "C", pos: 0 },
+  { num: 8, type: "seat", code: "C", pos: 1 },
+  { num: 9, type: "seat", code: "D", pos: 0 },
+  { num: 10, type: "seat", code: "D", pos: 1 },
+  { num: 11, type: "seat", code: "E", pos: 0 },
+  { num: 12, type: "seat", code: "E", pos: 1 },
 
-  { num: 13, type: "seat", code: "F", pos: "L" },
-  { num: 14, type: "seat", code: "F", pos: "R" },
-  { num: 15, type: "seat", code: "G", pos: "L" },
-  { num: 16, type: "seat", code: "G", pos: "R" },
-  { num: 17, type: "seat", code: "H", pos: "L" },
-  { num: 18, type: "seat", code: "H", pos: "R" },
+  { num: 13, type: "seat", code: "F", pos: 0 },
+  { num: 14, type: "seat", code: "F", pos: 1 },
+  { num: 15, type: "seat", code: "G", pos: 0 },
+  { num: 16, type: "seat", code: "G", pos: 1 },
+  { num: 17, type: "seat", code: "H", pos: 0 },
+  { num: 18, type: "seat", code: "H", pos: 1 },
 
-  { num: 19, type: "seat", code: "I", pos: "L" },
-  { num: 20, type: "seat", code: "I", pos: "R" },
-  { num: 21, type: "seat", code: "J", pos: "L" },
-  { num: 22, type: "seat", code: "J", pos: "R" },
-  { num: 23, type: "seat", code: "K", pos: "L" },
-  { num: 24, type: "seat", code: "K", pos: "R" },
+  { num: 19, type: "seat", code: "I", pos: 0 },
+  { num: 20, type: "seat", code: "I", pos: 1 },
+  { num: 21, type: "seat", code: "J", pos: 0 },
+  { num: 22, type: "seat", code: "J", pos: 1 },
+  { num: 23, type: "seat", code: "K", pos: 0 },
+  { num: 24, type: "seat", code: "K", pos: 1 },
 
-  { num: 25, type: "seat", code: "다", pos:"R" },
-  { num: 26, type: "seat", code: "L", pos: "L" },
-  { num: 27, type: "seat", code: "L", pos: "R" },
-  { num: 28, type: "seat", code: "M", pos: "L" },
-  { num: 29, type: "seat", code: "M", pos: "R" },
+  { num: 25, type: "seat", code: "다", pos: 1 },
+  { num: 26, type: "seat", code: "L", pos: 0 },
+  { num: 27, type: "seat", code: "L", pos: 1 },
+  { num: 28, type: "seat", code: "M", pos: 0 },
+  { num: 29, type: "seat", code: "M", pos: 1 },
   { num: 30, type: "thinking", name: "생각의자" }
 ];
+const SEAT_MAP_FOR_3 = [
+  { num: 1, type: "seat", code: "A", pos: 0 },
+  { num: 2, type: "seat", code: "A", pos: 1 },
+  { num: 3, type: "seat", code: "A", pos: 2 },
+  { num: 4, type: "seat", code: "B", pos: 0 },
+  { num: 5, type: "seat", code: "B", pos: 1 },
+  { num: 6, type: "seat", code: "B", pos: 2 },
+
+  { num: 7, type: "seat", code: "C", pos: 0 },
+  { num: 8, type: "seat", code: "C", pos: 1 },
+  { num: 9, type: "seat", code: "C", pos: 2 },
+  { num: 10, type: "seat", code: "D", pos: 0 },
+  { num: 11, type: "seat", code: "D", pos: 1 },
+  { num: 12, type: "seat", code: "D", pos: 2 },
+
+  { num: 13, type: "seat", code: "E", pos: 0 },
+  { num: 14, type: "seat", code: "E", pos: 1 },
+  { num: 15, type: "seat", code: "E", pos: 2 },
+  { num: 16, type: "seat", code: "F", pos: 0 },
+  { num: 17, type: "seat", code: "F", pos: 1 },
+  { num: 18, type: "seat", code: "F", pos: 2 },
+
+  { num: 19, type: "seat", code: "G", pos: 0 },
+  { num: 20, type: "seat", code: "G", pos: 1 },
+  { num: 21, type: "seat", code: "G", pos: 2 },
+  { num: 22, type: "seat", code: "H", pos: 0 },
+  { num: 23, type: "seat", code: "H", pos: 1 },
+  { num: 24, type: "seat", code: "H", pos: 2 },
+
+  { num: 25, type: "seat", code: "I", pos: 0 },
+  { num: 26, type: "seat", code: "I", pos: 1 },
+  { num: 27, type: "seat", code: "I", pos: 2 },
+  { num: 28, type: "thinking", name: "생각의자" },
+  { num: 29, type: "thinking", name: "생각의자" },
+  { num: 30, type: "thinking", name: "생각의자" }
+]
 
 const CORNER_SEATS = ["가", "나", "다"];
 
@@ -99,28 +138,30 @@ const MY_CODE_COLORS: Record<string, string> = {
   };
 
 export default function ClassroomGrid({
-  roundNumber,
+  roundId,
   seatList,
   myGroupId,
   myGroupName,
   currentUserName,
   isAdmin,
-  classId,
+  numberPerGroup,
   loadData
 }: {
-  roundNumber: number;
+  roundId: number;
   seatList: SeatData[];
   myGroupId: string;
   myGroupName: string;
   currentUserName: string;
-  isAdmin: boolean;
-  classId: string;
+  isAdmin: boolean; 
+  numberPerGroup: number;
   loadData: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
   // 💡 드래그 중인 타일의 시각적 피드백 상태 (드롭 호버 중인 구역 코드)
   const [dragOverCode, setDragOverCode] = useState<string | null>(null);
   const [tatalCost, setTotalCost] = useState<number>(0);
+  const [recordModalOpen, setRecordModalOpen] = useState(false);
+  const seatMap = numberPerGroup === 3 ? SEAT_MAP_FOR_3 : SEAT_MAP;
 
   useEffect(() => {
     let result = 0;
@@ -134,31 +175,25 @@ export default function ClassroomGrid({
   const handleSeatClick = (code: string) => {
     // 이미 트랜지션 처리 중이면 중복 요청 차단
     if (isPending) return;
-    if(myGroupName.includes(",") && ["가", "나", "다"].includes(code)) {
+    if(CORNER_SEATS.includes(code) && myGroupName.includes(",")) {
       alert("가/나/다 구역은 1인 팀만 입찰 가능합니다.");
       return;
     }
+    const seat = getSeatInfo(code);
+    if (!seat) return;
+
     startTransition(async () => {
-      const res = await placeOrMoveSeatBid(
-        roundNumber,
-        code,
-        myGroupId,
-        myGroupName,
-        classId
-      );
-
-      if (!res.success) {
-        alert(res.error);
-        loadData();
-        return;
+      try {
+        await placeBid({
+          allocationId: Number(seat.id),
+          nextGroupId: Number(myGroupId),
+          userName: currentUserName,
+          priceChange: 500,
+        });
+        await loadData();
+      } catch (err: any) {
+        alert(`입찰 실패: ${err.message}`);
       }
-
-      if (res.message) {
-        alert(res.message);
-      }
-
-      // 필요한 데이터 갱신
-      loadData();
     });
   };
 
@@ -166,32 +201,44 @@ export default function ClassroomGrid({
   const handleSeatDropBid = async (
     code: string,
     targetGroupId: string,
-    targetGroupName: string
   ) => {
     try {
-      await placeOrMoveSeatBid(
-        roundNumber,
-        code,
-        targetGroupId,
-        targetGroupName,
-        classId
-      );
+      const seat = getSeatInfo(code);
+      if (!seat) return;
+
+      await placeBid({
+        allocationId: Number(seat.id),
+        nextGroupId: Number(targetGroupId),
+        userName: currentUserName,
+        priceChange: 500,
+      });
+      await loadData();
     } catch (err: any) {
       alert(`드롭 배정 실패: ${err.message}`);
     }
   };
 
-  const handleSwapClick = async (e: React.MouseEvent, seatId: string) => {
+  const handleSwapClick = async (e: React.MouseEvent, seatId: string, swap1and2: boolean) => {
     e.stopPropagation();
+    const seat = seatList.find((item) => item.id === seatId);
+    if (!seat) return;
+
     try {
-      await swapSeatPositions(seatId);
+      await assignDetailedSeat({
+        allocationId: Number(seatId),
+        memberLeft: swap1and2 ? seat.member_middle ?? null : seat.member_left ?? null,
+        memberMiddle: swap1and2 ? seat.member_left ?? null : seat.member_right ?? null,
+        memberRight: swap1and2 ? seat.member_right ?? null : seat.member_middle ?? null,
+      });
+      await loadData();
     } catch (err: any) {
       alert(`위치 변경 실패: ${err.message}`);
     }
   };
   const handleLockClick = async (seatId: string, nextState: boolean) => {
     try {
-      await toggleSeatLock(seatId, nextState);
+      await toggleLockSeat(Number(seatId));
+      await loadData();
     } catch (err: any) {
       alert(`좌석 잠금/해제 실패: ${err.message}`);
     }
@@ -219,13 +266,12 @@ export default function ClassroomGrid({
 
     // 드래그 아이템에서 전달된 그룹 정보 추출
     const targetGroupId = e.dataTransfer.getData("text/plain");
-    const targetGroupName = e.dataTransfer.getData("groupName");
 
-    if (!targetGroupId || !targetGroupName) return;
+    if (!targetGroupId) return;
 
     // 본인 그룹이거나 관리자인 경우 드롭 진행
     if (isAdmin || targetGroupId === myGroupId) {
-      await handleSeatDropBid(code, targetGroupId, targetGroupName);
+      await handleSeatDropBid(code, targetGroupId);
     } else {
       alert("본인의 팀 카드만 드래그하여 배치할 수 있습니다.");
     }
@@ -233,6 +279,12 @@ export default function ClassroomGrid({
 
   return (
     <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4 max-w-4xl mx-auto">
+      {recordModalOpen && (
+        <BidRecordModal
+          roundId={roundId}
+          onClose={() => setRecordModalOpen(false)}
+        />
+      )}
       {/* 스크린 / 문 / 강사님 */}
       <div className="space-y-3">
         <div className="grid grid-cols-12 gap-2 text-center text-xs font-bold">
@@ -248,14 +300,21 @@ export default function ClassroomGrid({
             href="https://app.notion.com/p/3a366fe0f687805d9a4bf4cdec5299bf"
             target="_blank"
             rel="noopener noreferrer"
-            className="col-span-10 bg-slate-800 text-white py-2 rounded-xl flex items-center justify-center gap-2 block"
+            className="col-span-8 bg-slate-800 text-white py-2 rounded-xl flex items-center justify-center gap-2 block"
           >
             <Sparkles className="w-4 h-4 text-amber-400" /> 칠판 (스크린)
           </a>
+          <button
+            type="button"
+            onClick={() => setRecordModalOpen(true)}
+            className="col-span-2 bg-indigo-50 text-indigo-900 py-2 rounded-xl border border-indigo-300 flex items-center justify-center gap-1.5 hover:bg-indigo-100 transition-colors"
+          >
+            기록 보기
+          </button>
         </div>
         <div className="flex justify-between">
           <div className="w-48 bg-violet-50 border-2 border-violet-300 text-violet-900 py-2.5 rounded-xl font-bold text-xs text-center">
-            총액: {(tatalCost * 2).toLocaleString()}원
+            총액: {(tatalCost * numberPerGroup).toLocaleString()}원
           </div>
           <div className="w-48 bg-amber-50 border-2 border-amber-300 text-amber-900 py-2.5 rounded-xl font-bold text-xs text-center">
             강사님 자~리
@@ -266,14 +325,14 @@ export default function ClassroomGrid({
       {/* 좌석 그리드 */}
       <div className="grid grid-cols-2 gap-12">
         <div className="grid grid-cols-3 gap-2 gap-y-6">
-          {SEAT_MAP.filter((s) =>
+          {seatMap.filter((s) =>
             [1, 2, 3, 7, 8, 9, 13, 14, 15, 19, 20, 21, 25, 26, 27].includes(
               s.num
             )
           ).map(renderTile)}
         </div>
         <div className="grid grid-cols-3 gap-2 gap-y-6">
-          {SEAT_MAP.filter((s) =>
+          {seatMap.filter((s) =>
             [4, 5, 6, 10, 11, 12, 16, 17, 18, 22, 23, 24, 28, 29, 30].includes(
               s.num
             )
@@ -306,9 +365,10 @@ export default function ClassroomGrid({
       isOccupied &&
       (seatInfo?.current_group_id === myGroupId ||
         seatInfo?.member_left === currentUserName ||
+        seatInfo?.member_middle === currentUserName ||
         seatInfo?.member_right === currentUserName);
-
-    const isLeft = tile.pos === "L";
+    const position = positions[tile.pos]; // 0: left, 1: middle, 2: right
+    const isCorner = CORNER_SEATS.includes(tile.code);
 
     // 내 그룹이면 원래 구역 색상의 '진한 톤(MY_CODE_COLORS)', 아니면 '연한 톤(CODE_COLORS)' 적용
     const colorClass = isMyGroup
@@ -316,13 +376,12 @@ export default function ClassroomGrid({
         "bg-indigo-600 text-white ring-4 ring-indigo-300"
       : CODE_COLORS[tile.code] || "bg-slate-50 border-slate-200";
 
-    const personName = CORNER_SEATS.includes(tile.code) && (!seatInfo?.member_left || !seatInfo?.member_right) ? seatInfo?.member_left || seatInfo?.member_right : isLeft ? seatInfo?.member_left : seatInfo?.member_right;
-
-    const canSwap =
+    const personName = isCorner ? seatInfo?.member_left : seatInfo?.[`member_${position}`];
+    const canSwap = !isCorner && isOccupied &&(
       isAdmin ||
-      (isOccupied &&
         (currentUserName === seatInfo?.member_left ||
-          currentUserName === seatInfo?.member_right) && !CORNER_SEATS.includes(tile.code));
+          currentUserName === seatInfo?.member_right)
+    );
 
     // 💡 드래그한 카드가 타일 위에 올라왔을 때 강조 스타일
     const isHovered = dragOverCode === tile.code;
@@ -393,15 +452,15 @@ export default function ClassroomGrid({
         </div>
 
         {/* 스위치 (<->) 버튼 */}
-        {canSwap && seatInfo && !seatInfo.locked && !isLeft && (
+        {canSwap && seatInfo && !seatInfo.is_locked && position !== "left" && (
           <button
             onMouseEnter={(e) => e.stopPropagation()}
             disabled={isPending}
             onClick={(e) => {
               e.preventDefault();
-              handleSwapClick(e, seatInfo.id);
+              handleSwapClick(e, seatInfo.id, position === "middle");
             }}
-            className={`absolute top-7.5 py-1.25 px-2.25 rounded-md border-2 transition-colors cursor-pointer ${colorClass
+            className={`absolute top-6.75 py-1.25 px-2.25 rounded-md border-2 transition-colors cursor-pointer ${colorClass
               .replace("bg-", "bg-white ")
               .replace("text-", "text-slate-900 ")
               .replace(
@@ -413,56 +472,61 @@ export default function ClassroomGrid({
             <ArrowLeftRight className="w-3 h-3" />
           </button>
         )}
-        {isAdmin && seatInfo && !isLeft && (
+        {isAdmin &&seatInfo&& seatInfo.current_group_id !== null  && position === "middle" && (
           <>
-          <button
-            onMouseEnter={(e) => e.stopPropagation()}
-            disabled={isPending}
-            className={`absolute top-1 p-1 rounded-full border-2 transition-colors cursor-pointer ${colorClass
-              .replace("bg-", "bg-white ")
-              .replace("text-", "text-slate-900 ")
-              .replace(
-                "ring-3",
-                "ring-2"
-              )} ${tile.num % 6 === 4 ? "-left-9" : "-left-4 "}`}
-            onClick={(e) => {
-              e.preventDefault();
-              handleLockClick(seatInfo.id, !seatInfo.locked);
-            }}
-            title={seatInfo.locked ? "좌석 잠금 해제" : "좌석 잠금"}
-          >
-            {seatInfo.locked ? (
-              <Lock className="w-3 h-3 text-red-500" />
-            ) : (
-              <LockOpen className="w-3 h-3" />
-            )}
-          </button>
-          <button
-            onMouseEnter={(e) => e.stopPropagation()}
-            disabled={isPending}
-            onClick={(e) => {
-              e.preventDefault();
-              if (confirm("정말로 이 좌석 정보를 삭제하시겠습니까?")) {
-                startTransition(async () => {
-                  try {
-                    await deleteSeatInfo(seatInfo.id);
-                  } catch (err: any) {
-                    alert(`삭제 에러: ${err.message}`);
-                  }
-                });
-              }
-            }}
-            className={`absolute top-14.5 p-1 rounded-full border-2 transition-colors cursor-pointer ${colorClass
-              .replace("bg-", "bg-white ")
-              .replace("text-", "text-slate-900 ")
-              .replace(
-                "ring-3",
-                "ring-2"
-              )} ${tile.num % 6 === 4 ? "-left-9" : "-left-4 "}`}
-            title="좌석 삭제"
-          >
-            <Trash className="w-3 h-3" />
-          </button></>
+            {
+              <button
+                onMouseEnter={(e) => e.stopPropagation()}
+                disabled={isPending}
+                className={`absolute -top-0.5 p-1 rounded-full border-2 transition-colors cursor-pointer ${colorClass
+                  .replace("bg-", "bg-white ")
+                  .replace("text-", "text-slate-900 ")
+                  .replace(
+                    "ring-3",
+                    "ring-2"
+                  )} ${numberPerGroup === 3 || isCorner? "left-10":tile.num % 6 === 4 ? "-left-9" : "-left-4 "}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleLockClick(seatInfo.id, !seatInfo.is_locked);
+                }}
+                title={seatInfo.is_locked ? "좌석 잠금 해제" : "좌석 잠금"}
+              >
+                {seatInfo.is_locked ? (
+                  <Lock className="w-3 h-3 text-red-500" />
+                ) : (
+                  <LockOpen className="w-3 h-3" />
+                )}
+                
+              </button>
+            }
+            <button
+              onMouseEnter={(e) => e.stopPropagation()}
+              disabled={isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (confirm("정말로 이 좌석 정보를 삭제하시겠습니까?")) {
+                  startTransition(async () => {
+                    try {
+                      await deleteAllocation(Number(seatInfo.id));
+                      await loadData();
+                    } catch (err: any) {
+                      alert(`삭제 에러: ${err.message}`);
+                    }
+                  });
+                }
+              }}
+              className={`absolute top-14.5 p-1 rounded-full border-2 transition-colors cursor-pointer ${colorClass
+                .replace("bg-", "bg-white ")
+                .replace("text-", "text-slate-900 ")
+                .replace(
+                  "ring-3",
+                  "ring-2"
+                )} ${numberPerGroup === 3 || isCorner ? "left-10" :tile.num % 6 === 4 ? "-left-9" : "-left-4 "}`}
+              title="좌석 삭제"
+            >
+              <Trash className="w-3 h-3" />
+            </button>
+          </>
         )}
       </div>
     );

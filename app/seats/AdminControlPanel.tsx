@@ -3,9 +3,9 @@
 import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-	toggleAuctionStatus,
-	assignUnallocatedGroupsRandomly,
-	deleteSeatRound,
+	closeRound,
+	openRound,
+	deleteRound,
 } from './actions';
 import {
 	Lock,
@@ -20,12 +20,10 @@ export default function AdminControlPanel({
 	roundNumber,
 	isClosed,
 	loadData,
-	classId,
 }: {
 	roundNumber: number;
 	isClosed: boolean;
 	loadData: () => Promise<void>;
-	classId: string;
 }) {
 	const [isPending, startTransition] = useTransition();
 	const router = useRouter();
@@ -39,7 +37,11 @@ export default function AdminControlPanel({
 	const handleToggleStatus = () => {
 		startTransition(async () => {
 			try {
-				await toggleAuctionStatus(roundNumber, !isClosed, classId);
+				if (isClosed) {
+					await openRound(roundNumber);
+				} else {
+					await closeRound(roundNumber);
+				}
 				await refreshAuctionState();
 			} catch (err: any) {
 				alert(`상태 변경 에러: ${err.message}`);
@@ -47,27 +49,6 @@ export default function AdminControlPanel({
 		});
 	};
 
-	// 2. 미배정 그룹 랜덤 일괄 배치
-
-	const handleRandomAssign = () => {
-		if (
-			!confirm(
-				'자리를 잡지 못한 그룹들을 남은 빈 구역에 무작위로 배치하시겠습니까?',
-			)
-		)
-			return;
-
-		startTransition(async () => {
-			try {
-				// 💡 roundNumber만 전달하면 서버가 알아서 미배정 짝을 찾아 매핑합니다!
-				await assignUnallocatedGroupsRandomly(roundNumber, classId);
-				await refreshAuctionState();
-				alert('미배정 그룹 배치가 완료되었습니다!');
-			} catch (err: any) {
-				alert(`배치 에러: ${err.message}`);
-			}
-		});
-	};
 
 	return (
 		<div className="bg-slate-900 text-white p-5 rounded-2xl shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -114,22 +95,13 @@ export default function AdminControlPanel({
 					)}
 				</button>
 
-				{/* 미배정 그룹 랜덤 배치 버튼 */}
-				<button
-					onClick={handleRandomAssign}
-					disabled={isPending}
-					className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold transition-all"
-				>
-					<Shuffle className="w-3.5 h-3.5" /> 미배정 그룹 랜덤 배치
-				</button>
-
 				{/* 경매 삭제 버튼 */}
 				<button
 					onClick={() => {
 						if (confirm('정말로 이 회차의 경매를 삭제하시겠습니까?')) {
 							startTransition(async () => {
 								try {
-									await deleteSeatRound(roundNumber, classId);
+									await deleteRound(roundNumber);
 									await refreshAuctionState();
 									alert('경매가 삭제되었습니다.');
 								} catch (err: any) {

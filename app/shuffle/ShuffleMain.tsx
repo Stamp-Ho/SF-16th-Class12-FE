@@ -1,20 +1,14 @@
 "use client";
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   getTargetUsers,
-  saveRandomDraw,
-  getRandomDrawHistory
 } from "./actions";
-import HistoryModal from "./HistoryModal";
 import {
   Dices,
   Shuffle,
-  Save,
-  History,
   ArrowLeft,
   Loader2,
-  CheckCircle2,
   Sparkles,
   Trophy
 } from "lucide-react";
@@ -22,29 +16,19 @@ interface UserItem {
   id: string;
   name: string;
 }
-export default function ShuffleMain({ classId }: { classId: string }) {
+export default function ShuffleMain() {
   const [users, setUsers] = useState<UserItem[]>([]);
   const [shuffledList, setShuffledList] = useState<
     { order: number; name: string }[]
   >([]);
 
   const [isShuffling, setIsShuffling] = useState(false);
-  const [isPending, startTransition] = useTransition();
-
-  // 저장 폼 상태
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [saveMessage, setSaveMessage] = useState("");
-
-  // 히스토리 모달 상태
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [history, setHistory] = useState<any[]>([]);
 
   // 1. 초기 유저 데이터 로드
   useEffect(() => {
     async function load() {
       try {
-        const data = await getTargetUsers(classId || "");
+        const data = await getTargetUsers();
         setUsers(data);
         // 초기 고정 순서 설정
         setShuffledList(
@@ -55,14 +39,13 @@ export default function ShuffleMain({ classId }: { classId: string }) {
       }
     }
     load();
-  }, [classId]);
+  }, []);
 
   // 2. 셔플(Fisher-Yates) 함수 및 애니메이션 효과
   const handleShuffle = () => {
     if (users.length === 0 || isShuffling) return;
 
     setIsShuffling(true);
-    setSaveMessage("");
 
     let count = 0;
     const maxTicks = 20; // 셔플 회전 횟수
@@ -85,34 +68,6 @@ export default function ShuffleMain({ classId }: { classId: string }) {
     }, 80); // 80ms 간격으로 틱 변경
   };
 
-  // 3. 결과 DB 저장 핸들러
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim() || shuffledList.length === 0) return;
-
-    setSaveMessage("");
-
-    startTransition(async () => {
-      try {
-        await saveRandomDraw(title, description, shuffledList, classId);
-        setSaveMessage("추첨 결과가 성공적으로 저장되었습니다!");
-        setTitle("");
-        setDescription("");
-      } catch (err: any) {
-        setSaveMessage(`저장 에러: ${err.message}`);
-      }
-    });
-  };
-  // 4. 히스토리 모달 열기
-  const handleOpenHistory = async () => {
-    try {
-      const data = await getRandomDrawHistory(classId || "");
-      setHistory(data);
-      setIsHistoryOpen(true);
-    } catch (err: any) {
-      alert(`히스토리 로드 실패: ${err.message}`);
-    }
-  };
   return (
     <main className="min-h-screen bg-slate-50 p-6 md:p-12">
       <div className="max-w-5xl mx-auto space-y-8">
@@ -134,13 +89,6 @@ export default function ShuffleMain({ classId }: { classId: string }) {
             </p>
           </div>
 
-          <button
-            onClick={handleOpenHistory}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl hover:bg-slate-50 hover:border-slate-300 shadow-sm transition-all self-start sm:self-auto"
-          >
-            <History className="w-4 h-4 text-slate-500" />
-            과거 추첨 기록 보기
-          </button>
         </div>
 
         {/* 셔플 액션 컨트롤 파트 */}
@@ -172,7 +120,7 @@ export default function ShuffleMain({ classId }: { classId: string }) {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* 1. 추첨 결과 리스트 카드 (2열 차지) */}
-          <section className="lg:col-span-2 bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
+          <section className="lg:col-span-3 bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <h3 className="font-bold text-slate-800 flex items-center gap-2 text-base">
                 <Trophy className="w-5 h-5 text-amber-500" />
@@ -186,7 +134,7 @@ export default function ShuffleMain({ classId }: { classId: string }) {
             </div>
 
             {/* 순서 격자 배치 */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-5 sm:grid-cols-5 gap-3">
               {shuffledList.map((item) => (
                 <div
                   key={item.order}
@@ -216,7 +164,7 @@ export default function ShuffleMain({ classId }: { classId: string }) {
           </section>
 
           {/* 2. 결과 DB 저장 폼 (1열 차지) */}
-          <section className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4 h-fit">
+          {/* <section className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4 h-fit">
             <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
               <Save className="w-5 h-5 text-indigo-600" />
               <h3 className="font-bold text-slate-800 text-base">
@@ -271,15 +219,15 @@ export default function ShuffleMain({ classId }: { classId: string }) {
                 </div>
               )}
             </form>
-          </section>
+          </section> */}
         </div>
 
         {/* 히스토리 모달 */}
-        <HistoryModal
+        {/* <HistoryModal
           isOpen={isHistoryOpen}
           onClose={() => setIsHistoryOpen(false)}
           history={history}
-        />
+        /> */}
       </div>
     </main>
   );

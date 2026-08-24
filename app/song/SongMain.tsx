@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, DiscAlbum, MicVocal, Play } from 'lucide-react';
 import Link from 'next/link';
 import { addSongRecord, getSongRecords } from './actions';
@@ -17,7 +17,7 @@ const RandomSelectModal = dynamic(() => import('./RandomSelectModal'), {
 export default function SongMain({
 	user,
 }: {
-	user: { name: string; role: string; classId: string };
+	user: { name: string; role: string};
 }) {
 	const supabase = useMemo(() => createClient(), []);
 	const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
@@ -27,6 +27,7 @@ export default function SongMain({
 	const [newSingerName, setNewSingerName] = useState('');
 	const [newSingerReason, setNewSingerReason] = useState('');
 	const [addFront, setAddFront] = useState(false); // 우선 예약 여부 상태
+	const singerNameInputRef = useRef<HTMLInputElement>(null);
 
 	const [singerList, setSingerList] = useState<
 		{ id: string; name: string; reason: string }[]
@@ -34,13 +35,13 @@ export default function SongMain({
 
 	const fetchSingerList = async () => {
 		try {
-			const data = await getSongRecords(user.classId);
+			const data = await getSongRecords();
 			setSingerList(
 				data
 					.filter((record) => record.status === 'pending')
 					.map((record) => ({
 						id: record.id,
-						name: record.name,
+						name: record.user_name,
 						reason: record.reason,
 					})),
 			);
@@ -51,10 +52,9 @@ export default function SongMain({
 	};
 	useEffect(() => {
 		fetchSingerList();
-	}, [user.classId]);
+	}, []);
 
 	useEffect(() => {
-		if (!user.classId) return;
 		fetchSingerList(); // 초기 로드 시 한 번 호출
 		const channel = supabase
 			.channel(`song_records`)
@@ -69,15 +69,13 @@ export default function SongMain({
 		return () => {
 			supabase.removeChannel(channel);
 		};
-	}, [user.classId]);
+	}, []);
 
 	const onSubmitAddSinger = async (e: React.FormEvent) => {
 		e.preventDefault();
 		if (!newSingerName.trim()) return;
 		try {
 			await addSongRecord(
-				user.classId,
-
 				newSingerName,
 				newSingerReason,
 				addFront,
@@ -87,6 +85,7 @@ export default function SongMain({
 			setAddFront(false);
 
 			fetchSingerList(); // 명단 추가 후 리스트 갱신
+			singerNameInputRef.current?.focus();
 		} catch (error) {
 			console.error('명단 추가 실패:', error);
 		}
@@ -170,13 +169,16 @@ export default function SongMain({
 							<h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
 								✨ 가수 대기열 추가
 							</h2>
+							<h4 className="text-sm text-slate-400 -mt-3 mb-3">탭 순서: 가수 이름 → 노래 사유 → 대기열 추가하기 (추가 후 다시 가수 이름으로 포커스)</h4>
 
 							<div className="grid grid-cols-3 grid-rows-1 gap-3">
 								<input
+									ref={singerNameInputRef}
 									type="text"
 									placeholder="가수 이름"
 									value={newSingerName}
 									onChange={(e) => setNewSingerName(e.target.value)}
+									tabIndex={1}
 									className="border-2 border-ssafy-blue/40 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-ssafy-blue focus:ring-2 focus:ring-ssafy-blue/20 transition-all"
 								/>
 								<input
@@ -184,6 +186,7 @@ export default function SongMain({
 									placeholder="노래 사유 (예: 벌칙, 지각, 기분 좋음)"
 									value={newSingerReason}
 									onChange={(e) => setNewSingerReason(e.target.value)}
+									tabIndex={1}
 									className="border-2 border-ssafy-blue/40 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-ssafy-blue focus:ring-2 focus:ring-ssafy-blue/20 transition-all"
 								/>
 								{/* 무작위 뽑기! */}
@@ -192,6 +195,7 @@ export default function SongMain({
 									onClick={() => {
 										setIsRandomSelectModalOpen(true);
 									}}
+									tabIndex={0}
 									className="col-span-1 py-2 bg-ssafy-blue hover:bg-ssafy-blue/80 text-white text-sm font-bold rounded-xl shadow-sm transition-all active:scale-[0.98]"
 								>
 									🎲 무작위 뽑기
@@ -203,6 +207,7 @@ export default function SongMain({
 								{[true, false].map((value) => (
 									<button
 										type="button"
+										tabIndex={0}
 										key={`addFront-${value}`}
 										className={`py-2 text-xs font-bold rounded-lg transition-all border-2 ${
 											addFront === value
@@ -220,13 +225,14 @@ export default function SongMain({
 								type="submit"
 								className="w-full py-3 bg-ssafy-blue hover:bg-ssafy-blue/90 text-white text-sm font-bold rounded-xl shadow-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.99]"
 								disabled={!newSingerName}
+								tabIndex={1}
 							>
 								대기열에 추가하기
 							</button>
 						</form>
 					</section>
 				) : (
-					<section className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+					<section className="bg-gradient-to-r from-ssafy-blue/10 via-white to-white p-6 rounded-2xl shadow-sm border border-slate-100">
 						<h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">
 							MY TURN STATUS
 						</h2>
@@ -247,7 +253,7 @@ export default function SongMain({
 							) : singerList.some((singer) =>
 									singer.name.includes(user.name),
 							  ) ? (
-								<div className="p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-center gap-3">
+								<div className="p-4 bg-gradient-to-l from-ssafy-blue/10 via-white to-white border border-blue-200 rounded-xl flex items-center gap-3">
 									<span className="text-2xl">👀</span>
 									<div>
 										<p className="text-blue-800 font-bold text-base">
@@ -294,12 +300,10 @@ export default function SongMain({
 				{isRecordModalOpen && (
 					<RecordModal
 						onClose={() => setIsRecordModalOpen(false)}
-						classId={user.classId}
 					/>
 				)}
 				{isRandomSelectModalOpen && (
 					<RandomSelectModal
-						classId={user.classId}
 						setSingerName={setNewSingerName}
 						setSingerReason={setNewSingerReason}
 						onClose={() => setIsRandomSelectModalOpen(false)}

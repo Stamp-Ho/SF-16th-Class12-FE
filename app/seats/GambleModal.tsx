@@ -1,15 +1,16 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { processGamble } from './actions';
+import { gambleBid } from './actions';
 import { Dices, Sparkles } from 'lucide-react';
 
 interface GambleModalProps {
   seatId: string;
+  userName: string;
   onClose: () => void;
 }
 
-export default function GambleModal({ seatId, onClose }: GambleModalProps) {
+export default function GambleModal({ seatId, userName, onClose }: GambleModalProps) {
   const [isSpinning, setIsSpinning] = useState(true);
   const [result, setResult] = useState<"loss" | "win" | null>(null);
 
@@ -36,13 +37,18 @@ export default function GambleModal({ seatId, onClose }: GambleModalProps) {
 
     const startGamble = async () => {
       try {
+        const plus3000 = Math.random() < 0.2; // 20% 확률로 +3,000 당첨
         // 1. 서버에서 즉시 DB 변경 및 결과 수령
-        const { isWin } = await processGamble(seatId);
+        await gambleBid({
+          allocationId: Number(seatId),
+          userName,
+          priceChange: plus3000 ? 3000 : -500,
+        });
 
         if (isCancelled) return;
 
-        const finalResult = isWin ? "win" : "loss";
-        const targetSymbol = isWin ? "+3,000" : "-500";
+        const finalResult = plus3000 ? "win" : "loss";
+        const targetSymbol = plus3000 ? "+3,000" : "-500";
 
         // 2. 당첨 기호를 정면(0번)에 배치
         const totalSlots = 12;

@@ -4,10 +4,8 @@ import { bulkRegisterUsers } from "./actions";
 import { UserPlus, Loader2, CheckCircle2 } from "lucide-react";
 
 export default function BulkRegisterForm({
-  classInfo,
   onRegisterSuccess
 }: {
-  classInfo: { id: string; name: string };
   onRegisterSuccess?: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
@@ -24,9 +22,7 @@ export default function BulkRegisterForm({
     startTransition(async () => {
       try {
         const res = await bulkRegisterUsers(
-          userNames,
-          classInfo.name,
-          classInfo.id
+          userNames
         );
         setUserMessage(
           `성공: ${res.successCount}명 / 실패: ${res.failCount}명`
@@ -48,13 +44,6 @@ export default function BulkRegisterForm({
 
       <form onSubmit={handleUserSubmit} className="space-y-4">
         <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-1">
-            반 이름
-          </label>
-          <div className="text-sm font-medium font-bold text-slate-500 mb-4">
-            {classInfo.name}
-          </div>
-
           <label className="block text-xs font-semibold text-slate-600 mb-1">
             이름 목록 (Comma-separated)
           </label>

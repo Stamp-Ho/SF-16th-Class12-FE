@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { getSeatRounds } from './actions';
+import { getAllRounds, getAllocationsByRound, getGroupsByRound, getSeatsDataByRounds } from './actions';
 import ClassroomGrid from './ClassroomGrid';
 import { createClient } from '@/utils/supabase/client';
 import {
@@ -25,7 +25,8 @@ const AllocationAddModal = dynamic(() => import('./AllocationAddModal'), {
 	ssr: false,
 });
 
-export default function SeatsMain({ classId }: { classId: string }) {
+export default function SeatsMain({ profile }: { profile: any }) {
+
 	const supabase = useMemo(() => createClient(), []);
 
 	const [rounds, setRounds] = useState<any[]>([]);
@@ -38,63 +39,91 @@ export default function SeatsMain({ classId }: { classId: string }) {
 	const selectedRoundNumberRef = useRef<number | null>(null);
 
 	// 로그인 사용자 정보
-	const [currentUser, setCurrentUser] = useState({ name: '', isAdmin: false });
-
+	const currentUser = profile;
 	// 그룹 정렬 기준 (선점 좌석 없으면 상단 노출)
 	const [sortGroupsByOccupied, setSortGroupsByOccupied] = useState(true);
 
-	const fetchCurrentUser = useCallback(async () => {
-		try {
-			const {
-				data: { user },
-			} = await supabase.auth.getUser();
-
-			if (!user) return;
-
-			// profiles 테이블에서 name과 role 조회
-			const { data: profile } = await supabase
-				.from('profiles')
-				.select('name, role')
-				.eq('id', user.id)
-				.single();
-
-			if (profile) {
-				setCurrentUser({
-					name: profile.name,
-					isAdmin:
-						profile.role === 'super_admin' || profile.role === 'class_admin',
-				});
-			}
-		} catch (err) {
-			console.error('유저 정보 조회 실패:', err);
-		}
-	}, [supabase]);
-
 	const loadData = useCallback(async () => {
 		try {
-			const data = await getSeatRounds(classId);
+			const roundData = await getAllRounds();
+			if (!roundData || roundData.length === 0) {
+				setRounds([]);
+				setSelectedRound(null);
+				return;
+			}
+
+			// 1. 전체 라운드 ID 목록으로 그룹 및 좌석 배정 데이터를 한 번에 가져옴 (단 1회 네트워크 요청)
+			const roundIds = roundData.map((r) => r.id);
+			const { groups: allGroups, allocations: allAllocations } = await getSeatsDataByRounds(roundIds);
+
+			// 2. round_id 기준으로 빠른 매핑을 위한 그룹핑 (Map 활용)
+			const groupsMap = new Map<number, typeof allGroups>();
+			for (const group of allGroups) {
+				const list = groupsMap.get(group.round_id) || [];
+				list.push(group);
+				groupsMap.set(group.round_id, list);
+			}
+
+			const allocationsMap = new Map<number, typeof allAllocations>();
+			for (const allocation of allAllocations) {
+				const list = allocationsMap.get(allocation.round_id) || [];
+				list.push(allocation);
+				allocationsMap.set(allocation.round_id, list);
+			}
+
+			// 3. 인메모리에서 데이터 조립 (비동기 병목 제거)
+			const data = roundData.map((round) => {
+				const groups = groupsMap.get(round.id) || [];
+				const allocations = allocationsMap.get(round.id) || [];
+
+				return {
+				...round,
+				roundNumber: round.id,
+				numberPerGroup: round.people_per_group,
+				isClosed: round.is_closed,
+				groups: groups.map((group) => ({
+					...group,
+					groupId: String(group.id),
+					m1: group.member_1,
+					m2: group.member_2,
+					m3: group.member_3,
+					groupName: group.group_name,
+				})),
+				seats: allocations.map((allocation) => ({
+					...allocation,
+					id: String(allocation.id),
+					current_group_id: allocation.group_id ? String(allocation.group_id) : null,
+					current_group_name: allocation.seat_group?.group_name ?? null,
+					current_bid_price: allocation.bid_price,
+					locked: allocation.is_locked,
+					member_left: allocation.member_left ?? allocation.seat_group?.member_1 ?? null,
+					member_middle: allocation.member_middle ?? allocation.seat_group?.member_2 ?? null,
+					member_right: allocation.member_right ?? allocation.seat_group?.member_3 ?? null,
+				})),
+				};
+			});
+
 			setRounds(data);
 
 			setSelectedRound((prevSelected: any) => {
 				if (data.length === 0) return null;
 
 				if (prevSelected) {
-					const matchedRound = data.find(
-						(r) => r.roundNumber === prevSelected.roundNumber,
-					);
-					return matchedRound || data[0];
+				const matchedRound = data.find(
+					(r) => r.roundNumber === prevSelected.roundNumber
+				);
+				return matchedRound || data[0];
 				}
 
 				return data[0];
 			});
-		} catch (err) {
+			} catch (err) {
 			console.error('데이터 로드 에러:', err);
-		}
-	}, [classId]);
+			}
+	}, []);
 
 	useEffect(() => {
 		void loadData();
-		void fetchCurrentUser();
 		// 💡 Supabase Realtime 구독 설정
 		const channel = supabase
 			.channel('realtime-seats')
@@ -104,7 +133,6 @@ export default function SeatsMain({ classId }: { classId: string }) {
 					event: 'UPDATE',
 					schema: 'public',
 					table: 'seat_allocations',
-					filter: `class_id=eq.${classId}`,
 				},
 				(payload) => {
 					const updatedSeat = payload.new;
@@ -115,9 +143,9 @@ export default function SeatsMain({ classId }: { classId: string }) {
 					if (
 						currentCode &&
 						updatedSeat.seat_code === currentCode &&
-						updatedSeat.current_group_id !== currentGroupId &&
-						updatedSeat.current_group_id !== null &&
-						updatedSeat.round_number === selectedRoundNumberRef.current
+						updatedSeat.group_id !== Number(currentGroupId) &&
+						updatedSeat.group_id !== null &&
+						updatedSeat.round_id === selectedRoundNumberRef.current
 					) {
 						alert(
 							`⚠️ [경고] ${updatedSeat.seat_code}구역 자리를 다른 팀이 상향 입찰하여 뺏어갔습니다!`,
@@ -133,7 +161,7 @@ export default function SeatsMain({ classId }: { classId: string }) {
 		return () => {
 			supabase.removeChannel(channel);
 		};
-	}, [classId, fetchCurrentUser, loadData, supabase]);
+	}, [ loadData, supabase]);
 
 	// 신규 배정 모달 열기
 	const handleOpenCreateModal = () => {
@@ -148,7 +176,7 @@ export default function SeatsMain({ classId }: { classId: string }) {
 
 	// 💡 2. 동명이인이 없으므로 currentGroups에서 내 이름(currentUser.name)이 속한 짝 찾기
 	const myMatchedGroup = currentGroups.find(
-		(g: any) => g.m1 === currentUser.name || g.m2 === currentUser.name,
+		(g: any) => g.m1 === currentUser.name || g.m2 === currentUser.name || g.m3 === currentUser.name,
 	);
 
 	// 내 그룹 ID 및 그룹명 (예: groupId: "GROUP_1", groupName: "정인호, 김철수")
@@ -173,14 +201,14 @@ export default function SeatsMain({ classId }: { classId: string }) {
 	return (
 		<main className="min-h-screen bg-slate-50 p-6 md:p-6">
 			<div className="max-w-6xl mx-auto space-y-6">
+				<Link
+					href="/"
+					className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 transition-colors w-fit py-2 m-0"
+				>
+					<ArrowLeft className="w-4 h-4" /> 메인 화면으로
+				</Link>
 				{/* 1. 상단 헤더 */}
 				<div className="flex flex-col sm:flex-row sm:items-center gap-4">
-					<Link
-						href="/"
-						className="flex items-center -ml-15 mr-2.5 gap-2 text-sm text-slate-600 hover:text-slate-900 transition-colors mb-2 py-2"
-					>
-						<ArrowLeft className="w-4 h-4" /> 홈
-					</Link>
 					<div>
 						<h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
 							<Armchair className="w-7 h-7 text-indigo-600" />
@@ -191,7 +219,7 @@ export default function SeatsMain({ classId }: { classId: string }) {
 						</p>
 					</div>
 
-					{currentUser.isAdmin && (
+					{currentUser.role === "super_admin" && (
 						<button
 							onClick={handleOpenCreateModal}
 							className="flex items-center ml-auto gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-all self-start sm:self-auto"
@@ -221,12 +249,11 @@ export default function SeatsMain({ classId }: { classId: string }) {
 				{/* 3. 내 그룹 및 선점 위치 요약 카드 */}
 
 				{/* 4. 어드민 제어 패널 */}
-				{currentUser.isAdmin && selectedRound && (
+				{currentUser.role === "super_admin" && selectedRound && (
 					<AdminControlPanel
 						roundNumber={selectedRound.roundNumber}
 						isClosed={selectedRound.isClosed}
 						loadData={loadData}
-						classId={classId}
 					/>
 				)}
 
@@ -236,14 +263,14 @@ export default function SeatsMain({ classId }: { classId: string }) {
 						{/* 좌측 (2열 차지): 배치도 */}
 						<div className="lg:col-span-2">
 							<ClassroomGrid
-								roundNumber={selectedRound.roundNumber}
+								roundId={selectedRound.id}
 								seatList={selectedRound.seats}
 								myGroupId={myGroupId}
 								myGroupName={myGroupName}
 								currentUserName={currentUser.name}
-								isAdmin={currentUser.isAdmin}
+								isAdmin={currentUser.role === "super_admin"}
+								numberPerGroup={selectedRound.numberPerGroup}
 								loadData={loadData}
-								classId={classId}
 							/>
 						</div>
 
@@ -254,9 +281,9 @@ export default function SeatsMain({ classId }: { classId: string }) {
 								<div className="bg-linear-to-br from-indigo-300 to-indigo-600 text-white px-5 py-3 rounded-2xl shadow-md flex items-center justify-between">
 									<div className="space-y-1">
 										<span className="text-[10px] font-bold bg-white/20 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-											MY PAIR
+											MY GROUP
 										</span>
-										<h3 className="text-xl font-black">{myGroupName}</h3>
+										<h3 className={`${myGroupName.length > 8 ? "text-[14.5px]" : "text-xl"} flex items-center h-7.25 font-black`}>{myGroupName}</h3>
 										<p className="text-indigo-100 text-xs">
 											본인:{' '}
 											<span className="font-bold underline">
@@ -428,7 +455,7 @@ export default function SeatsMain({ classId }: { classId: string }) {
 											>
 												<div>
 													<p className="font-bold text-slate-800">
-														{!!g.m1 && !!g.m2 ? `${g.m1} • ${g.m2}` : `${g.m1 || ''}${g.m2 || ''}`}
+														{[g.m1, g.m2, g.m3].filter(Boolean).join(' • ')}
 													</p>
 												</div>
 
@@ -462,13 +489,13 @@ export default function SeatsMain({ classId }: { classId: string }) {
 						onClose={() => setIsModalOpen(false)}
 						rounds={rounds}
 						loadData={loadData}
-						classId={classId}
 					/>
 				)}
 
 				{gambleModalOn && (
 					<GambleModal
 						seatId={myOccupiedSeat?.id || ''}
+						userName={currentUser.name}
 						onClose={() => setGambleModalOn(false)}
 					/>
 				)}

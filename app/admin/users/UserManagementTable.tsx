@@ -4,8 +4,7 @@ import { useState, useTransition, useEffect } from "react";
 import {
   updateUserStatus,
   getAllUsers,
-  resetUserPassword,
-  getClasses
+  resetUserPassword
 } from "./actions";
 import {
   ShieldCheck,
@@ -19,69 +18,34 @@ import {
   KeyRound,
   X
 } from "lucide-react";
-import ClassAdminRegisterForm from "./ClassAdminRegisterForm";
 import BulkRegisterForm from "./BulkRegisterForm";
 
 interface Profile {
+  username: string;
+  role: "super_admin" | "class_admin" | "user" | "song_admin" | "teacher";
+  status: "ACTIVE" | "INACTIVE";
   id: string;
-  name: string;
-  email: string | null;
-  role: "super_admin" | "class_admin" | "user" | "song_admin";
-  status: "active" | "blocked";
-  class_id: string | null;
-  className?: string; // 클래스 이름 (선택적)
-  created_at: string;
 }
 
-export default function UserManagementTable({
-  initialUsers,
-  userRole,
-  myId,
-  classId
-}: {
-  initialUsers: Profile[];
-  userRole?: "super_admin" | "class_admin" | "user" | "song_admin";
-  myId?: string;
-  classId: string | null;
-}) {
-  const [users, setUsers] = useState<Profile[]>(initialUsers);
-  const [classes, setClasses] = useState<{ id: string; name: string }[]>([]);
+export default function UserManagementTable() {
+  const [users, setUsers] = useState<Profile[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [searchClass, setSearchClass] = useState("");
   const [isPending, startTransition] = useTransition();
-  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [loadingName, setLoadingName] = useState<string | null>(null);
   const [isResetting, setIsResetting] = useState(false);
   const [resetTargetUser, setResetTargetUser] = useState<Profile | null>(null);
 
-  const [isRegisteringAdmin, setIsRegisteringAdmin] = useState(false);
   const [isRegisteringBatch, setIsRegisteringBatch] = useState(false);
 
   // 검색 필터링 (이름/이메일기준)
   const filteredUsers = users.filter(
     (u) =>
-      u.name.includes(searchTerm.toLowerCase()) &&
-      u?.className?.includes(searchClass.toLowerCase())
+      u.username.includes(searchTerm.toLowerCase())
   );
 
   const fetchUsers = async () => {
-    const users = await getAllUsers(
-      userRole === "class_admin" ? classId : null
-    );
-    const classes = await getClasses(
-      userRole === "class_admin" ? classId : null
-    );
-    setClasses(classes);
-    if (userRole === "class_admin" && classId) {
-      setSearchClass(classes[0]?.name ?? "");
-    }
-    setUsers(
-      users.map((user) => {
-        return {
-          ...user,
-          className: classes.find((cls) => cls.id === user.class_id)?.name ?? ""
-        };
-      })
-    );
+    const users = await getAllUsers();
+    setUsers(users);
   };
   useEffect(() => {
     // 초기 유저 목록을 가져오는 로직 (예: API 호출)
@@ -91,10 +55,10 @@ export default function UserManagementTable({
   // 권한 또는 상태 업데이트 핸들러
   const handleStatusChange = (
     userId: string,
-    newRole: "class_admin" | "user" | "song_admin",
-    newStatus: "active" | "blocked"
+    newRole: "class_admin" | "user" | "song_admin" | "teacher",
+    newStatus: "ACTIVE" | "INACTIVE"
   ) => {
-    setLoadingId(userId);
+    setLoadingName(userId);
 
     startTransition(async () => {
       try {
@@ -109,7 +73,7 @@ export default function UserManagementTable({
       } catch (err: any) {
         alert(`업데이트 실패: ${err.message}`);
       } finally {
-        setLoadingId(null);
+        setLoadingName(null);
       }
     });
   };
@@ -120,9 +84,9 @@ export default function UserManagementTable({
       return;
     }
     try {
-      await resetUserPassword(resetTargetUser.id, "ssafy16");
+      await resetUserPassword(resetTargetUser.username, "ssafy16");
       alert(
-        `[${resetTargetUser?.name}] 님의 비밀번호가 성공적으로 변경되었습니다.`
+        `[${resetTargetUser?.username}] 님의 비밀번호가 성공적으로 변경되었습니다.`
       );
     } catch (err: any) {
       alert(`초기화 실패: ${err.message}`);
@@ -132,7 +96,7 @@ export default function UserManagementTable({
     }
   };
   return (
-    <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden space-y-4 p-6 col-span-1 md:col-span-2">
+    <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden space-y-4 p-6 col-span-1 md:col-span-1">
       {/* 상단 타이틀 & 검색 바 */}
       <div className="flex flex-col justify-between gap-4 border-b border-slate-100 pb-4">
         <div className="flex flex-row items-center justify-between gap-2 pr-4">
@@ -151,67 +115,14 @@ export default function UserManagementTable({
           />
         </div>
 
-        {/* Class 검색 */}
-
-        {userRole === "super_admin" && (
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => setSearchClass("")}
-              className={`px-3 py-1 text-[11px] font-medium rounded-lg border transition-colors ${
-                searchClass === ""
-                  ? "bg-indigo-600 border-indigo-600 text-white"
-                  : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              전체
-            </button>
-            {classes.map(({ id, name }) => (
-              <button
-                key={id}
-                onClick={() => setSearchClass(name)}
-                className={`px-3 py-1 text-[11px] font-medium rounded-lg border transition-colors ${
-                  searchClass === name
-                    ? "bg-indigo-600 border-indigo-600 text-white"
-                    : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                {name}
-              </button>
-            ))}
-          </div>
-        )}
         {/* 등록버튼 */}
-        <div>
-          {userRole === "super_admin" && (
-            <button
-              onClick={() => setIsRegisteringAdmin(true)}
-              className="px-3 py-1 mr-2 text-[11px] font-medium rounded-lg border bg-indigo-600 border-indigo-600 text-white hover:bg-indigo-700"
-            >
-              반 생성 및 관리자 등록
-            </button>
-          )}
+        <div className="flex flex-row items-center justify-between gap-2 pr-4">
           <button
             onClick={() => setIsRegisteringBatch(true)}
-            className={`px-3 py-1 text-[11px] font-medium rounded-lg border bg-indigo-600 border-indigo-600 text-white hover:bg-indigo-700 ${
-              searchClass === "" ? "opacity-30 cursor-not-allowed" : ""
-            }`}
-            disabled={searchClass === ""}
+            className={`px-3 py-1 text-[11px] font-medium rounded-lg border bg-indigo-600 border-indigo-600 text-white hover:bg-indigo-700 `}
           >
             회원 일괄 등록
           </button>
-        </div>
-
-        {isRegisteringAdmin ? (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white w-full max-w-sm rounded-2xl p-6 space-y-4 shadow-2xl relative">
-              <X
-                className="w-5 h-5 text-slate-400 hover:text-slate-600 absolute top-4 right-4 cursor-pointer"
-                onClick={() => setIsRegisteringAdmin(false)}
-              />
-              <ClassAdminRegisterForm onRegisterSuccess={fetchUsers} />
-            </div>
-          </div>
-        ) : (
           <div className="relative w-full sm:w-64">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
@@ -222,7 +133,8 @@ export default function UserManagementTable({
               className="w-full pl-9 pr-4 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
-        )}
+        </div>
+
         {isRegisteringBatch && (
           <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white w-full max-w-sm rounded-2xl p-6 space-y-4 shadow-2xl relative">
@@ -231,9 +143,6 @@ export default function UserManagementTable({
                 onClick={() => setIsRegisteringBatch(false)}
               />
               <BulkRegisterForm
-                classInfo={
-                  classes.filter((c) => c.name.includes(searchClass))[0]
-                }
                 onRegisterSuccess={fetchUsers}
               />
             </div>
@@ -246,7 +155,6 @@ export default function UserManagementTable({
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              <th className="py-3 px-4">반</th>
               <th className="py-3 px-4">이름</th>
               <th className="py-3 px-4">Role</th>
               <th className="py-3 px-4">상태</th>
@@ -256,19 +164,16 @@ export default function UserManagementTable({
           <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
             {filteredUsers.length > 0 ? (
               filteredUsers.map((user) => {
-                const isLoading = loadingId === user.id;
+                const isLoading = loadingName === user.username;
 
                 return (
                   <tr
-                    key={user.id}
+                    key={user.username}
                     className="hover:bg-slate-50/80 transition-colors"
                   >
-                    <td className="py-3 px-1 font-semibold text-slate-600 items-center min-w-[50px]">
-                      {user.className || "미지정"}
-                    </td>
                     {/* 이름 */}
                     <td className="py-3 px-1 font-semibold text-sm text-slate-900 items-center min-w-[50px]">
-                      {user.name}
+                      {user.username}
                     </td>
                     {/* 권한 뱃지 */}
                     <td className="py-3 px-1">
@@ -282,6 +187,14 @@ export default function UserManagementTable({
                           <ShieldCheck className="w-3 h-3 text-amber-600" />C
                           Admin
                         </span>
+                      ) : user.role === "teacher" ? (
+                        <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 border border-green-200/60 py-0.5 px-1 rounded-full text-[11px] font-semibold">
+                          <User className="w-3 h-3 text-green-600" /> Teacher
+                        </span>
+                      ) : user.role === "song_admin" ? (
+                        <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 border border-purple-200/60 py-0.5 px-1 rounded-full text-[11px] font-semibold">
+                          <ShieldCheck className="w-3 h-3 text-purple-600" /> Song
+                        </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 px-2.5 py-0.5 rounded-full text-[11px] font-medium">
                           <User className="w-3 h-3 text-slate-400" /> User
@@ -291,7 +204,7 @@ export default function UserManagementTable({
 
                     {/* 상태 뱃지 */}
                     <td className="py-3">
-                      {user.status === "active" ? (
+                      {user.status === "ACTIVE" ? (
                         <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-md text-[11px] font-medium">
                           <CheckCircle2 className="w-3 h-3" /> 정상
                         </span>
@@ -322,63 +235,35 @@ export default function UserManagementTable({
                           >
                             <KeyRound className="w-3.5 h-3.5" />
                           </button>
-                          {/* 권한 토글 버튼 */}
-                          {user.id !== myId &&
-                            user.role !== "super_admin" &&
-                            user.role !== "song_admin" && (
-                              <>
-                                <button
-                                  onClick={() =>
-                                    handleStatusChange(
-                                      user.id,
-                                      user.role === "class_admin"
-                                        ? "user"
-                                        : "class_admin",
-                                      user.status
-                                    )
-                                  }
-                                  className={`px-2.5 py-1 text-[11px] font-medium rounded-lg border transition-colors ${
-                                    user.role === "class_admin"
-                                      ? "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                                      : "bg-amber-500 border-amber-500 text-white hover:bg-amber-600"
-                                  }`}
-                                >
-                                  {user.role === "class_admin"
-                                    ? "User로 변경"
-                                    : "Admin 지정"}
-                                </button>
-                                {/* 차단 토글 버튼 */}
-                                <button
-                                  onClick={() =>
-                                    handleStatusChange(
-                                      user.id,
-                                      user.role === "super_admin"
-                                        ? "class_admin"
-                                        : user.role,
-                                      user.status === "active"
-                                        ? "blocked"
-                                        : "active"
-                                    )
-                                  }
-                                  className={`px-2.5 py-1 text-[11px] font-medium rounded-lg border transition-colors ${
-                                    user.status === "active"
-                                      ? "bg-white border-rose-200 text-rose-600 hover:bg-rose-50"
-                                      : "bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700"
-                                  }`}
-                                >
-                                  {user.status === "active"
-                                    ? "차단"
-                                    : "차단 해제"}
-                                </button>
-                              </>
-                            )}
+                          <button
+                            onClick={() =>
+                              user.role !== "super_admin" && handleStatusChange(
+                                user.id, user.role,
+                                user.status === "ACTIVE"
+                                  ? "INACTIVE"
+                                  : "ACTIVE"
+                              )
+                            }
+                            className={`px-2.5 py-1 text-[11px] font-medium rounded-lg border transition-colors ${
+                              user.status === "ACTIVE"
+                                ? "bg-white border-rose-200 text-rose-600 hover:bg-rose-50"
+                                : "bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700"
+                            } disabled:cursor-not-allowed disabled:opacity-30`}
+                            disabled={user.role === "super_admin"}
+                          >
+                            {user.status === "ACTIVE"
+                              ? "차단"
+                              : "차단 해제"}
+                          </button>
                         </div>
                       )}
                     </td>
                   </tr>
                 );
-              })
-            ) : (
+              }
+              
+            )
+          ) : (
               <tr>
                 <td
                   colSpan={5}
@@ -397,8 +282,8 @@ export default function UserManagementTable({
           <div className="bg-white w-full max-w-sm rounded-2xl p-6 space-y-4 shadow-2xl relative">
             <div className="flex items-center justify-between ">
               <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                <KeyRound className="w-4 h-4 text-indigo-600" />[
-                {resetTargetUser.name}]의 비밀번호를 초기화 하겠습니까?
+                <KeyRound className="w-4 h-4 text-indigo-600" />
+                {resetTargetUser.username}님의 비밀번호를 초기화 하겠습니까?
               </h3>
               <button
                 type="button"
@@ -409,23 +294,22 @@ export default function UserManagementTable({
               </button>
             </div>
 
-            <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
-              <div className="flex justify-end gap-2 pt-2 mr-1">
-                <button
-                  type="button"
-                  onClick={() => setResetTargetUser(null)}
-                  className="cursor-pointer px-4.5 py-2.25 text-md font-semibold text-slate-500 hover:bg-slate-100 rounded-xl"
-                >
-                  취소
-                </button>
-                <button
-                  type="submit"
-                  className="cursor-pointer px-4.5 py-2.25 text-md font-bold bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 flex items-center gap-1 shadow-md shadow-indigo-100"
-                >
-                  초기화
-                </button>
-              </div>
-            </form>
+            <div className="flex justify-end gap-2 pt-2 mr-1">
+              <button
+                type="button"
+                onClick={() => setResetTargetUser(null)}
+                className="cursor-pointer px-4.5 py-2.25 text-md font-semibold text-slate-500 hover:bg-slate-100 rounded-xl"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleResetPasswordSubmit}
+                className="cursor-pointer px-4.5 py-2.25 text-md font-bold bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 flex items-center gap-1 shadow-md shadow-indigo-100"
+              >
+                초기화
+              </button>
+            </div>
           </div>
         </div>
       )}

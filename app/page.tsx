@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/server';
-import LoginModal from '@/components/LoginModal';
+import LoginModal from '@/app/(auth)/LoginModal';
 import { logout } from '@/app/(auth)/actions';
 import {
 	Armchair,
@@ -13,37 +13,22 @@ import {
 } from 'lucide-react';
 import ChangePwButton from '@/components/ChangePwButton';
 import DeleteLinkButton from '@/components/DeleteLinkButton';
+import { requireAuth } from '@/utils/auth';
 
 export default async function MainPage() {
 	const supabase = await createClient();
-
-	// 1. 현재 세션 유저 조회
-	const {
-		data: { user },
-	} = await supabase.auth.getUser();
+	  const { status, profile } = await requireAuth();
 
 	// 로그인하지 않은 경우 바로 로그인 모달 출력
-	if (!user) {
+	if (!profile) {
 		return <LoginModal />;
 	}
 
-	// 2. 로그인 유저의 profile (Role) 조회
-	const { data: profile } = await supabase
-		.from('profiles')
-		.select('id, name, role, class_id')
-		.eq('id', user.id)
-		.single();
 
-	if (!profile?.class_id) {
-		return <div className="text-center text-red-500">권한이 없습니다.</div>;
-	}
-
-	const [{ data: classInfo }, { data: links }] = await Promise.all([
-		supabase.from('classes').select('name').eq('id', profile.class_id).single(),
+	const [{ data: links }] = await Promise.all([
 		supabase
 			.from('dashboard_links')
 			.select('id, title, url, description, display_order')
-			.eq('class_id', profile.class_id)
 			.order('display_order', { ascending: true }),
 	]);
 
@@ -57,12 +42,12 @@ export default async function MainPage() {
 				<header className="flex justify-between items-center bg-white p-6 pb-5 rounded-2xl shadow-sm border border-slate-100">
 					<div>
 						<h1 className="text-2xl font-bold text-slate-800">
-							[SSAFY 16기] {classInfo?.name} 대시보드
+							[SSAFY 16기] 12반 대시보드
 						</h1>
 						<p className="text-sm text-slate-500 mt-2">
 							반갑습니다,{' '}
 							<span className="font-semibold text-slate-800">
-								{profile?.name}
+								{profile?.username}
 							</span>
 							님!
 							{isAdmin && (
@@ -131,7 +116,7 @@ export default async function MainPage() {
 								</span>
 								<h2 className="text-2xl font-bold mt-3">노래 큐</h2>
 								<p className="text-teal-100 text-sm mt-1">
-									{classInfo?.name}의 노래방
+									12반의 노래방
 								</p>
 							</div>
 							<MicVocal className="w-10 h-10 text-indigo-100 group-hover:scale-110 transition-transform" />
@@ -150,7 +135,7 @@ export default async function MainPage() {
 								</span>
 								<h2 className="text-2xl font-bold mt-3">순서 무작위 추첨</h2>
 								<p className="text-teal-100 text-sm mt-1">
-									26명 무작위 셔플 및 결과 저장
+									26명 무작위 순서 뽑기
 								</p>
 							</div>
 							<Dices className="w-10 h-10 text-teal-200 group-hover:scale-110 transition-transform" />
@@ -161,8 +146,7 @@ export default async function MainPage() {
 				{/* 공지사항 목록 */}
 				<section className="space-y-4">
 					<h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-						<Megaphone className="w-5 h-5 text-indigo-500" /> 공지사항 & 주요
-						링크
+						<Megaphone className="w-5 h-5 text-indigo-500" /> 주요 링크
 					</h2>
 
 					<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -186,16 +170,13 @@ export default async function MainPage() {
 											<p className="text-xs text-slate-500 mt-2">
 												{item.description}
 											</p>
-											{profile?.role?.includes('super_admin') && (
-												<DeleteLinkButton linkId={item.id} />
-											)}
 										</div>
 									)}
 								</a>
 							))
 						) : (
 							<div className="col-span-full bg-white p-8 rounded-2xl border border-dashed border-slate-200 text-center text-slate-400 text-sm">
-								등록된 공지가 없습니다.
+								등록된 링크가 없습니다.
 							</div>
 						)}
 					</div>

@@ -10,22 +10,20 @@ export default function StageSync({
   user
 }: {
   initialStageData: any | null;
-  user: { name: string; role: string; classId: string };
+  user: { name: string; role: string};
 }) {
   const [stageData, setStageData] = useState<any | null>(initialStageData);
   const supabase = createClient();
 
   useEffect(() => {
-    // 같은 반(classId)의 song_records 테이블 변경사항 구독
     const channel = supabase
-      .channel(`karaoke-sync-${user.classId}`)
+      .channel(`karaoke-sync`)
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "song_records",
-          filter: `class_id=eq.${user.classId}`
         },
         (payload) => {
           const record = payload.new as any;
@@ -50,7 +48,7 @@ export default function StageSync({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user.classId, stageData?.id]);
+  }, [stageData?.id]);
 
   // singing 중인 곡이 있으면 무대 화면, 없으면 대기열 화면
   if (stageData) {

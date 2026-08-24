@@ -4,17 +4,14 @@ import { useState, useTransition } from "react";
 import { BookmarkPlus, Loader2, CheckCircle2 } from "lucide-react";
 import { createDashboardLink } from "./links/actions";
 
-export default function NoticeRegisterForm({
-  classId
-}: {
-  classId: string | null;
-}) {
+export default function NoticeRegisterForm() {
   const [isPending, startTransition] = useTransition();
 
   const [linkTitle, setLinkTitle] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [linkDesc, setLinkDesc] = useState("");
   const [linkMessage, setLinkMessage] = useState("");
+  const [isFront, setIsFront] = useState(true); // true: 대시보드, false: 공지사항
 
   // 2. 대시보드 링크 추가 핸들러
   const handleLinkSubmit = (e: React.FormEvent) => {
@@ -27,7 +24,7 @@ export default function NoticeRegisterForm({
           title: linkTitle,
           url: linkUrl,
           description: linkDesc,
-          class_id: classId
+          isFront: isFront,
         });
         setLinkMessage("새로운 링크가 추가되었습니다.");
         setLinkTitle("");
@@ -85,6 +82,31 @@ export default function NoticeRegisterForm({
             placeholder="간단한 안내 문구"
             className="w-full text-sm p-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
           />
+        </div>
+
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              name="linkType"
+              value="dashboard"
+              checked={isFront}
+              onChange={() => setIsFront(true)}
+              className="w-4 h-4 text-emerald-600 border-slate-300 focus:ring-emerald-500"
+            />
+            앞에 넣기
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              name="linkType"
+              value="notice"
+              checked={!isFront}
+              onChange={() => setIsFront(false)}
+              className="w-4 h-4 text-emerald-600 border-slate-300 focus:ring-emerald-500"
+            />
+            뒤에 추가
+          </label>
         </div>
 
         <button

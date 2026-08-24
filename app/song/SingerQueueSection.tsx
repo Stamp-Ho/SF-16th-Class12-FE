@@ -18,7 +18,7 @@ export default function SingerQueueSection({
 }: {
   singerList: any[];
   setSingerList: React.Dispatch<React.SetStateAction<any[]>>;
-  user: { name: string; role: string; classId: string };
+  user: { name: string; role: string };
   isAdmin: boolean;
   fetchSingerList: () => void;
 }) {
@@ -51,8 +51,7 @@ export default function SingerQueueSection({
         updatedListWithNewOrder.map((s) => ({
           id: s.id,
           display_order: s.display_order
-        })),
-        user.classId
+        }))
       );
     } catch (error) {
       console.error("순서 업데이트 실패:", error);
@@ -157,7 +156,7 @@ export default function SingerQueueSection({
                           {isAdmin && (
                             <button
                               onClick={async () => {
-                                await cancelSongRecord(singer.id, user.classId);
+                                await cancelSongRecord(singer.id);
                                 fetchSingerList();
                               }}
                               className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"

@@ -7,13 +7,11 @@ import { Dices, Sparkles } from "lucide-react";
 export default function RandomSelectModal({
   onClose,
   setSingerName,
-  setSingerReason,
-  classId
+  setSingerReason
 }: {
   onClose: () => void;
   setSingerName: React.Dispatch<React.SetStateAction<string>>;
   setSingerReason: React.Dispatch<React.SetStateAction<string>>;
-  classId: string;
 }) {
   const [winner, setWinner] = useState<string | null>(null);
   const [isSpinning, setIsSpinning] = useState(true);
@@ -27,10 +25,10 @@ export default function RandomSelectModal({
 
     const initSlot = async () => {
       try {
-        const users = await getUsers(classId);
+        const users = await getUsers();
         if (!users || users.length === 0 || !isMounted) return;
 
-        const names = users.map((u) => u.name);
+        const names = users.map((u) => u.username);
 
         // 1. 당첨자 선출
         const winnerIndex = Math.floor(Math.random() * names.length);
@@ -84,7 +82,7 @@ export default function RandomSelectModal({
     return () => {
       isMounted = false;
     };
-  }, [classId]);
+  }, []);
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
