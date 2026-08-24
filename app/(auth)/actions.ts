@@ -43,6 +43,8 @@ export async function loginWithName(formData: FormData) {
     email: profile.email,
     password: password
   });
+  console.log("Sign-in error:", signInError);
+  console.log("email, password:", profile.email, password);
 
   if (signInError) {
     return { error: "비밀번호가 올바르지 않습니다." };
