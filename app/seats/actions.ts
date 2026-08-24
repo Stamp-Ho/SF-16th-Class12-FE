@@ -126,13 +126,13 @@ export async function createRound(request: CreateRoundRequest) {
 /**
  * 라운드 마감
  */
-export async function closeRound(roundId: number) {
+export async function closeRound(round: number) {
   const supabase = await createClient();
 
   const { data, error } = await supabase
     .from('seat_rounds')
     .update({ is_closed: true })
-    .eq('id', roundId)
+    .eq('id', round)
     .select()
     .single();
 
@@ -144,13 +144,13 @@ export async function closeRound(roundId: number) {
 /**
  * 라운드 재오픈
  */
-export async function openRound(roundId: number) {
+export async function openRound(round: number) {
   const supabase = await createClient();
 
   const { data, error } = await supabase
     .from('seat_rounds')
     .update({ is_closed: false })
-    .eq('id', roundId)
+    .eq('id', round)
     .select()
     .single();
 
@@ -162,13 +162,13 @@ export async function openRound(roundId: number) {
 /**
  * 라운드 삭제 (CASCADE에 의해 관련 그룹, 좌석, 히스토리 자동 삭제)
  */
-export async function deleteRound(roundId: number) {
+export async function deleteRound(round: number) {
   const supabase = await createClient();
 
   const { error } = await supabase
     .from('seat_rounds')
     .delete()
-    .eq('id', roundId);
+    .eq('id', round);
 
   if (error) throw new Error(`라운드 삭제 실패: ${error.message}`);
   revalidatePath('/seats');
@@ -182,13 +182,13 @@ export async function deleteRound(roundId: number) {
 /**
  * 특정 라운드의 그룹 목록 조회
  */
-export async function getGroupsByRound(roundId: number) {
+export async function getGroupsByRound(round: number) {
   const supabase = await createClient();
 
   const { data, error } = await supabase
     .from('seat_groups')
     .select('*')
-    .eq('round_id', roundId)
+    .eq('round', round)
     .order('id', { ascending: true });
 
   if (error) throw new Error(`그룹 목록 조회 실패: ${error.message}`);
@@ -198,13 +198,13 @@ export async function getGroupsByRound(roundId: number) {
 /**
  * 신규 그룹 등록
  */
-export async function createGroup(roundId: number, request: GroupRequest) {
+export async function createGroup(round: number, request: GroupRequest) {
   const supabase = await createClient();
 
   const { data, error } = await supabase
     .from('seat_groups')
     .insert({
-      round_id: roundId,
+      round: round,
       group_name: request.groupName,
       member_1: request.member_1 ?? null,
       member_2: request.member_2 ?? null,
@@ -249,7 +249,7 @@ export async function deleteAllocation(allocationId: number) {
 /**
  * 특정 라운드의 좌석 배정 현황 조회 (seat_code 오름차순)
  */
-export async function getAllocationsByRound(roundId: number) {
+export async function getAllocationsByRound(round_id: number) {
   const supabase = await createClient();
 
   const { data, error } = await supabase
@@ -260,7 +260,7 @@ export async function getAllocationsByRound(roundId: number) {
         group_name
       )
     `)
-    .eq('round_id', roundId)
+    .eq('round_id', round_id)
     .order('seat_code', { ascending: true });
 
   if (error) throw new Error(`좌석 배정 현황 조회 실패: ${error.message}`);
@@ -398,13 +398,13 @@ export async function toggleLockSeat(allocationId: number) {
 /**
  * 특정 라운드의 입찰 기록 조회 (created_at 내림차순)
  */
-export async function getHistoriesByRound(roundId: number) {
+export async function getHistoriesByRound(round_id: number) {
   const supabase = await createClient();
 
   const { data, error } = await supabase
     .from('seat_bid_histories')
     .select('*')
-    .eq('round_id', roundId)
+    .eq('round_id', round_id)
     .order('created_at', { ascending: false });
 
   if (error) throw new Error(`히스토리 조회 실패: ${error.message}`);

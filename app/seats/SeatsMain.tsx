@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { getAllRounds, getAllocationsByRound, getGroupsByRound, getSeatsDataByRounds } from './actions';
+import { getAllRounds, getSeatsDataByRounds } from './actions';
 import ClassroomGrid from './ClassroomGrid';
 import { createClient } from '@/utils/supabase/client';
 import {
@@ -338,7 +338,7 @@ export default function SeatsMain({ profile }: { profile: any }) {
 												</>
 											) : (
 												<span className="text-slate-400">
-													선점한 자리가 없습니다
+													자리 미배정
 												</span>
 											)}
 										</h3>

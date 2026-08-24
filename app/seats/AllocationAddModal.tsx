@@ -210,11 +210,11 @@ export default function AllocationAddModal({
           }))
         );
         setIsCustomMode(true); // 불러온 후 커스텀 모드로 전환
-        setTargetRound(latestRound.roundNumber);
+        setTargetRound(latestRound.roundNumber - 1);
         setRoundTitle(
-          `${latestRound.roundNumber}회차 (${dateList[latestRound.roundNumber - 1] || "2주 배정"})`
+          `${latestRound.roundNumber - 1}회차 (${dateList[latestRound.roundNumber - 1] || "2주 배정"})`
         );
-        alert(`최신(${latestRound.roundNumber}회차) 데이터를 성공적으로 불러왔습니다!`);
+        alert(`최신(${latestRound.roundNumber - 1}회차) 데이터를 성공적으로 불러왔습니다!`);
       }
     } catch (err: any) {
       alert(`불러오기 실패: ${err.message}`);
