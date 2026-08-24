@@ -101,7 +101,7 @@ export async function addSongRecord(
 
   const { data, error } = await supabase.from("song_records").insert([
     {
-      name,
+      user_name: name,
       reason,
       display_order: newOrder,
       status: "pending"
@@ -119,8 +119,7 @@ export async function addSongRecord(
 export async function startTopSongRecord({
   id,
   songName,
-  youtubeUrl,
-  youtubeVideoId
+  youtubeUrl
 }: {
   id: string;
   songName: string;
@@ -134,7 +133,6 @@ export async function startTopSongRecord({
     .update({
       song_name: songName,
       youtube_url: youtubeUrl,
-      youtube_video_id: youtubeVideoId,
       status: "singing"
     })
     .eq("id", id);
@@ -185,7 +183,7 @@ export async function cancelSongRecord(id: string) {
 export async function getChatMessages(songId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
-    .from("karaoke_chats")
+    .from("song_chats")
     .select("*")
     .eq("song_id", songId)
     .order("created_at", { ascending: true });
@@ -201,17 +199,20 @@ export async function getChatMessages(songId: string) {
 export async function sendChatMessage({
   songId,
   senderName,
+  nickname,
   message
 }: {
   songId: string;
   senderName: string;
+  nickname: string;
   message: string;
 }) {
   const supabase = await createClient();
-  const { error } = await supabase.from("karaoke_chats").insert([
+  const { error } = await supabase.from("song_chats").insert([
     {
-      song_id: songId,
-      sender_name: senderName,
+      song_record_id: songId,
+      user_name: senderName,
+      nickname: nickname,
       message
     }
   ]);

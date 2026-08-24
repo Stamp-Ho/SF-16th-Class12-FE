@@ -135,7 +135,7 @@ export default async function MainPage() {
 								</span>
 								<h2 className="text-2xl font-bold mt-3">순서 무작위 추첨</h2>
 								<p className="text-teal-100 text-sm mt-1">
-									26명 무작위 셔플 및 결과 저장
+									26명 무작위 순서 뽑기
 								</p>
 							</div>
 							<Dices className="w-10 h-10 text-teal-200 group-hover:scale-110 transition-transform" />

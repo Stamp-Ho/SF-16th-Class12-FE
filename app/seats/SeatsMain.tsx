@@ -132,7 +132,7 @@ export default function SeatsMain({ profile }: { profile: any }) {
 				{
 					event: 'UPDATE',
 					schema: 'public',
-						table: 'seat_allocation',
+					table: 'seat_allocations',
 				},
 				(payload) => {
 					const updatedSeat = payload.new;

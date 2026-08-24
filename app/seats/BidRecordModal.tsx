@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Coins, Crown, History, Loader2, Skull, Sword, X } from "lucide-react";
 import { getHistoriesByRound } from "./actions";
+import { createClient } from "@/utils/supabase/client";
 
 type BidHistoryRecord = {
     id: number;
@@ -40,6 +41,51 @@ type RankingData = {
     success_count: number;
     fail_count: number;
 };
+
+type RawBidHistory = Omit<BidHistoryRecord, "category">;
+
+function toBidHistoryRecord(record: RawBidHistory): BidHistoryRecord {
+    return {
+        ...record,
+        category: record.method === "BID" ? (record.prev_group_name === null ? "이동" : "입찰") : "도박",
+    };
+}
+
+// 단일 기록을 기존 랭킹 목록에 반영한 새 배열을 반환
+function applyRecordToRanking(rankingData: RankingData[], record: RawBidHistory): RankingData[] {
+    const next = rankingData.map(r => ({ ...r }));
+
+    if (record.method === "GAMBLE") {
+        const existingRanking = next.find(r => r.user_name === record.user_name);
+        if (existingRanking) {
+            if (record.price_change < 0) existingRanking.success_count += 1;
+            else existingRanking.fail_count += 1;
+        } else {
+            next.push({
+                user_name: record.user_name,
+                bid_count: 0,
+                success_count: record.price_change < 0 ? 1 : 0,
+                fail_count: record.price_change < 0 ? 0 : 1,
+            });
+        }
+    }
+
+    if (record.method === "BID" && record.price_change > 0) {
+        const existingRanking = next.find(r => r.user_name === record.user_name);
+        if (existingRanking) existingRanking.bid_count += 1;
+        else {
+            next.push({
+                user_name: record.user_name,
+                bid_count: 1,
+                success_count: 0,
+                fail_count: 0,
+            });
+        }
+    }
+
+    return next;
+}
+
 export default function BidRecordModal({
 	roundId,
 	onClose
@@ -55,11 +101,14 @@ export default function BidRecordModal({
 
     const [showRanking, setShowRanking] = useState(false);
     const [seatCodeFilter, setSeatCodeFilter] = useState<string | null>(null);
+    const [userNameFilter, setUserNameFilter] = useState<string | null>(null);
     const [filteredRecords, setFilteredRecords] = useState<BidHistoryRecord[]>([]);
 
     const [rankingData, setRankingData] = useState<RankingData[]>([]);
     const [sortedRankingData, setSortedRankingData] = useState<RankingData[]>([]);
     const [rankBy, setRankBy] = useState<"bid_count" | "gamble_success_rate" | "gamble_count">("bid_count");
+
+    const supabase = useMemo(() => createClient(), []);
 
     const handleCategoryFilterChange = (category: string) => {
         if (categoryFilter.includes(category)) {
@@ -96,48 +145,13 @@ export default function BidRecordModal({
 
 			try {
 				const history = await getHistoriesByRound(roundId);
-				if (isActive) setRecords(history.map(record => ({ ...record, category: record.method === "BID" ? record.prev_group_name === null ? "이동" : "입찰":  "도박" })) as BidHistoryRecord[]);
-                
-                const initialRankingData: RankingData[] = [];
-                for(const record of history) {
-                    if(record.method === "GAMBLE") {
-                        const existingRanking = initialRankingData.find(r => r.user_name === record.user_name);
+				if (isActive) setRecords(history.map(toBidHistoryRecord));
 
-                        if(existingRanking) {
-                            if(record.price_change < 0)
-                                existingRanking.success_count += 1;
-                            else 
-                                existingRanking.fail_count += 1;
-                        }
-                        else {
-                            initialRankingData.push({
-                                user_name: record.user_name,
-                                bid_count: 0,
-                                success_count: record.price_change < 0 ? 1 : 0,
-                                fail_count: record.price_change < 0 ? 0 : 1
-                            });
-                        }
-                    }
-                    if(record.method === "BID") {
-                        if(record.price_change > 0) {
-                            const existingRanking = initialRankingData.find(r => r.user_name === record.user_name);
-
-                            if(existingRanking)
-                                existingRanking.bid_count += 1;
-                            
-                            else {
-                                initialRankingData.push({
-                                    user_name: record.user_name,
-                                    bid_count: 1,
-                                    success_count: 0,
-                                    fail_count: 0
-                                });
-                            }
-                        }
-                    }
-                    
+                let initialRankingData: RankingData[] = [];
+                for (const record of history) {
+                    initialRankingData = applyRecordToRanking(initialRankingData, record as RawBidHistory);
                 }
-                setRankingData(initialRankingData);
+                if (isActive) setRankingData(initialRankingData);
             
             } catch (error) {
 				if (isActive) {
@@ -152,14 +166,36 @@ export default function BidRecordModal({
 
 		void loadHistory();
 
+		// 신규 입찰/도박/이동 기록을 실시간으로 반영
+		const channel = supabase
+			.channel(`seat_bid_histories-round-${roundId}`)
+			.on(
+				'postgres_changes',
+				{
+					event: 'INSERT',
+					schema: 'public',
+					table: 'seat_bid_histories',
+					filter: `round_id=eq.${roundId}`,
+				},
+				(payload) => {
+					const newRecord = payload.new as RawBidHistory;
+					if (!isActive) return;
+
+					setRecords(prev => [toBidHistoryRecord(newRecord), ...prev]);
+					setRankingData(prev => applyRecordToRanking(prev, newRecord));
+				},
+			)
+			.subscribe();
+
 		return () => {
 			isActive = false;
+			supabase.removeChannel(channel);
 		};
-	}, [roundId]);
+	}, [roundId, supabase]);
 
     useEffect(() => {
-        setFilteredRecords(records.filter(record => categoryFilter.includes(record.category) && (seatCodeFilter == null || record.seat_code === seatCodeFilter)));
-    }, [records, categoryFilter, seatCodeFilter]);
+        setFilteredRecords(records.filter(record => categoryFilter.includes(record.category) && (seatCodeFilter == null || record.seat_code === seatCodeFilter) && (userNameFilter == null || record.user_name === userNameFilter)));
+    }, [records, categoryFilter, seatCodeFilter, userNameFilter]);
 
 	return (
 		<div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
@@ -169,38 +205,6 @@ export default function BidRecordModal({
 						<History className="h-5 w-5 text-indigo-600" />
 						기록
 					</h2>
-                    {
-                        showRanking || <div className = "flex flex-row gap-2 mr-auto ml-4">
-                        {["이동", "입찰", "도박"].map((category) => (
-                            
-                            <button
-                                key={category}
-                                type="button"
-                                onClick={() => handleCategoryFilterChange(category)}
-                                className={`rounded-full px-3 py-1 text-sm font-semibold transition-colors ${
-                                    categoryFilter.includes(category)
-                                        ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                                        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                                }`} 
-                            >
-                                {category}
-                            </button>
-                        ))}
-                        <div>
-                            코드:
-                            <select
-                                className="ml-2 rounded-md border border-slate-300 bg-white py-1 px-2 text-sm text-slate-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                value={seatCodeFilter ?? "전체"}
-                                onChange={(e) => setSeatCodeFilter(e.target.value === "전체" ? null : e.target.value)}
-                            >
-                                {["전체", "A", "B", "C", "D", "E", "F", "G", "H","I","J","K","L","M","가","나","다"].map((code) => (
-                                    <option key={code} value={code}>
-                                        {code}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>}
                     <button
                         type="button"
                         onClick={() => setShowRanking(!showRanking)}
@@ -220,7 +224,55 @@ export default function BidRecordModal({
 					</button>
 				</div>
 
-				<div className="flex-1 overflow-y-auto p-5">
+                
+                {showRanking ||
+                <div className = "flex flex-row gap-2 mr-auto ml-4 py-4">
+                    {["이동", "입찰", "도박"].map((category) => (
+                        
+                        <button
+                            key={category}
+                            type="button"
+                            onClick={() => handleCategoryFilterChange(category)}
+                            className={`rounded-full px-3 py-1 text-sm font-semibold transition-colors ${
+                                categoryFilter.includes(category)
+                                    ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                            }`} 
+                        >
+                            {category}
+                        </button>
+                    ))}
+                    <div className="ml-4">
+                        코드:
+                        <select
+                            className="ml-2 rounded-md border border-slate-300 bg-white py-1 px-2 text-sm text-slate-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            value={seatCodeFilter ?? "전체"}
+                            onChange={(e) => setSeatCodeFilter(e.target.value === "전체" ? null : e.target.value)}
+                        >
+                            {["전체", "A", "B", "C", "D", "E", "F", "G", "H","I","J","K","L","M","가","나","다"].map((code) => (
+                                <option key={code} value={code}>
+                                    {code}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="ml-4">
+                        사용자:
+                        <select
+                            className="ml-2 rounded-md border border-slate-300 bg-white py-1 px-2 text-sm text-slate-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            value={userNameFilter ?? "전체"}
+                            onChange={(e) => setUserNameFilter(e.target.value === "전체" ? null : e.target.value)}
+                        >
+                            <option value="전체">전체</option>
+                            {Array.from(new Set(records.map(record => record.user_name))).sort((a, b) => a.localeCompare(b)).map((userName) => (
+                                <option key={userName} value={userName}>
+                                    {userName}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                </div>}
+				<div className="flex-1 overflow-y-auto p-4">
 					{isLoading ? (
 						<div className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
 							<Loader2 className="h-4 w-4 animate-spin" />
@@ -261,17 +313,17 @@ export default function BidRecordModal({
                                                 key={`${String(record.user_name ?? index)}-${index}`}
                                                 className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
                                             >
-                                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                                                <div className="grid grid-cols-7 items-center gap-x-2 gap-y-1 text-sm">
                                                     {user != null && <span className="font-bold text-slate-800">{String(user)}</span>}
-                                                    <span className="ml-auto font-semibold text-amber-600 flex flex-row gap-1">
+                                                    <span className="ml-auto font-semibold text-amber-600 flex flex-row gap-1 col-span-2">
                                                         입찰 횟수: {String(bidCount)}회
                                                         <p className="ml-auto font-semibold text-emerald-600">( +{String(bidCount * 500)} )</p>
                                                     </span>
-                                                    <span className="ml-auto font-semibold text-slate-600 flex flex-row">
+                                                    <span className="ml-auto font-semibold text-slate-600 flex flex-row col-span-2">
                                                         도박 횟수: {String(successCount + failCount)}회
                                                         
                                                     </span>
-                                                    <span className="ml-auto font-semibold text-slate-600 flex flex-row">
+                                                    <span className="ml-auto font-semibold text-slate-600 flex flex-row col-span-2">
                                                         성공률: {String(((successCount / (Math.max(successCount + failCount, 1))) * 100).toFixed(2))}%
                                                         (<p className="ml-auto font-semibold text-emerald-600">{String(successCount)}</p>/
                                                         <p className="ml-auto font-semibold text-rose-600">{String(failCount)}</p>)

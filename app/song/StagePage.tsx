@@ -100,7 +100,8 @@ export default function StagePage({
 
 		await sendChatMessage({
 			songId: stageData.id,
-			senderName: nickName.trim() || user.name,
+			senderName: user.name,
+			nickname: nickName.trim() || user.name,
 			message: chatInput,
 		});
 
@@ -131,7 +132,7 @@ export default function StagePage({
 			setMessages(
 				initialData.map((msg: any) => ({
 					id: msg.id,
-					sender: msg.sender_name,
+					sender: msg.nickname || msg.user_name || '익명',
 					text: msg.message,
 					time: new Date(msg.created_at).toLocaleTimeString('ko-KR', {
 						hour: '2-digit',
@@ -148,14 +149,14 @@ export default function StagePage({
 
 		// 해당 song_id 세션에 대한 INSERT 이벤트만 Realtime 구독
 		const channel = supabase
-			.channel(`karaoke_chats`)
+			.channel(`song_chats`)
 			.on(
 				'postgres_changes',
 				{
 					event: 'INSERT',
 					schema: 'public',
-					table: 'karaoke_chats',
-					filter: `song_id=eq.${stageData.id}`, // 해당 노래 세션 채팅만 수신
+					table: 'song_chats',
+					filter: `song_record_id=eq.${stageData.id}`, // 해당 노래 세션 채팅만 수신
 				},
 				(payload) => {
 					const newChat = payload.new;
@@ -169,7 +170,7 @@ export default function StagePage({
 						...prev,
 						{
 							id: newChat.id,
-							sender: newChat.sender_name,
+							sender: newChat.nickname || newChat.user_name || '익명',
 							text: newChat.message,
 							time: new Date(newChat.created_at).toLocaleTimeString('ko-KR', {
 								hour: '2-digit',
@@ -303,7 +304,7 @@ export default function StagePage({
 								},
 							}}
 							onReady={onPlayerReady}
-							onEnd={handleFinishSong}
+							onEnd={user.role === "teacher" || user.role === "song_admin" ? handleFinishSong : undefined}
 							className="w-full h-full"
 						/>
 					</div>
@@ -394,6 +395,7 @@ export default function StagePage({
 						onScroll={updateShouldStickToBottom}
 						className="flex-1 overflow-y-auto space-y-3 pr-1 text-sm"
 					>
+						{messages.length}
 						{messages.map((msg) => (
 							<div
 								key={msg.id}

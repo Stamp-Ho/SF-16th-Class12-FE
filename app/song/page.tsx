@@ -17,7 +17,6 @@ export default async function SongPage() {
     .from("song_records")
     .select("*")
     .eq("status", "singing")
-    .eq("class_id", profile.class_id)
     .maybeSingle();
 
   const userInfo = {
