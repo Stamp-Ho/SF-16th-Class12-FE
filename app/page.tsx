@@ -10,20 +10,19 @@ import {
 	Megaphone,
 	LogOut,
 	MicVocal,
+	Cookie,
 } from 'lucide-react';
 import ChangePwButton from '@/components/ChangePwButton';
-import DeleteLinkButton from '@/components/DeleteLinkButton';
 import { requireAuth } from '@/utils/auth';
 
 export default async function MainPage() {
 	const supabase = await createClient();
-	  const { status, profile } = await requireAuth();
+	const { status, profile } = await requireAuth();
 
 	// 로그인하지 않은 경우 바로 로그인 모달 출력
 	if (!profile) {
 		return <LoginModal />;
 	}
-
 
 	const [{ data: links }] = await Promise.all([
 		supabase
@@ -34,6 +33,49 @@ export default async function MainPage() {
 
 	const isAdmin =
 		profile?.role === 'super_admin' || profile?.role === 'class_admin';
+
+	const MainLinks = [
+		{
+			badge: 'SEAT AUCTION',
+			title: '자리 배정 경매',
+			description: 'A~M 구역 선점 및 실시간 입찰',
+			url: '/seats',
+			icon: Armchair,
+			bgColor:
+				'from-indigo-400/80 to-indigo-600 hover:from-indigo-600/80 hover:to-indigo-400/70 transition-colors duration-750',
+			desColor: 'text-indigo-100',
+		},
+		{
+			badge: 'SONG QUEUE',
+			title: '노래 큐',
+			description: '12반의 노래방',
+			url: '/song',
+			icon: MicVocal,
+			bgColor:
+				'from-ssafy-blue/80 to-ssafy-blue-dark hover:from-ssafy-blue-dark hover:to-ssafy-blue/70 transition-colors duration-750',
+			desColor: 'text-teal-100',
+		},
+		{
+			badge: 'RANDOMIZER',
+			title: '제비뽑기',
+			description: '학생들 무작위 순서 뽑기',
+			url: '/shuffle',
+			icon: Dices,
+			bgColor:
+				'from-emerald-400/80 to-emerald-600 hover:from-emerald-600/80 hover:to-emerald-400/70 transition-colors duration-750',
+			desColor: 'text-emerald-100',
+		},
+		{
+			badge: 'SNACK CENTER',
+			title: '간식 센터',
+			description: '간식 뽑기 및 신청',
+			url: '/snack',
+			icon: Cookie,
+			bgColor:
+				'from-amber-400/80 to-amber-600 hover:from-amber-600/80 hover:to-amber-400/70 transition-colors duration-750',
+			desColor: 'text-amber-100',
+		},
+	];
 
 	return (
 		<main className="min-h-screen bg-slate-50 p-6 md:p-12">
@@ -85,62 +127,35 @@ export default async function MainPage() {
 
 				{/* 메인 서비스 카드 버튼들 */}
 				<section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-					<Link
-						href="/seats"
-						prefetch
-						className="group bg-linear-to-br from-indigo-400 to-indigo-600 text-white p-6 rounded-2xl shadow-md hover:shadow-lg transition-all"
-					>
-						<div className="flex justify-between items-start">
-							<div>
-								<span className="text-xs font-semibold bg-white/20 px-2.5 py-1 rounded-full uppercase">
-									Auction
-								</span>
-								<h2 className="text-2xl font-bold mt-3">자리 배정 경매</h2>
-								<p className="text-indigo-100 text-sm mt-1">
-									A~M 구역 선점 및 실시간 입찰
-								</p>
-							</div>
-							<Armchair className="w-10 h-10 text-indigo-200 group-hover:scale-110 transition-transform" />
-						</div>
-					</Link>
-
-					<Link
-						href="/song"
-						prefetch
-						className="group bg-linear-to-br from-ssafy-blue to-ssafy-blue-dark text-white p-6 rounded-2xl shadow-md hover:shadow-lg transition-all"
-					>
-						<div className="flex justify-between items-start">
-							<div>
-								<span className="text-xs font-semibold bg-white/20 px-2.5 py-1 rounded-full uppercase">
-									Song Queue
-								</span>
-								<h2 className="text-2xl font-bold mt-3">노래 큐</h2>
-								<p className="text-teal-100 text-sm mt-1">
-									12반의 노래방
-								</p>
-							</div>
-							<MicVocal className="w-10 h-10 text-indigo-100 group-hover:scale-110 transition-transform" />
-						</div>
-					</Link>
-
-					<Link
-						href="/shuffle"
-						prefetch={false}
-						className="group bg-linear-to-br from-emerald-500 to-teal-600 text-white p-6 rounded-2xl shadow-md hover:shadow-lg transition-all"
-					>
-						<div className="flex justify-between items-start">
-							<div>
-								<span className="text-xs font-semibold bg-white/20 px-2.5 py-1 rounded-full uppercase">
-									Randomizer
-								</span>
-								<h2 className="text-2xl font-bold mt-3">순서 무작위 추첨</h2>
-								<p className="text-teal-100 text-sm mt-1">
-									26명 무작위 순서 뽑기
-								</p>
-							</div>
-							<Dices className="w-10 h-10 text-teal-200 group-hover:scale-110 transition-transform" />
-						</div>
-					</Link>
+					{MainLinks.map(
+						({
+							badge,
+							title,
+							description,
+							url,
+							icon: Icon,
+							bgColor,
+							desColor,
+						}) => (
+							<Link
+								key={title}
+								href={url}
+								prefetch={false}
+								className={`group bg-linear-to-br ${bgColor} text-white p-6 rounded-2xl shadow-md hover:shadow-lg transition-all`}
+							>
+								<div className="flex justify-between items-start">
+									<div>
+										<span className="text-xs font-semibold bg-white/20 px-2.5 py-1 rounded-full uppercase">
+											{badge}
+										</span>
+										<h2 className="text-2xl font-bold mt-3">{title}</h2>
+										<p className={`${desColor} text-sm mt-1`}>{description}</p>
+									</div>
+									<Icon className="w-10 h-10 text-white/70 group-hover:scale-110 transition-transform" />
+								</div>
+							</Link>
+						),
+					)}
 				</section>
 
 				{/* 공지사항 목록 */}

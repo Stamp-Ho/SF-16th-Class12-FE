@@ -7,6 +7,7 @@ export default function AppLoading() {
 					<div className="h-36 rounded-2xl bg-white border border-slate-100" />
 					<div className="h-36 rounded-2xl bg-white border border-slate-100" />
 					<div className="h-36 rounded-2xl bg-white border border-slate-100" />
+					<div className="h-36 rounded-2xl bg-white border border-slate-100" />
 				</div>
 				<div className="h-40 rounded-2xl bg-white border border-slate-100" />
 			</div>
