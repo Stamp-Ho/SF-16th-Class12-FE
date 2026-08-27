@@ -45,7 +45,7 @@ export default function LoginModal() {
 							<User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
 							<input
 								type="text"
-								name="name"
+								name="ssafy12banName"
 								placeholder="홍길동"
 								className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
 								required
