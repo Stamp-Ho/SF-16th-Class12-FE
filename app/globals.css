@@ -22,19 +22,6 @@
   --color-ssafy-blue-dark: var(--ssafy-blue-dark);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #090d16;
-    --foreground: #f1f5f9;
-
-    --surface: #0f172a;
-    --surface-card: #1e293b;
-    --border-color: #334155;
-
-    --ssafy-blue: #6dc4e8;
-    --ssafy-blue-dark: #4aa0c7;
-  }
-}
 
 body {
   background: var(--background);
