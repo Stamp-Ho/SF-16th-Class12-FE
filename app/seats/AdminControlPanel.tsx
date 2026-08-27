@@ -6,26 +6,30 @@ import {
 	closeRound,
 	openRound,
 	deleteRound,
+	toggleGamble,
 } from './actions';
 import {
 	Lock,
 	Unlock,
-	Shuffle,
 	ShieldCheck,
 	Loader2,
 	Trash2,
+	Coins,
 } from 'lucide-react';
 
 export default function AdminControlPanel({
 	roundNumber,
 	isClosed,
+	isGambleEnabled,
 	loadData,
 }: {
 	roundNumber: number;
 	isClosed: boolean;
+	isGambleEnabled: boolean;
 	loadData: () => Promise<void>;
 }) {
 	const [isPending, startTransition] = useTransition();
+	const [isGamblePending, startGambleTransition] = useTransition();
 	const router = useRouter();
 
 	const refreshAuctionState = async () => {
@@ -45,6 +49,17 @@ export default function AdminControlPanel({
 				await refreshAuctionState();
 			} catch (err: any) {
 				alert(`상태 변경 에러: ${err.message}`);
+			}
+		});
+	};
+	// 2. 도박 허용/금지 토글
+	const handleToggleGamble = () => {
+		startGambleTransition(async () => {
+			try {
+				await toggleGamble(roundNumber);
+				await refreshAuctionState();
+			} catch (err: any) {
+				alert(`도박 상태 변경 에러: ${err.message}`);
 			}
 		});
 	};
@@ -93,6 +108,18 @@ export default function AdminControlPanel({
 							<Lock className="w-3.5 h-3.5" /> 경매 종료하기
 						</>
 					)}
+				</button>
+
+				{/* 도박 금지/허용 버튼 */}
+				<button
+					onClick={handleToggleGamble}
+					disabled={isGamblePending}
+					className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 text-white rounded-xl text-xs font-bold transition-all
+							${!isGambleEnabled ? 'bg-rose-600 hover:bg-rose-500' : 'bg-amber-500 hover:bg-amber-400'}
+						`}
+				>
+					{isGamblePending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+					<Coins className="w-3.5 h-3.5" /> {isGambleEnabled ? '도박 허용됨' : '도박 금지됨'}
 				</button>
 
 				{/* 경매 삭제 버튼 */}

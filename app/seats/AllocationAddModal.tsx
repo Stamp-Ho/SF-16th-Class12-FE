@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createRound } from "./actions";
+import { createRound, getSeatsDataByRounds } from "./actions";
 import {
   Loader2,
   ChevronLeft,
@@ -180,7 +180,7 @@ export default function AllocationAddModal({
     );
   };
 
-  // 💡 1. DB에서 가장 높은 회차 데이터 불러오기
+  // 💡 1. DB에서 가장 높은 회차 데이터 불러오기 (해당 회차의 그룹 데이터만 조회)
   const handleLoadLastRoundFromDB = async () => {
     setIsLoadingLast(true);
     try {
@@ -188,14 +188,21 @@ export default function AllocationAddModal({
         (left, right) => right.roundNumber - left.roundNumber
       )[0];
 
-      if (!latestRound?.groups?.length) {
+      if (!latestRound) {
         alert("저장된 지난 회차 배정 데이터가 없습니다.");
         return;
       }
-      const latestRoundSeats = latestRound.groups.reduce(
-        (members: string[], group: { m1?: string; m2?: string }) => {
-          if (group.m1) members.push(group.m1);
-          if (group.m2) members.push(group.m2);
+
+      const { groups } = await getSeatsDataByRounds([latestRound.roundNumber]);
+
+      if (!groups?.length) {
+        alert("저장된 지난 회차 배정 데이터가 없습니다.");
+        return;
+      }
+      const latestRoundSeats = groups.reduce(
+        (members: string[], group: { member_1?: string; member_2?: string }) => {
+          if (group.member_1) members.push(group.member_1);
+          if (group.member_2) members.push(group.member_2);
           return members;
         },
         [] as string[]

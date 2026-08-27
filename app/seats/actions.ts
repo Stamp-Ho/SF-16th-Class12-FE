@@ -32,7 +32,6 @@ export interface BidRequest {
   allocationId: number;
   nextGroupId: number;
   userName: string;
-  priceChange: number;
 }
 
 export interface GambleRequest {
@@ -160,6 +159,38 @@ export async function openRound(round: number) {
 }
 
 /**
+ * 라운드 도박 허용/금지 토글
+ */
+export async function toggleGamble(round: number) {
+  const supabase = await createClient();
+
+  // 1. 현재 도박 허용 상태 조회
+  const { data: current, error: fetchError } = await supabase
+    .from('seat_rounds')
+    .select('is_gamble_enabled')
+    .eq('id', round)
+    .single();
+
+  if (fetchError || !current) {
+    throw new Error('존재하지 않는 라운드입니다.');
+  }
+
+  // 2. 상태 반전 업데이트
+  const { data, error: updateError } = await supabase
+    .from('seat_rounds')
+    .update({
+      is_gamble_enabled: !current.is_gamble_enabled,
+    })
+    .eq('id', round)
+    .select()
+    .single();
+
+  if (updateError) throw new Error(`도박 상태 변경 실패: ${updateError.message}`);
+  revalidatePath('/seats');
+  return data;
+}
+
+/**
  * 라운드 삭제 (CASCADE에 의해 관련 그룹, 좌석, 히스토리 자동 삭제)
  */
 export async function deleteRound(round: number) {
@@ -174,6 +205,7 @@ export async function deleteRound(round: number) {
   revalidatePath('/seats');
   return { success: true };
 }
+
 
 // =================================================================
 // 2. 그룹 편성 (Group Management)
@@ -307,11 +339,10 @@ export async function placeBid(request: BidRequest) {
   const supabase = await createClient();
   console.log(request.nextGroupId);
 
-  const { data, error } = await supabase.rpc('place_bid', {
+  const { data, error } = await supabase.rpc('place_bid_with_shield', {
     p_allocation_id: request.allocationId,
     p_next_group_id: request.nextGroupId,
-    p_user_name: request.userName,
-    p_price_change: request.priceChange,
+    p_user_name: request.userName
   });
 
 
@@ -410,3 +441,4 @@ export async function getHistoriesByRound(round_id: number) {
   if (error) throw new Error(`히스토리 조회 실패: ${error.message}`);
   return data;
 }
+

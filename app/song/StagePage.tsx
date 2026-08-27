@@ -395,7 +395,6 @@ export default function StagePage({
 						onScroll={updateShouldStickToBottom}
 						className="flex-1 overflow-y-auto space-y-3 pr-1 text-sm"
 					>
-						{messages.length}
 						{messages.map((msg) => (
 							<div
 								key={msg.id}
