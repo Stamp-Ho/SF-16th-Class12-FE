@@ -42,11 +42,7 @@ const initialSnackList: { snackName: string; votedUsers: string[] }[] = [
 		votedUsers: initialUserList.filter((u, i) => i % 2 !== 0),
 	},
 ];
-export default function SnackMain({
-	profile,
-}: {
-	profile: { username: string };
-}) {
+export default function SnackMain({ profile }: { profile: any }) {
 	const [snackList, setSnackList] =
 		useState<{ snackName: string; votedUsers: string[] }[]>(initialSnackList);
 	return (
