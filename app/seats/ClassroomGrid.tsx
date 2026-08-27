@@ -7,8 +7,9 @@ import {
   placeBid,
   toggleLockSeat,
 } from "./actions";
-import { ArrowLeftRight, Lock, LockOpen, Sparkles, Star, Trash } from "lucide-react";
+import { ArrowLeftRight, Castle, CastleIcon, Lock, LockOpen, Shield, Sparkles, Star, Trash } from "lucide-react";
 import BidRecordModal from "./BidRecordModal";
+import { getSeatBidTier } from "./utils/shield";
 
 interface SeatData {
   id: string;
@@ -21,6 +22,7 @@ interface SeatData {
   current_bid_price: number;
   is_closed: boolean;
   is_locked : boolean;
+  updated_at: string;
 }
 
 const positions = ["left", "middle", "right"] as const;
@@ -157,6 +159,8 @@ export default function ClassroomGrid({
   loadData: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
+
+  const [hoveredSeatCode, setHoveredSeatCode] = useState<string | null>(null);
   // 💡 드래그 중인 타일의 시각적 피드백 상태 (드롭 호버 중인 구역 코드)
   const [dragOverCode, setDragOverCode] = useState<string | null>(null);
   const [tatalCost, setTotalCost] = useState<number>(0);
@@ -188,9 +192,9 @@ export default function ClassroomGrid({
           allocationId: Number(seat.id),
           nextGroupId: Number(myGroupId),
           userName: currentUserName,
-          priceChange: 500,
         });
         await loadData();
+        setHoveredSeatCode(null);
       } catch (err: any) {
         alert(`입찰 실패: ${err.message}`);
       }
@@ -209,8 +213,7 @@ export default function ClassroomGrid({
       await placeBid({
         allocationId: Number(seat.id),
         nextGroupId: Number(targetGroupId),
-        userName: currentUserName,
-        priceChange: 500,
+        userName: currentUserName
       });
       await loadData();
     } catch (err: any) {
@@ -275,6 +278,11 @@ export default function ClassroomGrid({
     } else {
       alert("본인의 팀 카드만 드래그하여 배치할 수 있습니다.");
     }
+  };
+
+  const getTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return `${date.getHours()}:${date.getMinutes().toString().padStart(2, "0")}`;
   };
 
   return (
@@ -358,15 +366,18 @@ export default function ClassroomGrid({
     }
 
     const seatInfo = getSeatInfo(tile.code);
-    const isOccupied = !!seatInfo?.current_group_name;
+    if(!seatInfo) return null;
+    const isOccupied = !!seatInfo.current_group_name;
+
+    const seatBidTier = getSeatBidTier(seatInfo.updated_at);
 
     // 내 그룹 소속 구역인지 체크
     const isMyGroup =
       isOccupied &&
-      (seatInfo?.current_group_id === myGroupId ||
-        seatInfo?.member_left === currentUserName ||
-        seatInfo?.member_middle === currentUserName ||
-        seatInfo?.member_right === currentUserName);
+      (seatInfo.current_group_id === myGroupId ||
+        seatInfo.member_left === currentUserName ||
+        seatInfo.member_middle === currentUserName ||
+        seatInfo.member_right === currentUserName);
     const position = positions[tile.pos]; // 0: left, 1: middle, 2: right
     const isCorner = CORNER_SEATS.includes(tile.code);
 
@@ -376,50 +387,64 @@ export default function ClassroomGrid({
         "bg-indigo-600 text-white ring-4 ring-indigo-300"
       : CODE_COLORS[tile.code] || "bg-slate-50 border-slate-200";
 
-    const personName = isCorner ? seatInfo?.member_left : seatInfo?.[`member_${position}`];
+    const personName = isCorner ? seatInfo.member_left : seatInfo?.[`member_${position}`];
     const canSwap = !isCorner && isOccupied &&(
       isAdmin ||
-        (currentUserName === seatInfo?.member_left ||
-          currentUserName === seatInfo?.member_right)
+        (currentUserName === seatInfo.member_left ||
+          currentUserName === seatInfo.member_middle ||
+          currentUserName === seatInfo.member_right)
     );
 
     // 💡 드래그한 카드가 타일 위에 올라왔을 때 강조 스타일
-    const isHovered = dragOverCode === tile.code;
+    const isHovered = hoveredSeatCode === tile.code;
+    const isCardHovered = dragOverCode === tile.code;
 
     return (
       <div key={tile.num} className={`relative`}>
         <div
           onClick={() => !isPending && handleSeatClick(tile.code)}
           // 💡 Drag & Drop Event Listeners 추가
+          onMouseEnter={()=>isMyGroup || setHoveredSeatCode(tile.code)}
+          onMouseLeave={()=>setHoveredSeatCode(null)}
           onDragOver={(e) => handleDragOver(e, tile.code)}
           onDragLeave={(e) => handleDragLeave(e, tile.code)}
           onDrop={(e) => handleDrop(e, tile.code)}
           className={`border-2 rounded-xl p-2 py-1 flex flex-col justify-between h-20 cursor-pointer transition-all z-0 select-none ${
             isMyGroup ? "z-10 scale-[1.03]" : ""
           } ${
-            isHovered
+            isCardHovered
               ? "ring-4 ring-indigo-500 border-indigo-600 scale-[1.05] z-20 shadow-lg"
               : ""
           } ${colorClass}`}
         >
           <div className="flex justify-between items-start w-full">
             <span
-              className={`text-[10px] font-mono font-bold ${
+              className={`text-[10px] font-mono font-bold w-4.25 ${
                 isMyGroup ? "opacity-80" : "opacity-60"
               }`}
             >
               {tile.num}
             </span>
+            <span>
+            {seatInfo.is_locked
+              ? <Lock className="w-3.5 h-3.5 text-red-500 mt-1 -mb-2"/>
+              : isHovered
+                ? <span className="text-xs flex -mb-10 mt-2.5 -ml-1">+{seatBidTier.priceChange - (seatInfo.current_group_id == null ? 500 : 0)}</span>
+                : <div className="flex flex-row gap-0 mt-2 -mb-2">
+                    {Array.from({ length: Math.max(0, seatBidTier.tier - 1) }).map((_, index) => (
+                      <Shield key={index} className="w-4 h-4 -mx-0.25"/>
+                    ))}
+                  </div>
+            }
+            
+            </span>
             <span
-              className={`text-xs font-extrabold px-1.5 py-0.5 rounded flex items-center gap-0.5 ${
+              className={`-mr-0.5 text-xs font-extrabold w-5 py-0.5 rounded flex items-center justify-center gap-0.5 ${
                 isMyGroup
                   ? "bg-black/20 text-white backdrop-blur-sm"
                   : "bg-white/80 text-slate-800"
               }`}
             >
-              {isMyGroup && (
-                <Star className="w-3 h-3 text-amber-300 fill-amber-300 animate-pulse" />
-              )}
               {tile.code}
             </span>
           </div>
@@ -436,23 +461,26 @@ export default function ClassroomGrid({
                   isMyGroup ? "text-white/70" : "text-slate-400"
                 }`}
               >
-                {isHovered ? "여기에 드롭!" : "빈 자 리"}
+                {isCardHovered ? "여기에 드롭!" : "빈 자 리"}
               </span>
             )}
           </div>
 
-          {/* 하단 가격 & 스위치 버튼 */}
+          {/* 하단 가격 */}
           <div className="flex justify-between items-end text-[10px]">
             <span className="font-bold font-mono">
-              {seatInfo?.current_bid_price
+              {seatInfo.current_bid_price
                 ? `${seatInfo.current_bid_price.toLocaleString()}원`
                 : "0원"}
+            </span>
+            <span className="font-bold text-[10px]">
+              {seatInfo.updated_at ? getTime(seatInfo.updated_at) : ""}
             </span>
           </div>
         </div>
 
         {/* 스위치 (<->) 버튼 */}
-        {canSwap && seatInfo && !seatInfo.is_locked && position !== "left" && (
+        {canSwap && !seatInfo.is_locked && position !== "left" && (
           <button
             onMouseEnter={(e) => e.stopPropagation()}
             disabled={isPending}

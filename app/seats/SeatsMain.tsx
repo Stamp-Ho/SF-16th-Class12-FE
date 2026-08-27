@@ -43,6 +43,49 @@ export default function SeatsMain({ profile }: { profile: any }) {
 	// 그룹 정렬 기준 (선점 좌석 없으면 상단 노출)
 	const [sortGroupsByOccupied, setSortGroupsByOccupied] = useState(true);
 
+	// 라운드 메타 정보만 가공 (그룹/좌석 데이터는 포함하지 않음)
+	const buildRoundMeta = (round: any) => ({
+		...round,
+		roundNumber: round.id,
+		numberPerGroup: round.people_per_group,
+		isClosed: round.is_closed,
+		isGambleEnabled: round.is_gamble_enabled,
+	});
+
+	// 특정 라운드의 그룹/좌석 원시 데이터를 화면에서 쓰는 형태로 가공
+	const buildRoundDetail = (roundMeta: any, groups: any[], allocations: any[]) => ({
+		...roundMeta,
+		groups: groups.map((group) => ({
+			...group,
+			groupId: String(group.id),
+			m1: group.member_1,
+			m2: group.member_2,
+			m3: group.member_3,
+			groupName: group.group_name,
+		})),
+		seats: allocations.map((allocation) => ({
+			...allocation,
+			id: String(allocation.id),
+			current_group_id: allocation.group_id ? String(allocation.group_id) : null,
+			current_group_name: allocation.seat_group?.group_name ?? null,
+			current_bid_price: allocation.bid_price,
+			locked: allocation.is_locked,
+			member_left: allocation.member_left ?? allocation.seat_group?.member_1 ?? null,
+			member_middle: allocation.member_middle ?? allocation.seat_group?.member_2 ?? null,
+			member_right: allocation.member_right ?? allocation.seat_group?.member_3 ?? null,
+		})),
+	});
+
+	// 현재 보고 있는 라운드의 그룹/좌석 데이터만 조회 (불필요한 전체 라운드 조회 방지)
+	const loadRoundDetail = useCallback(async (roundMeta: any) => {
+		try {
+			const { groups, allocations } = await getSeatsDataByRounds([roundMeta.id]);
+			setSelectedRound(buildRoundDetail(roundMeta, groups, allocations));
+		} catch (err) {
+			console.error('회차 상세 데이터 로드 에러:', err);
+		}
+	}, []);
+
 	const loadData = useCallback(async () => {
 		try {
 			const roundData = await getAllRounds();
@@ -52,75 +95,28 @@ export default function SeatsMain({ profile }: { profile: any }) {
 				return;
 			}
 
-			// 1. 전체 라운드 ID 목록으로 그룹 및 좌석 배정 데이터를 한 번에 가져옴 (단 1회 네트워크 요청)
-			const roundIds = roundData.map((r) => r.id);
-			const { groups: allGroups, allocations: allAllocations } = await getSeatsDataByRounds(roundIds);
+			const metaList = roundData.map(buildRoundMeta);
+			setRounds(metaList);
 
-			// 2. round_id 기준으로 빠른 매핑을 위한 그룹핑 (Map 활용)
-			const groupsMap = new Map<number, typeof allGroups>();
-			for (const group of allGroups) {
-				const list = groupsMap.get(group.round_id) || [];
-				list.push(group);
-				groupsMap.set(group.round_id, list);
-			}
+			const prevRoundNumber = selectedRoundNumberRef.current;
+			const targetMeta =
+				(prevRoundNumber != null && metaList.find((r) => r.roundNumber === prevRoundNumber)) ||
+				metaList[0];
 
-			const allocationsMap = new Map<number, typeof allAllocations>();
-			for (const allocation of allAllocations) {
-				const list = allocationsMap.get(allocation.round_id) || [];
-				list.push(allocation);
-				allocationsMap.set(allocation.round_id, list);
-			}
-
-			// 3. 인메모리에서 데이터 조립 (비동기 병목 제거)
-			const data = roundData.map((round) => {
-				const groups = groupsMap.get(round.id) || [];
-				const allocations = allocationsMap.get(round.id) || [];
-
-				return {
-				...round,
-				roundNumber: round.id,
-				numberPerGroup: round.people_per_group,
-				isClosed: round.is_closed,
-				groups: groups.map((group) => ({
-					...group,
-					groupId: String(group.id),
-					m1: group.member_1,
-					m2: group.member_2,
-					m3: group.member_3,
-					groupName: group.group_name,
-				})),
-				seats: allocations.map((allocation) => ({
-					...allocation,
-					id: String(allocation.id),
-					current_group_id: allocation.group_id ? String(allocation.group_id) : null,
-					current_group_name: allocation.seat_group?.group_name ?? null,
-					current_bid_price: allocation.bid_price,
-					locked: allocation.is_locked,
-					member_left: allocation.member_left ?? allocation.seat_group?.member_1 ?? null,
-					member_middle: allocation.member_middle ?? allocation.seat_group?.member_2 ?? null,
-					member_right: allocation.member_right ?? allocation.seat_group?.member_3 ?? null,
-				})),
-				};
-			});
-
-			setRounds(data);
-
-			setSelectedRound((prevSelected: any) => {
-				if (data.length === 0) return null;
-
-				if (prevSelected) {
-				const matchedRound = data.find(
-					(r) => r.roundNumber === prevSelected.roundNumber
-				);
-				return matchedRound || data[0];
-				}
-
-				return data[0];
-			});
-			} catch (err) {
+			await loadRoundDetail(targetMeta);
+		} catch (err) {
 			console.error('데이터 로드 에러:', err);
-			}
-	}, []);
+		}
+	}, [loadRoundDetail]);
+
+	// 회차 탭 선택 시 해당 회차 데이터만 조회
+	const handleSelectRound = useCallback(
+		(r: any) => {
+			setSelectedRound((prev: any) => (prev?.roundNumber === r.roundNumber ? prev : { ...r, groups: [], seats: [] }));
+			void loadRoundDetail(r);
+		},
+		[loadRoundDetail],
+	);
 
 	useEffect(() => {
 		void loadData();
@@ -138,6 +134,7 @@ export default function SeatsMain({ profile }: { profile: any }) {
 					const updatedSeat = payload.new;
 					const currentCode = myOccupiedCodeRef.current;
 					const currentGroupId = myGroupIdRef.current;
+					const currentRoundId = selectedRoundNumberRef.current;
 
 					// 내가 선점 중이던 자리를 다른 팀이 뺏어간 경우 알림
 					if (
@@ -145,14 +142,17 @@ export default function SeatsMain({ profile }: { profile: any }) {
 						updatedSeat.seat_code === currentCode &&
 						updatedSeat.group_id !== Number(currentGroupId) &&
 						updatedSeat.group_id !== null &&
-						updatedSeat.round_id === selectedRoundNumberRef.current
+						updatedSeat.round_id === currentRoundId
 					) {
 						alert(
 							`⚠️ [경고] ${updatedSeat.seat_code}구역 자리를 다른 팀이 상향 입찰하여 뺏어갔습니다!`,
 						);
 					}
 
-					void loadData();
+					// 현재 보고 있는 회차와 무관한 변경이면 재조회하지 않음
+					if (updatedSeat.round_id === currentRoundId) {
+						void loadData();
+					}
 				},
 			)
 			.subscribe();
@@ -234,7 +234,7 @@ export default function SeatsMain({ profile }: { profile: any }) {
 					{rounds.map((r) => (
 						<button
 							key={r.roundNumber}
-							onClick={() => setSelectedRound(r)}
+							onClick={() => handleSelectRound(r)}
 							className={`px-4 py-2 text-xs font-bold rounded-xl transition-all whitespace-nowrap ${
 								selectedRound?.roundNumber === r.roundNumber
 									? 'bg-slate-900 text-white shadow-sm'
@@ -253,6 +253,7 @@ export default function SeatsMain({ profile }: { profile: any }) {
 					<AdminControlPanel
 						roundNumber={selectedRound.roundNumber}
 						isClosed={selectedRound.isClosed}
+						isGambleEnabled={selectedRound.isGambleEnabled}
 						loadData={loadData}
 					/>
 				)}
@@ -359,12 +360,12 @@ export default function SeatsMain({ profile }: { profile: any }) {
 								{/* 행운 노려보기 버튼 */}
 								<div
 									className={`px-5 py-3 rounded-2xl shadow-lg flex items-center justify-between border transition-all duration-300 shadow-md relative overflow-hidden ${
-										myOccupiedCode
+										myOccupiedCode && myCurrentBidPrice >= 500 && selectedRound.isGambleEnabled
 											? 'cursor-pointer bg-[linear-gradient(110deg,#E6C685_0%,#F9E9C3_45%,#F9E9C3_55%,#D9A036_100%)] text-slate-950 border-[#FDF2D9] shadow-inner shadow-white/30'
 											: 'cursor-not-allowed bg-white text-slate-800 border-slate-200'
 									}`}
 									onClick={() => {
-										if (myOccupiedCode && myCurrentBidPrice >= 500 && !myOccupiedSeat.locked) {
+										if (myOccupiedCode && myCurrentBidPrice >= 500 && selectedRound.isGambleEnabled) {
 											setGambleModalOn(true);
 										}}}
 									
@@ -372,28 +373,50 @@ export default function SeatsMain({ profile }: { profile: any }) {
 									<div className="space-y-1 relative z-10">
 										<span
 											className={`text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
-												myOccupiedCode
+												myOccupiedCode && myCurrentBidPrice >= 500 && selectedRound.isGambleEnabled
 													? 'bg-yellow-800/80 text-yellow-300'
 													: 'bg-slate-100 text-slate-500'
 											}`}
 										>
 											LUCKY TRY
 										</span>
+										{selectedRound.isGambleEnabled ?
+											(
+												<>
+													<h3
+														className={`text-xl font-black flex items-center gap-2 
+														text-slate-800`}
+													>
+														행운 노리기
+													</h3>
 
-										<h3
-											className={`text-xl font-black flex items-center gap-2 
-											 text-slate-800`}
-										>
-											행운 노리기
-										</h3>
+													<p
+														className={`text-xs font-bold animate-pulse ${
+															myOccupiedCode && myCurrentBidPrice >= 500 ? 'text-yellow-950/80' : 'text-slate-400'
+														}`}
+													>
+														결과는 본인 책임~
+													</p>
+												</>
+											)
+											:(
+												<>
+												
+													<h3
+														className={`text-xl font-black flex items-center gap-2 
+														text-slate-500`}
+													>
+														도박 금지됨
+													</h3>
 
-										<p
-											className={`text-xs font-bold animate-pulse ${
-												myOccupiedCode ? 'text-yellow-950/80' : 'text-slate-400'
-											}`}
-										>
-											결과는 본인 책임~
-										</p>
+													<p
+														className={`text-xs font-bold animate-pulse 'text-slate-300'`}
+													>
+														관리자에게 문의하세요
+													</p>
+												</>
+											)
+										}
 									</div>
 								</div>
 							</div>
