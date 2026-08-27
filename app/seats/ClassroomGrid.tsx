@@ -457,7 +457,7 @@ export default function ClassroomGrid({
 										if (seatBidTier.tier === 4) {
 											return (
 												<Shield
-													iconKey={index}
+													iconKey={tile.num * 10 + index}
 													size={index === 1 ? '18.5' : '16'}
 													className="ml-[-0.75px] mr-[-1.25px]"
 												/>
@@ -466,7 +466,7 @@ export default function ClassroomGrid({
 
 										return (
 											<Shield
-												iconKey={index}
+												iconKey={tile.num * 10 + index}
 												size="16"
 												className="-mx-px flex justify-center"
 											/>

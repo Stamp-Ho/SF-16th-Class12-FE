@@ -17,7 +17,7 @@ const RandomSelectModal = dynamic(() => import('./RandomSelectModal'), {
 export default function SongMain({
 	user,
 }: {
-	user: { name: string; role: string};
+	user: { name: string; role: string };
 }) {
 	const supabase = useMemo(() => createClient(), []);
 	const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
@@ -75,11 +75,7 @@ export default function SongMain({
 		e.preventDefault();
 		if (!newSingerName.trim()) return;
 		try {
-			await addSongRecord(
-				newSingerName,
-				newSingerReason,
-				addFront,
-			);
+			await addSongRecord(newSingerName, newSingerReason, addFront);
 			setNewSingerName('');
 			setNewSingerReason('');
 			setAddFront(false);
@@ -131,10 +127,10 @@ export default function SongMain({
 				</header>
 
 				{/* 2. 어드민 또는 사용자 메인 섹션 */}
-				{isAdmin ? (
+				{!isAdmin ? (
 					<section className="space-y-4">
 						{/* 노래 시작 패널 */}
-						<div className="bg-gradient-to-r from-ssafy-blue/10 via-white to-white p-6 rounded-2xl border border-ssafy-blue/20 shadow-sm flex items-center justify-between">
+						<div className="bg-linear-to-r from-ssafy-blue/10 via-white to-white px-8 py-4 rounded-2xl border border-ssafy-blue/20 shadow-sm flex items-center justify-between">
 							<div>
 								<span className="inline-block px-2.5 py-1 bg-ssafy-blue/20 text-ssafy-blue text-xs font-bold rounded-lg mb-2">
 									ADMIN CONTROL
@@ -146,18 +142,30 @@ export default function SongMain({
 									1순위 가수가 준비되면 검색 버튼을 눌러 노래를 틀어주세요.
 								</p>
 							</div>
-							<div className="flex flex-col items-center text-slate-600 text-sm ml-auto mr-5">
-								<p>대기 인원</p>
-								<p className="text-ssafy-blue font-bold text-3xl">
-									{singerList.length}
-								</p>
+							<div className="text-ssafy-blue font-bold text-4xl ml-auto mr-8">
+								노래 시작!
 							</div>
+							<style>{`
+								@keyframes flash-red {
+									0%, 100% { background-color: var(--color-ssafy-blue); }
+									10%, 60% { background-color: white; }
+									50% { background-color: #CD201F; }
+								}
+							`}</style>
 							<button
 								onClick={() => setIsSearchModalOpen(true)}
-								className="bg-ssafy-blue hover:bg-ssafy-blue/90 text-white h-16 w-16 rounded-2xl shadow-md shadow-ssafy-blue/30 transition-all flex items-center justify-center group active:scale-95"
+								style={{
+									animation:
+										isSearchModalOpen || isRecordModalOpen
+											? ''
+											: 'bounce 1s infinite, flash-red 2s infinite',
+									transformOrigin: 'center',
+									transition: 'transform 1s ease-in-out',
+								}}
+								className="text-white h-38 w-40 rounded-[38px] shadow-md shadow-ssafy-blue/30 transition-all flex items-center justify-center group active:scale-95 bg-ssafy-blue"
 								title="노래 검색 및 재생"
 							>
-								<Play className="w-8 h-8 fill-current translate-x-0.5 group-hover:scale-110 transition-transform mr-1" />
+								<Play className="w-16 h-16 fill-current translate-x-0.5 group-hover:scale-110 transition-transform mr-1" />
 							</button>
 						</div>
 
@@ -169,7 +177,10 @@ export default function SongMain({
 							<h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
 								✨ 가수 대기열 추가
 							</h2>
-							<h4 className="text-sm text-slate-400 -mt-3 mb-3">탭 순서: 가수 이름 → 노래 사유 → 대기열 추가하기 (추가 후 다시 가수 이름으로 포커스)</h4>
+							<h4 className="text-sm text-slate-400 -mt-3 mb-3">
+								탭 순서: 가수 이름 → 노래 사유 → 대기열 추가하기 (추가 후 다시
+								가수 이름으로 포커스)
+							</h4>
 
 							<div className="grid grid-cols-3 grid-rows-1 gap-3">
 								<input
@@ -298,9 +309,7 @@ export default function SongMain({
 					/>
 				)}
 				{isRecordModalOpen && (
-					<RecordModal
-						onClose={() => setIsRecordModalOpen(false)}
-					/>
+					<RecordModal onClose={() => setIsRecordModalOpen(false)} />
 				)}
 				{isRandomSelectModalOpen && (
 					<RandomSelectModal
