@@ -374,19 +374,25 @@ export async function placeBid(request: BidRequest) {
 		p_next_group_id: request.nextGroupId,
 		p_user_name: request.userName,
 	});
-	try {
-		if (request.prevUsers && request.prevUsers.length > 0 && request.seatCode) {
-			sendMattermostNoticeOnSeatBid({
-				seatCode: request.seatCode,
-				attacker: request.userName,
-				victims: request.prevUsers,
-			});
-		}
-	} catch (err: any) {
-		console.error(`Failed to send Mattermost notice: ${err.message}`);
-	}
 
 	if (error) throw new Error(`입찰 실패: ${error.message}`);
+	else {
+		try {
+			if (
+				request.prevUsers &&
+				request.prevUsers.length > 0 &&
+				request.seatCode
+			) {
+				sendMattermostNoticeOnSeatBid({
+					seatCode: request.seatCode,
+					attacker: request.userName,
+					victims: request.prevUsers,
+				});
+			}
+		} catch (err: any) {
+			console.error(`Failed to send Mattermost notice: ${err.message}`);
+		}
+	}
 	revalidatePath('/seats');
 	return data;
 }
