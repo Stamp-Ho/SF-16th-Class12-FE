@@ -193,8 +193,14 @@ export default function ClassroomGrid({
 					allocationId: Number(seat.id),
 					nextGroupId: Number(myGroupId),
 					userName: currentUserName,
+					prevUsers: [
+						seat.member_left ?? '',
+						seat.member_middle ?? '',
+						seat.member_right ?? '',
+					].filter((m) => m !== ''),
+					seatCode: code,
 				});
-				await loadData();
+				loadData();
 				setHoveredSeatCode(null);
 			} catch (err: any) {
 				alert(`입찰 실패: ${err.message}`);
@@ -212,8 +218,9 @@ export default function ClassroomGrid({
 				allocationId: Number(seat.id),
 				nextGroupId: Number(targetGroupId),
 				userName: currentUserName,
+				seatCode: code,
 			});
-			await loadData();
+			loadData();
 		} catch (err: any) {
 			alert(`드롭 배정 실패: ${err.message}`);
 		}
@@ -241,15 +248,15 @@ export default function ClassroomGrid({
 					? (seat.member_right ?? null)
 					: (seat.member_middle ?? null),
 			});
-			await loadData();
+			loadData();
 		} catch (err: any) {
 			alert(`위치 변경 실패: ${err.message}`);
 		}
 	};
-	const handleLockClick = async (seatId: string, nextState: boolean) => {
+	const handleLockClick = async (seatId: string) => {
 		try {
 			await toggleLockSeat(Number(seatId));
-			await loadData();
+			loadData();
 		} catch (err: any) {
 			alert(`좌석 잠금/해제 실패: ${err.message}`);
 		}
@@ -553,7 +560,7 @@ export default function ClassroomGrid({
 										)} ${numberPerGroup === 3 || isCorner ? 'left-10.25' : tile.num % 6 === 4 ? '-left-9' : '-left-4 '}`}
 									onClick={(e) => {
 										e.preventDefault();
-										handleLockClick(seatInfo.id, !seatInfo.is_locked);
+										handleLockClick(seatInfo.id);
 									}}
 									title={seatInfo.is_locked ? '좌석 잠금 해제' : '좌석 잠금'}
 								>
