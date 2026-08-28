@@ -376,12 +376,10 @@ export async function placeBid(request: BidRequest) {
 	});
 	try {
 		if (request.prevUsers && request.prevUsers.length > 0 && request.seatCode) {
-			request.prevUsers.forEach((user) => {
-				sendMattermostNoticeOnSeatBid({
-					username: user,
-					seatCode: request.seatCode,
-					attacker: request.userName,
-				});
+			sendMattermostNoticeOnSeatBid({
+				seatCode: request.seatCode,
+				attacker: request.userName,
+				victims: request.prevUsers,
 			});
 		}
 	} catch (err: any) {
@@ -489,11 +487,11 @@ export async function getHistoriesByRound(round_id: number) {
  * 좌석 입찰시 메터모스트 알림 전송
  */
 export const sendMattermostNoticeOnSeatBid = async ({
-	username,
+	victims,
 	seatCode,
 	attacker,
 }: {
-	username: string;
+	victims: string[];
 	seatCode: string;
 	attacker: string;
 }) => {
@@ -502,15 +500,10 @@ export const sendMattermostNoticeOnSeatBid = async ({
 	if (!webhookUrl) {
 		throw new Error('매터모스트 클래스 웹훅이 정의되지 않았습니다.');
 	}
-	const userId: string = MATTERMOST_USER_IDS[username];
-	if (!userId) {
-		throw new Error(
-			`"${username}"의 매터모스트 사용자 ID가 정의되지 않았습니다.`,
-		);
-	}
 	const message = `> 🚨 좌석 입찰 알림 🚨
-> 좌석 코드: ${seatCode}의 자리를 빼앗겼습니다.
-> 공격자: (${MATTERMOST_USER_IDS[attacker]})`;
+> 좌석 코드: ${seatCode}자리의 주인이 바뀌었습니다.
+> 공격자: (${MATTERMOST_USER_IDS[attacker]})
+> 피해자: (${victims.map((v) => MATTERMOST_USER_IDS[v]).join(', ')})`;
 	try {
 		const response = await fetch(webhookUrl, {
 			method: 'POST',
@@ -518,7 +511,6 @@ export const sendMattermostNoticeOnSeatBid = async ({
 				'Content-Type': 'application/json',
 			},
 			body: JSON.stringify({
-				channel: userId,
 				text: message,
 			}),
 		});
