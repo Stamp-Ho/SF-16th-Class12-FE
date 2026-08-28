@@ -503,7 +503,7 @@ export const sendMattermostNoticeOnSeatBid = async ({
 	const message = `### 🚨 좌석 입찰 알림 🚨
 좌석 코드: ${seatCode}자리의 주인이 바뀌었습니다.
 > 공격자: ${attacker}
-> 피해자: (${victims.map((v) => MATTERMOST_USER_IDS[v]).join(', ')})`;
+> 피해자: ${victims.map((v) => MATTERMOST_USER_IDS[v]).join(', ')}`;
 	try {
 		const response = await fetch(webhookUrl, {
 			method: 'POST',
