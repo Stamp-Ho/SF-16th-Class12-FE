@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Cookie, Shield, ArrowLeft, Sparkles, Vote } from 'lucide-react';
+import { testHook } from './actions';
 
 const initialUserList: string[] = [
 	'강명환',
@@ -82,7 +83,7 @@ export default function SnackMain({ profile }: { profile: any }) {
 
 					<button
 						onClick={() => {
-							alert('간식 뽑기 기능은 아직 구현되지 않았습니다.');
+							testHook({ username: profile.username });
 						}}
 						className="z-10 flex items-center gap-3 px-8 py-4 bg-amber-400 hover:bg-amber-300 text-slate-900 font-extrabold text-base rounded-2xl shadow-lg hover:shadow-amber-400/30 transition-all transform active:scale-95 disabled:opacity-50"
 					>
