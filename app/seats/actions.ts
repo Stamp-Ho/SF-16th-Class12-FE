@@ -500,7 +500,7 @@ export const sendMattermostNoticeOnSeatBid = async ({
 	if (!webhookUrl) {
 		throw new Error('매터모스트 클래스 웹훅이 정의되지 않았습니다.');
 	}
-	const message = `###🚨 좌석 입찰 알림 🚨
+	const message = `🚨 좌석 입찰 알림 🚨
 좌석 코드: ${seatCode}자리의 주인이 바뀌었습니다.
 > 공격자: ${attacker}
 > 피해자: (${victims.map((v) => MATTERMOST_USER_IDS[v]).join(', ')})`;
