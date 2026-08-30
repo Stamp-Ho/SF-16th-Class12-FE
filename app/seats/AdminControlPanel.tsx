@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 
 export default function AdminControlPanel({
-	roundNumber,
+	roundId,
 	isClosed,
 	isGambleEnabled,
 	loadData,
@@ -25,7 +25,7 @@ export default function AdminControlPanel({
 	showMoney,
 	setShowMoney,
 }: {
-	roundNumber: number;
+	roundId: number;
 	isClosed: boolean;
 	isGambleEnabled: boolean;
 	loadData: () => Promise<void>;
@@ -48,9 +48,9 @@ export default function AdminControlPanel({
 		startTransition(async () => {
 			try {
 				if (isClosed) {
-					await openRound(roundNumber);
+					await openRound(roundId);
 				} else {
-					await closeRound(roundNumber);
+					await closeRound(roundId);
 				}
 				await refreshAuctionState();
 			} catch (err: any) {
@@ -62,7 +62,7 @@ export default function AdminControlPanel({
 	const handleToggleGamble = () => {
 		startGambleTransition(async () => {
 			try {
-				await toggleGamble(roundNumber);
+				await toggleGamble(roundId);
 				await refreshAuctionState();
 			} catch (err: any) {
 				alert(`도박 상태 변경 에러: ${err.message}`);
@@ -154,7 +154,7 @@ export default function AdminControlPanel({
 						if (confirm('정말로 이 회차의 경매를 삭제하시겠습니까?')) {
 							startTransition(async () => {
 								try {
-									await deleteRound(roundNumber);
+									await deleteRound(roundId);
 									await refreshAuctionState();
 									alert('경매가 삭제되었습니다.');
 								} catch (err: any) {

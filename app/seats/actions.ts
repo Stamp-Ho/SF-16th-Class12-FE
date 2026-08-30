@@ -150,13 +150,13 @@ export async function createRound(request: CreateRoundRequest) {
 /**
  * 라운드 마감
  */
-export async function closeRound(round: number) {
+export async function closeRound(roundId: number) {
 	const supabase = await createClient();
 
 	const { data, error } = await supabase
 		.from('seat_rounds')
 		.update({ is_closed: true })
-		.eq('id', round)
+		.eq('id', roundId)
 		.select()
 		.single();
 
@@ -168,13 +168,13 @@ export async function closeRound(round: number) {
 /**
  * 라운드 재오픈
  */
-export async function openRound(round: number) {
+export async function openRound(roundId: number) {
 	const supabase = await createClient();
 
 	const { data, error } = await supabase
 		.from('seat_rounds')
 		.update({ is_closed: false })
-		.eq('id', round)
+		.eq('id', roundId)
 		.select()
 		.single();
 
@@ -186,14 +186,14 @@ export async function openRound(round: number) {
 /**
  * 라운드 도박 허용/금지 토글
  */
-export async function toggleGamble(round: number) {
+export async function toggleGamble(roundId: number) {
 	const supabase = await createClient();
 
 	// 1. 현재 도박 허용 상태 조회
 	const { data: current, error: fetchError } = await supabase
 		.from('seat_rounds')
 		.select('is_gamble_enabled')
-		.eq('id', round)
+		.eq('id', roundId)
 		.single();
 
 	if (fetchError || !current) {
@@ -206,7 +206,7 @@ export async function toggleGamble(round: number) {
 		.update({
 			is_gamble_enabled: !current.is_gamble_enabled,
 		})
-		.eq('id', round)
+		.eq('id', roundId)
 		.select()
 		.single();
 
@@ -219,10 +219,13 @@ export async function toggleGamble(round: number) {
 /**
  * 라운드 삭제 (CASCADE에 의해 관련 그룹, 좌석, 히스토리 자동 삭제)
  */
-export async function deleteRound(round: number) {
+export async function deleteRound(roundId: number) {
 	const supabase = await createClient();
 
-	const { error } = await supabase.from('seat_rounds').delete().eq('id', round);
+	const { error } = await supabase
+		.from('seat_rounds')
+		.delete()
+		.eq('id', roundId);
 
 	if (error) throw new Error(`라운드 삭제 실패: ${error.message}`);
 	revalidatePath('/seats');
@@ -236,13 +239,13 @@ export async function deleteRound(round: number) {
 /**
  * 특정 라운드의 그룹 목록 조회
  */
-export async function getGroupsByRound(round: number) {
+export async function getGroupsByRound(roundNumber: number) {
 	const supabase = await createClient();
 
 	const { data, error } = await supabase
 		.from('seat_groups')
 		.select('*')
-		.eq('round', round)
+		.eq('round', roundNumber)
 		.order('id', { ascending: true });
 
 	if (error) throw new Error(`그룹 목록 조회 실패: ${error.message}`);

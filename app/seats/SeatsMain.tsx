@@ -52,7 +52,8 @@ export default function SeatsMain({ profile }: { profile: any }) {
 	// 라운드 메타 정보만 가공 (그룹/좌석 데이터는 포함하지 않음)
 	const buildRoundMeta = (round: any) => ({
 		...round,
-		roundNumber: round.id,
+		roundId: round.id,
+		roundNumber: round.round,
 		numberPerGroup: round.people_per_group,
 		isClosed: round.is_closed,
 		isGambleEnabled: round.is_gamble_enabled,
@@ -115,10 +116,10 @@ export default function SeatsMain({ profile }: { profile: any }) {
 			const metaList = roundData.map(buildRoundMeta);
 			setRounds(metaList);
 
-			const prevRoundNumber = selectedRoundNumberRef.current;
+			const prevRoundId = selectedRoundNumberRef.current;
 			const targetMeta =
-				(prevRoundNumber != null &&
-					metaList.find((r) => r.roundNumber === prevRoundNumber)) ||
+				(prevRoundId != null &&
+					metaList.find((r) => r.roundId === prevRoundId)) ||
 				metaList[0];
 
 			await loadRoundDetail(targetMeta);
@@ -131,9 +132,7 @@ export default function SeatsMain({ profile }: { profile: any }) {
 	const handleSelectRound = useCallback(
 		(r: any) => {
 			setSelectedRound((prev: any) =>
-				prev?.roundNumber === r.roundNumber
-					? prev
-					: { ...r, groups: [], seats: [] },
+				prev?.roundId === r.roundId ? prev : { ...r, groups: [], seats: [] },
 			);
 			void loadRoundDetail(r);
 		},
@@ -216,7 +215,7 @@ export default function SeatsMain({ profile }: { profile: any }) {
 	const myCurrentBidPrice = myOccupiedSeat?.current_bid_price || 0;
 
 	useEffect(() => {
-		selectedRoundNumberRef.current = selectedRound?.roundNumber ?? null;
+		selectedRoundNumberRef.current = selectedRound?.roundId ?? null;
 	}, [selectedRound]);
 
 	useEffect(() => {
@@ -257,10 +256,10 @@ export default function SeatsMain({ profile }: { profile: any }) {
 				<div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-slate-200">
 					{rounds.map((r) => (
 						<button
-							key={r.roundNumber}
+							key={r.roundId}
 							onClick={() => handleSelectRound(r)}
 							className={`px-4 py-2 text-xs font-bold rounded-xl transition-all whitespace-nowrap ${
-								selectedRound?.roundNumber === r.roundNumber
+								selectedRound?.roundId === r.roundId
 									? 'bg-slate-900 text-white shadow-sm'
 									: 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
 							}`}
@@ -280,7 +279,7 @@ export default function SeatsMain({ profile }: { profile: any }) {
 				{/* 4. 어드민 제어 패널 */}
 				{currentUser.role === 'super_admin' && selectedRound && (
 					<AdminControlPanel
-						roundNumber={selectedRound.roundNumber}
+						roundId={selectedRound.roundId}
 						isClosed={selectedRound.isClosed}
 						isGambleEnabled={selectedRound.isGambleEnabled}
 						loadData={loadData}
