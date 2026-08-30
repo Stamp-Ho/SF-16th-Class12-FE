@@ -150,6 +150,8 @@ export default function ClassroomGrid({
 	numberPerGroup,
 	loadData,
 	screenShotMode,
+	showMoney,
+	roundTitle,
 }: {
 	roundId: number;
 	seatList: SeatData[];
@@ -160,6 +162,8 @@ export default function ClassroomGrid({
 	numberPerGroup: number;
 	loadData: () => void;
 	screenShotMode: boolean;
+	showMoney: boolean;
+	roundTitle: string;
 }) {
 	const [isPending, startTransition] = useTransition();
 
@@ -312,7 +316,7 @@ export default function ClassroomGrid({
 			)}
 			{/* 스크린 / 문 / 강사님 */}
 			<div className="space-y-3">
-				<div className="grid grid-cols-12 gap-2 text-center text-xs font-bold">
+				<div className="grid grid-cols-12 gap-2 text-center text-[10px] sm:text-xs font-bold">
 					<a
 						href="https://copper-zebu-fc0.notion.site/3b9e15c202ad8075828cff5bcdf83bb6"
 						target="_blank"
@@ -340,9 +344,15 @@ export default function ClassroomGrid({
 					)}
 				</div>
 				<div className="flex justify-between">
-					<div className="w-48 bg-violet-50 border-2 border-violet-300 text-violet-900 py-2.5 rounded-xl font-bold text-xs text-center">
-						총액: {(tatalCost * numberPerGroup).toLocaleString()}원
-					</div>
+					{showMoney ? (
+						<div className="w-48 bg-violet-50 border-2 border-violet-300 text-violet-900 py-2.5 rounded-xl font-bold text-xs text-center">
+							총액: {(tatalCost * numberPerGroup).toLocaleString()}원
+						</div>
+					) : (
+						<div className="w-48 bg-slate-50 border-2 border-slate-300 text-slate-900 py-2.5 rounded-xl font-bold text-xs text-center">
+							{roundTitle}
+						</div>
+					)}
 					<div className="w-48 bg-amber-50 border-2 border-amber-300 text-amber-900 py-2.5 rounded-xl font-bold text-xs text-center">
 						강사님 자~리
 					</div>
@@ -404,10 +414,11 @@ export default function ClassroomGrid({
 		const isCorner = CORNER_SEATS.includes(tile.code);
 
 		// 내 그룹이면 원래 구역 색상의 '진한 톤(MY_CODE_COLORS)', 아니면 '연한 톤(CODE_COLORS)' 적용
-		const colorClass = isMyGroup
-			? MY_CODE_COLORS[tile.code] ||
-				'bg-indigo-600 text-white ring-4 ring-indigo-300'
-			: CODE_COLORS[tile.code] || 'bg-slate-50 border-slate-200';
+		const colorClass =
+			!screenShotMode && isMyGroup
+				? MY_CODE_COLORS[tile.code] ||
+					'bg-indigo-600 text-white ring-4 ring-indigo-300'
+				: CODE_COLORS[tile.code] || 'bg-slate-50 border-slate-200';
 
 		const personName = isCorner
 			? seatInfo.member_left
@@ -435,7 +446,7 @@ export default function ClassroomGrid({
 					onDragLeave={(e) => handleDragLeave(e, tile.code)}
 					onDrop={(e) => handleDrop(e, tile.code)}
 					className={`border-2 rounded-xl p-2 py-1 flex flex-col justify-between h-20 cursor-pointer transition-all z-0 select-none ${
-						isMyGroup ? 'z-10 scale-[1.03]' : ''
+						!screenShotMode && isMyGroup ? 'z-10 scale-[1.03]' : ''
 					} ${
 						isCardHovered
 							? 'ring-4 ring-indigo-500 border-indigo-600 scale-[1.05] z-20 shadow-lg'
@@ -512,11 +523,13 @@ export default function ClassroomGrid({
 					</div>
 
 					{/* 하단 가격 */}
-					<div className="flex justify-between items-end text-[10px]">
+					<div className="flex justify-between items-end text-[10px] h-3.75">
 						<span className="font-bold font-mono">
-							{seatInfo.current_bid_price
-								? `${seatInfo.current_bid_price.toLocaleString()}원`
-								: '0원'}
+							{showMoney
+								? seatInfo.current_bid_price
+									? `${seatInfo.current_bid_price.toLocaleString()}원`
+									: '0원'
+								: ''}
 						</span>
 						<span className="font-bold text-[10px]">
 							{!screenShotMode && seatInfo.updated_at

@@ -12,6 +12,7 @@ import {
 	Coins,
 	CameraOff,
 	Camera,
+	DollarSign,
 } from 'lucide-react';
 
 export default function AdminControlPanel({
@@ -21,6 +22,8 @@ export default function AdminControlPanel({
 	loadData,
 	screenShotMode,
 	setScreenShotMode,
+	showMoney,
+	setShowMoney,
 }: {
 	roundNumber: number;
 	isClosed: boolean;
@@ -28,6 +31,8 @@ export default function AdminControlPanel({
 	loadData: () => Promise<void>;
 	screenShotMode: boolean;
 	setScreenShotMode: (value: boolean) => void;
+	showMoney: boolean;
+	setShowMoney: (value: boolean) => void;
 }) {
 	const [isPending, startTransition] = useTransition();
 	const [isGamblePending, startGambleTransition] = useTransition();
@@ -66,8 +71,8 @@ export default function AdminControlPanel({
 	};
 
 	return (
-		<div className="bg-slate-900 text-white p-5 rounded-2xl shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4">
-			<div className="flex items-center gap-3">
+		<div className="bg-slate-900 text-white rounded-2xl shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4 p-2.5 sm:p-4">
+			<div className="flex items-center gap-3 justify-start w-full">
 				<ShieldCheck className="w-6 h-6 text-amber-400 shrink-0" />
 				<div>
 					<h3 className="font-bold text-sm">관리자 경매 컨트롤 센터</h3>
@@ -94,9 +99,19 @@ export default function AdminControlPanel({
 						<CameraOff className={`w-6 h-6 shrink-0 text-slate-400`} />
 					)}
 				</div>
+				<div
+					onClick={() => setShowMoney(!showMoney)}
+					className="cursor-pointer bg-white/20 py-1 px-2 rounded-full"
+				>
+					{showMoney ? (
+						<DollarSign className={`w-6 h-6 shrink-0  text-emerald-400`} />
+					) : (
+						<DollarSign className={`w-6 h-6 shrink-0 text-slate-400`} />
+					)}
+				</div>
 			</div>
 
-			<div className="flex items-center gap-3 w-full sm:w-auto">
+			<div className="flex items-center justify-end gap-3 w-full">
 				{/* 상태 변경 버튼 */}
 				<button
 					onClick={handleToggleStatus}
@@ -111,11 +126,11 @@ export default function AdminControlPanel({
 						<Loader2 className="w-3.5 h-3.5 animate-spin" />
 					) : isClosed ? (
 						<>
-							<Unlock className="w-3.5 h-3.5" /> 경매 재개하기
+							<Unlock className="w-3.5 h-3.5" /> 경매 재개
 						</>
 					) : (
 						<>
-							<Lock className="w-3.5 h-3.5" /> 경매 종료하기
+							<Lock className="w-3.5 h-3.5" /> 경매 종료
 						</>
 					)}
 				</button>
@@ -130,7 +145,7 @@ export default function AdminControlPanel({
 				>
 					{isGamblePending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
 					<Coins className="w-3.5 h-3.5" />{' '}
-					{isGambleEnabled ? '도박 허용됨' : '도박 금지됨'}
+					{isGambleEnabled ? '도박 허용' : '도박 금지'}
 				</button>
 
 				{/* 경매 삭제 버튼 */}

@@ -35,6 +35,8 @@ export default function SeatsMain({ profile }: { profile: any }) {
 
 	// 스크린 샷 모드
 	const [screenShotMode, setScreenShotMode] = useState(false);
+	// 돈 표시 여부
+	const [showMoney, setShowMoney] = useState(true);
 
 	// 모달 상태
 	const [isModalOpen, setIsModalOpen] = useState(false);
@@ -220,8 +222,8 @@ export default function SeatsMain({ profile }: { profile: any }) {
 		myGroupIdRef.current = myGroupId;
 	}, [myOccupiedCode, myGroupId]);
 	return (
-		<main className="min-h-screen bg-slate-50 p-6 md:p-6">
-			<div className="max-w-6xl mx-auto space-y-6">
+		<main className="min-h-screen bg-slate-50 p-3 sm:p-6">
+			<div className="max-w-6xl mx-auto space-y-6 w-full">
 				<Link
 					href="/"
 					className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 transition-colors w-fit py-2 m-0"
@@ -229,25 +231,24 @@ export default function SeatsMain({ profile }: { profile: any }) {
 					<ArrowLeft className="w-4 h-4" /> 메인 화면으로
 				</Link>
 				{/* 1. 상단 헤더 */}
-				<div className="flex flex-col sm:flex-row sm:items-center gap-4">
-					<div>
-						<h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+				<div className="flex flex-col sm:flex-row sm:items-center gap-4 w-full">
+					<div className="w-full">
+						<h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2 w-full justify-between">
 							<Armchair className="w-7 h-7 text-indigo-600" />
 							자리 배정 경매
+							{currentUser.role === 'super_admin' && (
+								<button
+									onClick={handleOpenCreateModal}
+									className="flex items-center ml-auto gap-2 px-3 py-2 sm:px-4 sm:py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-all self-start sm:self-auto"
+								>
+									<PlusCircle className="w-4 h-4" />새 자리 배정 시작
+								</button>
+							)}
 						</h1>
 						<p className="text-xs text-slate-500 mt-1">
 							2주 단위 자리 배정 및 선착순/경매 구역(A~M) 입찰 시스템
 						</p>
 					</div>
-
-					{currentUser.role === 'super_admin' && (
-						<button
-							onClick={handleOpenCreateModal}
-							className="flex items-center ml-auto gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-all self-start sm:self-auto"
-						>
-							<PlusCircle className="w-4 h-4" />새 자리 배정 시작
-						</button>
-					)}
 				</div>
 
 				{/* 2. 회차 선택 탭 */}
@@ -278,6 +279,8 @@ export default function SeatsMain({ profile }: { profile: any }) {
 						loadData={loadData}
 						screenShotMode={screenShotMode}
 						setScreenShotMode={setScreenShotMode}
+						showMoney={showMoney}
+						setShowMoney={setShowMoney}
 					/>
 				)}
 
@@ -296,6 +299,8 @@ export default function SeatsMain({ profile }: { profile: any }) {
 								numberPerGroup={selectedRound.numberPerGroup}
 								loadData={loadData}
 								screenShotMode={screenShotMode}
+								showMoney={showMoney}
+								roundTitle={selectedRound.title}
 							/>
 						</div>
 
