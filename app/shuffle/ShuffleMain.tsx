@@ -131,11 +131,11 @@ export default function ShuffleMain() {
 						</div>
 
 						{/* 순서 격자 배치 */}
-						<div className="grid grid-cols-5 sm:grid-cols-5 gap-3">
+						<div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3">
 							{shuffledList.map((item) => (
 								<div
 									key={item.order}
-									className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
+									className={`flex items-center gap-3 p-2 sm:p-3 rounded-xl border transition-all ${
 										isShuffling
 											? 'bg-slate-50 border-slate-100 scale-98'
 											: item.order === 1

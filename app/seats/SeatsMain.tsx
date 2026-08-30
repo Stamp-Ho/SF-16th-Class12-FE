@@ -13,6 +13,8 @@ import {
 	CheckCircle2,
 	Clock,
 	ArrowLeft,
+	Lock,
+	Flame,
 } from 'lucide-react';
 import Link from 'next/link';
 import GambleModal from './GambleModal';
@@ -263,7 +265,12 @@ export default function SeatsMain({ profile }: { profile: any }) {
 									: 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
 							}`}
 						>
-							{r.title} ({r.isClosed ? '마감됨' : '진행중'})
+							{r.title}
+							{r.isClosed ? (
+								<Lock className="w-3.5 h-3.5 inline-block ml-2 mb-px text-red-500 " />
+							) : (
+								<Flame className="w-3.5 h-3.5 inline-block ml-2 mb-px text-amber-500 " />
+							)}
 						</button>
 					))}
 				</div>

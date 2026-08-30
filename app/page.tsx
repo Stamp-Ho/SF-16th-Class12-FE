@@ -79,10 +79,10 @@ export default async function MainPage() {
 
 	return (
 		<main className="min-h-screen bg-slate-50 p-6 md:p-12">
-			<div className="max-w-5xl mx-auto space-y-8">
+			<div className="max-w-5xl mx-auto space-y-4 sm:space-y-8">
 				{/* 상단 헤더 및 프로필 */}
-				<header className="flex justify-between items-center bg-white p-6 pb-5 rounded-2xl shadow-sm border border-slate-100">
-					<div>
+				<header className="grid grid-rows-2 sm:flex sm:flex-row sm:justify-between bg-white p-3 pb-1 sm:p-6 sm:pb-5 rounded-2xl shadow-sm border border-slate-100">
+					<div className="flex flex-col">
 						<h1 className="text-2xl font-bold text-slate-800">
 							[SSAFY 16기] 12반 대시보드
 						</h1>
@@ -100,16 +100,15 @@ export default async function MainPage() {
 						</p>
 					</div>
 
-					<div className="flex items-center gap-3">
+					<div className="flex items-center gap-3 justify-end">
 						{/* 어드민일 때만 표시되는 버튼 */}
 						{isAdmin && (
 							<Link
 								href="/admin"
 								prefetch={false}
-								className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-xl hover:bg-slate-800 transition-colors"
+								className="flex items-center gap-2 px-4 py-3 bg-slate-900 text-white text-sm font-medium rounded-xl hover:bg-slate-800 transition-colors"
 							>
 								<ShieldCogCorner className="w-4 h-4" />
-								관리자 센터
 							</Link>
 						)}
 						<ChangePwButton />

@@ -127,7 +127,7 @@ export default function SongMain({
 				</header>
 
 				{/* 2. 어드민 또는 사용자 메인 섹션 */}
-				{!isAdmin ? (
+				{isAdmin ? (
 					<section className="space-y-4">
 						{/* 노래 시작 패널 */}
 						<div className="bg-linear-to-r from-ssafy-blue/10 via-white to-white px-8 py-4 rounded-2xl border border-ssafy-blue/20 shadow-sm flex items-center justify-between">
