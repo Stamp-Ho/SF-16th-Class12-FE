@@ -7,7 +7,14 @@ import {
 	placeBid,
 	toggleLockSeat,
 } from './actions';
-import { ArrowLeftRight, Lock, LockOpen, Sparkles, Trash } from 'lucide-react';
+import {
+	ArrowLeftRight,
+	Lock,
+	LockOpen,
+	ShieldIcon,
+	Sparkles,
+	Trash,
+} from 'lucide-react';
 import BidRecordModal from './BidRecordModal';
 import { getSeatBidTier } from './utils/shield';
 import { Shield } from '@/assets/icons';
@@ -307,7 +314,7 @@ export default function ClassroomGrid({
 	};
 
 	return (
-		<div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4 max-w-4xl mx-auto">
+		<div className="bg-white p-3 rounded-xl sm:p-6 sm:rounded-3xl border border-slate-200 shadow-sm space-y-4 max-w-4xl mx-auto">
 			{recordModalOpen && (
 				<BidRecordModal
 					roundId={roundId}
@@ -315,13 +322,13 @@ export default function ClassroomGrid({
 				/>
 			)}
 			{/* 스크린 / 문 / 강사님 */}
-			<div className="space-y-3">
-				<div className="grid grid-cols-12 gap-2 text-center text-[10px] sm:text-xs font-bold">
+			<div className="text-[9px] sm:text-xs space-y-3">
+				<div className="grid grid-cols-12 gap-2 text-center font-bold">
 					<a
 						href="https://copper-zebu-fc0.notion.site/3b9e15c202ad8075828cff5bcdf83bb6"
 						target="_blank"
 						rel="noopener noreferrer"
-						className="col-span-2 bg-slate-200 text-slate-700 py-2 rounded-xl border border-slate-300 block text-center"
+						className="col-span-2 bg-slate-200 text-slate-700 py-1.5 rounded-lg sm:py-2 sm:rounded-xl border border-slate-300 block text-center"
 					>
 						문{!screenShotMode && '  (식당)'}
 					</a>
@@ -329,7 +336,7 @@ export default function ClassroomGrid({
 						href="https://app.notion.com/p/3a366fe0f687805d9a4bf4cdec5299bf"
 						target="_blank"
 						rel="noopener noreferrer"
-						className={`${screenShotMode ? 'col-span-10' : 'col-span-8'} bg-slate-800 text-white py-2 rounded-xl flex items-center justify-center gap-2`}
+						className={`${screenShotMode ? 'col-span-10' : 'col-span-8'} bg-slate-800 text-white py-1.5 rounded-lg sm:py-2 sm:rounded-xl flex items-center justify-center gap-2`}
 					>
 						<Sparkles className="w-4 h-4 text-amber-400" /> 칠판 (스크린)
 					</a>
@@ -337,7 +344,7 @@ export default function ClassroomGrid({
 						<button
 							type="button"
 							onClick={() => setRecordModalOpen(true)}
-							className="col-span-2 bg-indigo-50 text-indigo-900 py-2 rounded-xl border border-indigo-300 flex items-center justify-center gap-1.5 hover:bg-indigo-100 transition-colors"
+							className="col-span-2 bg-indigo-50 text-indigo-900 py-1.5 rounded-lg sm:py-2 sm:rounded-xl border border-indigo-300 flex items-center justify-center gap-1.5 hover:bg-indigo-100 transition-colors"
 						>
 							기록 보기
 						</button>
@@ -345,23 +352,23 @@ export default function ClassroomGrid({
 				</div>
 				<div className="flex justify-between">
 					{showMoney ? (
-						<div className="w-48 bg-violet-50 border-2 border-violet-300 text-violet-900 py-2.5 rounded-xl font-bold text-xs text-center">
+						<div className="px-6 sm:w-48 bg-violet-50 border-2 border-violet-300 text-violet-900 py-1.5 rounded-lg sm:py-2 sm:rounded-xl font-bold text-center">
 							총액: {(tatalCost * numberPerGroup).toLocaleString()}원
 						</div>
 					) : (
-						<div className="w-48 bg-slate-50 border-2 border-slate-300 text-slate-900 py-2.5 rounded-xl font-bold text-xs text-center">
+						<div className="px-6 sm:w-48 bg-slate-50 border-2 border-slate-300 text-slate-900 py-1.5 rounded-lg sm:py-2 sm:rounded-xl font-bold text-center">
 							{roundTitle}
 						</div>
 					)}
-					<div className="w-48 bg-amber-50 border-2 border-amber-300 text-amber-900 py-2.5 rounded-xl font-bold text-xs text-center">
+					<div className="px-6 sm:w-48 bg-amber-50 border-2 border-amber-300 text-amber-900 py-1.5 rounded-lg sm:py-2 sm:rounded-xl font-bold text-center">
 						강사님 자~리
 					</div>
 				</div>
 			</div>
 
 			{/* 좌석 그리드 */}
-			<div className="grid grid-cols-2 gap-12">
-				<div className="grid grid-cols-3 gap-2 gap-y-6">
+			<div className="grid grid-cols-2 gap-3 sm:gap-12">
+				<div className="grid grid-cols-3 gap-1 sm:gap-2 gap-y-6">
 					{seatMap
 						.filter((s) =>
 							[1, 2, 3, 7, 8, 9, 13, 14, 15, 19, 20, 21, 25, 26, 27].includes(
@@ -370,7 +377,7 @@ export default function ClassroomGrid({
 						)
 						.map(renderTile)}
 				</div>
-				<div className="grid grid-cols-3 gap-2 gap-y-6">
+				<div className="grid grid-cols-3 gap-1 sm:gap-2 gap-y-6">
 					{seatMap
 						.filter((s) =>
 							[
@@ -389,10 +396,12 @@ export default function ClassroomGrid({
 			return (
 				<div
 					key={tile.num}
-					className="bg-slate-100 border-2 border-slate-300 text-slate-400 rounded-xl p-2.5 text-center flex flex-col justify-between h-20 select-none"
+					className="bg-slate-100 border-2 border-slate-300 text-slate-400 rounded-lg p-2 sm:rounded-xl sm:p-2.5 text-center flex flex-col justify-between h-13 sm:h-20 select-none"
 				>
-					<span className="text-[10px] font-mono">{tile.num}</span>
-					<span className="text-sm font-bold text-slate-500 mb-0.5">
+					<span className="text-[7px] sm:text-[10px] font-mono">
+						{tile.num}
+					</span>
+					<span className="text-[9px] sm:text-sm font-bold text-slate-500 mb-0.5">
 						{tile.name}
 					</span>
 				</div>
@@ -445,7 +454,7 @@ export default function ClassroomGrid({
 					onDragOver={(e) => handleDragOver(e, tile.code)}
 					onDragLeave={(e) => handleDragLeave(e, tile.code)}
 					onDrop={(e) => handleDrop(e, tile.code)}
-					className={`border-2 rounded-xl p-2 py-1 flex flex-col justify-between h-20 cursor-pointer transition-all z-0 select-none ${
+					className={`border-2 rounded-lg sm:rounded-xl px-0.75 py-0.5 sm:px-2 sm:py-1 flex flex-col justify-between h-13 sm:h-20 cursor-pointer transition-all z-0 select-none ${
 						!screenShotMode && isMyGroup ? 'z-10 scale-[1.03]' : ''
 					} ${
 						isCardHovered
@@ -455,15 +464,15 @@ export default function ClassroomGrid({
 				>
 					<div className="flex justify-between w-full">
 						<span
-							className={`text-[10px] font-mono font-bold w-4 ${
+							className={`text-[7px] sm:text-[10px] font-mono font-bold w-4 ${
 								isMyGroup ? 'opacity-80' : 'opacity-60'
 							}`}
 						>
 							{tile.num}
 						</span>
-						<div className="flex flex-row h-5.5 text-xs font-extrabold justify-center items-end">
+						<div className="flex flex-row h-4.25 sm:h-5.5 text-xs font-extrabold justify-center items-end">
 							{screenShotMode ? null : seatInfo.is_locked ? (
-								<Lock className="w-3.5 h-3.5 text-red-500" />
+								<Lock className="w-2.75 h-2.75 sm:w-3.5 sm:h-3.5 text-red-500" />
 							) : isHovered ? (
 								<span className="">
 									+
@@ -479,8 +488,8 @@ export default function ClassroomGrid({
 											return (
 												<Shield
 													iconKey={tile.num * 10 + index}
-													size={index === 1 ? '18.5' : '16'}
-													className="ml-[-0.75px] mr-[-1.25px]"
+													size={index === 1 ? '17.5' : '15'}
+													className={`ml-[-0.75px] mr-[-1.25px] ${index === 1 ? 'w-2.25' : 'w-2'} sm:w-full`}
 												/>
 											);
 										}
@@ -488,8 +497,8 @@ export default function ClassroomGrid({
 										return (
 											<Shield
 												iconKey={tile.num * 10 + index}
-												size="16"
-												className="-mx-px flex justify-center"
+												size="15"
+												className="-mx-px flex justify-center w-2.5 sm:w-full"
 											/>
 										);
 									})}
@@ -497,7 +506,7 @@ export default function ClassroomGrid({
 							)}
 						</div>
 						<span
-							className={`text-xs font-extrabold w-4 rounded text-right ${
+							className={`text-[8px] sm:text-xs font-extrabold w-4 rounded text-right ${
 								isMyGroup ? 'text-white backdrop-blur-sm' : 'text-slate-800'
 							}`}
 						>
@@ -506,24 +515,24 @@ export default function ClassroomGrid({
 					</div>
 
 					{/* 사용자 이름 표시 영역 */}
-					<div className="my-auto text-center mb-0.5 -mt-1">
+					<div className="my-auto text-center mb-0.5 -mt-1.5 sm:-mt-1">
 						{isOccupied ? (
-							<p className="font-extrabold text-lg truncate">
+							<p className="font-extrabold text-xs sm:text-lg truncate">
 								{personName || '빈 자 리'}
 							</p>
 						) : (
-							<span
-								className={`text-sm font-semibold ${
+							<p
+								className={`text-[8px] sm:text-sm font-semibold truncate mt-1 -mb-1 ${
 									isMyGroup ? 'text-white/70' : 'text-slate-400'
 								}`}
 							>
 								{isCardHovered ? '여기에 드롭!' : '빈 자 리'}
-							</span>
+							</p>
 						)}
 					</div>
 
 					{/* 하단 가격 */}
-					<div className="flex justify-between items-end text-[10px] h-3.75">
+					<div className="flex justify-between items-end text-[6px] sm:text-[10px] h-2 sm:h-3.75">
 						<span className="font-bold font-mono">
 							{showMoney
 								? seatInfo.current_bid_price
@@ -531,7 +540,7 @@ export default function ClassroomGrid({
 									: '0원'
 								: ''}
 						</span>
-						<span className="font-bold text-[10px]">
+						<span className="font-bold text-[6px] sm:text-[10px]">
 							{!screenShotMode && seatInfo.updated_at
 								? getTime(seatInfo.updated_at)
 								: ''}

@@ -223,7 +223,7 @@ export default function SeatsMain({ profile }: { profile: any }) {
 	}, [myOccupiedCode, myGroupId]);
 	return (
 		<main className="min-h-screen bg-slate-50 p-3 sm:p-6">
-			<div className="max-w-6xl mx-auto space-y-6 w-full">
+			<div className="max-w-6xl mx-auto space-y-3 sm:space-y-6 w-full">
 				<Link
 					href="/"
 					className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 transition-colors w-fit py-2 m-0"
