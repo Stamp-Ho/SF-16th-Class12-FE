@@ -2,12 +2,7 @@
 
 import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-	closeRound,
-	openRound,
-	deleteRound,
-	toggleGamble,
-} from './actions';
+import { closeRound, openRound, deleteRound, toggleGamble } from './actions';
 import {
 	Lock,
 	Unlock,
@@ -15,6 +10,8 @@ import {
 	Loader2,
 	Trash2,
 	Coins,
+	CameraOff,
+	Camera,
 } from 'lucide-react';
 
 export default function AdminControlPanel({
@@ -22,11 +19,15 @@ export default function AdminControlPanel({
 	isClosed,
 	isGambleEnabled,
 	loadData,
+	screenShotMode,
+	setScreenShotMode,
 }: {
 	roundNumber: number;
 	isClosed: boolean;
 	isGambleEnabled: boolean;
 	loadData: () => Promise<void>;
+	screenShotMode: boolean;
+	setScreenShotMode: (value: boolean) => void;
 }) {
 	const [isPending, startTransition] = useTransition();
 	const [isGamblePending, startGambleTransition] = useTransition();
@@ -64,7 +65,6 @@ export default function AdminControlPanel({
 		});
 	};
 
-
 	return (
 		<div className="bg-slate-900 text-white p-5 rounded-2xl shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4">
 			<div className="flex items-center gap-3">
@@ -83,6 +83,16 @@ export default function AdminControlPanel({
 							{isClosed ? '경매 마감됨' : '경매 진행 중'}
 						</span>
 					</p>
+				</div>
+				<div
+					onClick={() => setScreenShotMode(!screenShotMode)}
+					className="cursor-pointer bg-white/20 py-1 px-2 rounded-full"
+				>
+					{screenShotMode ? (
+						<Camera className={`w-6 h-6 shrink-0  text-emerald-400`} />
+					) : (
+						<CameraOff className={`w-6 h-6 shrink-0 text-slate-400`} />
+					)}
 				</div>
 			</div>
 
@@ -119,7 +129,8 @@ export default function AdminControlPanel({
 						`}
 				>
 					{isGamblePending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-					<Coins className="w-3.5 h-3.5" /> {isGambleEnabled ? '도박 허용됨' : '도박 금지됨'}
+					<Coins className="w-3.5 h-3.5" />{' '}
+					{isGambleEnabled ? '도박 허용됨' : '도박 금지됨'}
 				</button>
 
 				{/* 경매 삭제 버튼 */}

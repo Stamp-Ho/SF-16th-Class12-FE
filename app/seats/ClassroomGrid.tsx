@@ -149,6 +149,7 @@ export default function ClassroomGrid({
 	isAdmin,
 	numberPerGroup,
 	loadData,
+	screenShotMode,
 }: {
 	roundId: number;
 	seatList: SeatData[];
@@ -158,6 +159,7 @@ export default function ClassroomGrid({
 	isAdmin: boolean;
 	numberPerGroup: number;
 	loadData: () => void;
+	screenShotMode: boolean;
 }) {
 	const [isPending, startTransition] = useTransition();
 
@@ -317,23 +319,25 @@ export default function ClassroomGrid({
 						rel="noopener noreferrer"
 						className="col-span-2 bg-slate-200 text-slate-700 py-2 rounded-xl border border-slate-300 block text-center"
 					>
-						문 (식당)
+						문{!screenShotMode && '  (식당)'}
 					</a>
 					<a
 						href="https://app.notion.com/p/3a366fe0f687805d9a4bf4cdec5299bf"
 						target="_blank"
 						rel="noopener noreferrer"
-						className="col-span-8 bg-slate-800 text-white py-2 rounded-xl flex items-center justify-center gap-2 block"
+						className={`${screenShotMode ? 'col-span-10' : 'col-span-8'} bg-slate-800 text-white py-2 rounded-xl flex items-center justify-center gap-2`}
 					>
 						<Sparkles className="w-4 h-4 text-amber-400" /> 칠판 (스크린)
 					</a>
-					<button
-						type="button"
-						onClick={() => setRecordModalOpen(true)}
-						className="col-span-2 bg-indigo-50 text-indigo-900 py-2 rounded-xl border border-indigo-300 flex items-center justify-center gap-1.5 hover:bg-indigo-100 transition-colors"
-					>
-						기록 보기
-					</button>
+					{!screenShotMode && (
+						<button
+							type="button"
+							onClick={() => setRecordModalOpen(true)}
+							className="col-span-2 bg-indigo-50 text-indigo-900 py-2 rounded-xl border border-indigo-300 flex items-center justify-center gap-1.5 hover:bg-indigo-100 transition-colors"
+						>
+							기록 보기
+						</button>
+					)}
 				</div>
 				<div className="flex justify-between">
 					<div className="w-48 bg-violet-50 border-2 border-violet-300 text-violet-900 py-2.5 rounded-xl font-bold text-xs text-center">
@@ -370,7 +374,8 @@ export default function ClassroomGrid({
 	);
 
 	function renderTile(tile: any) {
-		if (tile.type === 'restricted' || tile.type === 'thinking') {
+		const seatInfo = getSeatInfo(tile.code);
+		if (!seatInfo || tile.type === 'restricted' || tile.type === 'thinking') {
 			return (
 				<div
 					key={tile.num}
@@ -384,8 +389,6 @@ export default function ClassroomGrid({
 			);
 		}
 
-		const seatInfo = getSeatInfo(tile.code);
-		if (!seatInfo) return null;
 		const isOccupied = !!seatInfo.current_group_name;
 
 		const seatBidTier = getSeatBidTier(seatInfo.updated_at);
@@ -447,8 +450,8 @@ export default function ClassroomGrid({
 						>
 							{tile.num}
 						</span>
-						<div className="flex flex-row h-5.75 text-xs font-extrabold justify-center items-end">
-							{seatInfo.is_locked ? (
+						<div className="flex flex-row h-5.5 text-xs font-extrabold justify-center items-end">
+							{screenShotMode ? null : seatInfo.is_locked ? (
 								<Lock className="w-3.5 h-3.5 text-red-500" />
 							) : isHovered ? (
 								<span className="">
@@ -487,12 +490,12 @@ export default function ClassroomGrid({
 								isMyGroup ? 'text-white backdrop-blur-sm' : 'text-slate-800'
 							}`}
 						>
-							{tile.code}
+							{!screenShotMode && tile.code}
 						</span>
 					</div>
 
 					{/* 사용자 이름 표시 영역 */}
-					<div className="my-auto text-center mb-0.5">
+					<div className="my-auto text-center mb-0.5 -mt-1">
 						{isOccupied ? (
 							<p className="font-extrabold text-lg truncate">
 								{personName || '빈 자 리'}
@@ -516,33 +519,39 @@ export default function ClassroomGrid({
 								: '0원'}
 						</span>
 						<span className="font-bold text-[10px]">
-							{seatInfo.updated_at ? getTime(seatInfo.updated_at) : ''}
+							{!screenShotMode && seatInfo.updated_at
+								? getTime(seatInfo.updated_at)
+								: ''}
 						</span>
 					</div>
 				</div>
 
 				{/* 스위치 (<->) 버튼 */}
-				{canSwap && !seatInfo.is_locked && position !== 'left' && (
-					<button
-						onMouseEnter={(e) => e.stopPropagation()}
-						disabled={isPending}
-						onClick={(e) => {
-							e.preventDefault();
-							handleSwapClick(e, seatInfo.id, position === 'middle');
-						}}
-						className={`absolute top-6.75 py-1.25 px-2.25 rounded-md border-2 transition-colors cursor-pointer ${colorClass
-							.replace('bg-', 'bg-white ')
-							.replace('text-', 'text-slate-900 ')
-							.replace(
-								'ring-3',
-								'ring-2',
-							)} ${tile.num % 6 === 4 ? '-left-10.5 px-2.5' : 'left-[-20.75px] '}`}
-						title="좌/우 자리 교환"
-					>
-						<ArrowLeftRight className="w-3 h-3" />
-					</button>
-				)}
-				{isAdmin &&
+				{!screenShotMode &&
+					canSwap &&
+					!seatInfo.is_locked &&
+					position !== 'left' && (
+						<button
+							onMouseEnter={(e) => e.stopPropagation()}
+							disabled={isPending}
+							onClick={(e) => {
+								e.preventDefault();
+								handleSwapClick(e, seatInfo.id, position === 'middle');
+							}}
+							className={`absolute top-6.75 py-1.25 px-2.25 rounded-md border-2 transition-colors cursor-pointer ${colorClass
+								.replace('bg-', 'bg-white ')
+								.replace('text-', 'text-slate-900 ')
+								.replace(
+									'ring-3',
+									'ring-2',
+								)} ${tile.num % 6 === 4 ? '-left-10.5 px-2.5' : 'left-[-20.75px] '}`}
+							title="좌/우 자리 교환"
+						>
+							<ArrowLeftRight className="w-3 h-3" />
+						</button>
+					)}
+				{!screenShotMode &&
+					isAdmin &&
 					seatInfo &&
 					seatInfo.current_group_id !== null &&
 					position === 'middle' && (
