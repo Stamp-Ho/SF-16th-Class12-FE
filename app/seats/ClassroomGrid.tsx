@@ -314,7 +314,7 @@ export default function ClassroomGrid({
 	};
 
 	return (
-		<div className="bg-white p-3 rounded-xl sm:p-6 sm:rounded-3xl border border-slate-200 shadow-sm space-y-4 max-w-4xl mx-auto">
+		<div className="bg-white p-3 rounded-xl sm:p-6 sm:rounded-3xl border border-slate-200 shadow-sm space-y-2 sm:space-y-4 max-w-4xl mx-auto">
 			{recordModalOpen && (
 				<BidRecordModal
 					roundId={roundId}
@@ -322,7 +322,7 @@ export default function ClassroomGrid({
 				/>
 			)}
 			{/* 스크린 / 문 / 강사님 */}
-			<div className="text-[9px] sm:text-xs space-y-3">
+			<div className="text-[9px] sm:text-xs space-y-1.5 sm:space-y-3">
 				<div className="grid grid-cols-12 gap-2 text-center font-bold">
 					<a
 						href="https://copper-zebu-fc0.notion.site/3b9e15c202ad8075828cff5bcdf83bb6"
@@ -368,7 +368,7 @@ export default function ClassroomGrid({
 
 			{/* 좌석 그리드 */}
 			<div className="grid grid-cols-2 gap-3 sm:gap-12">
-				<div className="grid grid-cols-3 gap-1 sm:gap-2 gap-y-6">
+				<div className="grid grid-cols-3 gap-1 sm:gap-2 gap-y-3 sm:gap-y-6">
 					{seatMap
 						.filter((s) =>
 							[1, 2, 3, 7, 8, 9, 13, 14, 15, 19, 20, 21, 25, 26, 27].includes(
@@ -377,7 +377,7 @@ export default function ClassroomGrid({
 						)
 						.map(renderTile)}
 				</div>
-				<div className="grid grid-cols-3 gap-1 sm:gap-2 gap-y-6">
+				<div className="grid grid-cols-3 gap-1 sm:gap-2 gap-y-3 sm:gap-y-6">
 					{seatMap
 						.filter((s) =>
 							[
@@ -560,16 +560,17 @@ export default function ClassroomGrid({
 								e.preventDefault();
 								handleSwapClick(e, seatInfo.id, position === 'middle');
 							}}
-							className={`absolute top-6.75 py-1.25 px-2.25 rounded-md border-2 transition-colors cursor-pointer ${colorClass
+							className={`absolute top-4 sm:top-6.75 py-0.5 px-1 sm:py-1.25 sm:px-2.25 rounded sm:rounded-md border sm:border-2 transition-colors cursor-pointer ${colorClass
 								.replace('bg-', 'bg-white ')
 								.replace('text-', 'text-slate-900 ')
-								.replace(
-									'ring-3',
-									'ring-2',
-								)} ${tile.num % 6 === 4 ? '-left-10.5 px-2.5' : 'left-[-20.75px] '}`}
+								.replace('ring-3', 'ring-2')} ${
+								tile.num % 6 === 4
+									? '-left-4 px-1 sm:-left-10.5 sm:px-2.5'
+									: '-left-3 sm:left-[-20.75px]'
+							}`}
 							title="좌/우 자리 교환"
 						>
-							<ArrowLeftRight className="w-3 h-3" />
+							<ArrowLeftRight className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
 						</button>
 					)}
 				{!screenShotMode &&
@@ -582,13 +583,16 @@ export default function ClassroomGrid({
 								<button
 									onMouseEnter={(e) => e.stopPropagation()}
 									disabled={isPending}
-									className={`absolute -top-2.75 p-1 rounded-full border-2 transition-colors cursor-pointer ${colorClass
+									className={`absolute -top-2 sm:-top-2.75 p-0.5 sm:p-1 rounded-full border sm:border-2 transition-colors cursor-pointer ${colorClass
 										.replace('bg-', 'bg-white ')
 										.replace('text-', 'text-slate-900 ')
-										.replace(
-											'ring-3',
-											'ring-2',
-										)} ${numberPerGroup === 3 || isCorner ? 'left-10.25' : tile.num % 6 === 4 ? '-left-9' : '-left-4 '}`}
+										.replace('ring-3', 'ring-2')} ${
+										numberPerGroup === 3 || isCorner
+											? 'left-1/2 -translate-x-1/2'
+											: tile.num % 6 === 4
+												? '-left-3.5 sm:-left-9'
+												: '-left-2.5 sm:-left-4'
+									}`}
 									onClick={(e) => {
 										e.preventDefault();
 										handleLockClick(seatInfo.id);
@@ -596,9 +600,9 @@ export default function ClassroomGrid({
 									title={seatInfo.is_locked ? '좌석 잠금 해제' : '좌석 잠금'}
 								>
 									{seatInfo.is_locked ? (
-										<Lock className="w-3 h-3 text-red-500" />
+										<Lock className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-red-500" />
 									) : (
-										<LockOpen className="w-3 h-3" />
+										<LockOpen className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
 									)}
 								</button>
 							}
@@ -618,16 +622,19 @@ export default function ClassroomGrid({
 										});
 									}
 								}}
-								className={`absolute top-14.5 p-1 rounded-full border-2 transition-colors cursor-pointer ${colorClass
+								className={`absolute top-9 sm:top-14.5 p-0.5 sm:p-1 rounded-full border sm:border-2 transition-colors cursor-pointer ${colorClass
 									.replace('bg-', 'bg-white ')
 									.replace('text-', 'text-slate-900 ')
-									.replace(
-										'ring-3',
-										'ring-2',
-									)} ${numberPerGroup === 3 || isCorner ? 'left-10.25' : tile.num % 6 === 4 ? '-left-9' : '-left-4 '}`}
+									.replace('ring-3', 'ring-2')} ${
+									numberPerGroup === 3 || isCorner
+										? 'left-1/2 -translate-x-1/2'
+										: tile.num % 6 === 4
+											? '-left-3.5 sm:-left-9'
+											: '-left-2.5 sm:-left-4'
+								}`}
 								title="좌석 삭제"
 							>
-								<Trash className="w-3 h-3" />
+								<Trash className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
 							</button>
 						</>
 					)}
