@@ -1,7 +1,9 @@
 /**
  * 09:00 ~ 18:00 (KST) 유효 경과 시간을 계산하는 함수
  */
-export function getBusinessHoursDiff(updatedAt: string | Date | null | undefined): number {
+export function getBusinessHoursDiff(
+  updatedAt: string | Date | null | undefined
+): number {
   if (!updatedAt) return 0;
 
   const start = new Date(updatedAt);
@@ -44,7 +46,7 @@ export function getBusinessHoursDiff(updatedAt: string | Date | null | undefined
     const validEnd = Math.min(end.getTime(), dayEnd.getTime());
 
     if (validEnd > validStart) {
-      totalMs += (validEnd - validStart);
+      totalMs += validEnd - validStart;
     }
 
     current.setDate(current.getDate() + 1);
@@ -59,14 +61,28 @@ export function getBusinessHoursDiff(updatedAt: string | Date | null | undefined
 export function getSeatBidTier(updatedAt: string | Date | null | undefined) {
   const diffHours = getBusinessHoursDiff(updatedAt);
 
+  if (diffHours < 1) {
+    return { tier: 1, priceChange: 500, label: "1시간 이내", diffHours };
+  }
   if (diffHours < 2) {
-    return { tier: 1, priceChange: 500, label: '2시간 이내', diffHours };
+    return { tier: 2, priceChange: 1000, label: "1시간 경과", diffHours };
+  }
+  if (diffHours < 3) {
+    return { tier: 3, priceChange: 1500, label: "2시간 경과", diffHours };
   }
   if (diffHours < 4) {
-    return { tier: 2, priceChange: 1000, label: '2시간 경과', diffHours };
+    return { tier: 4, priceChange: 2000, label: "3시간 경과", diffHours };
+  }
+  if (diffHours < 5) {
+    return { tier: 5, priceChange: 2500, label: "4시간 경과", diffHours };
   }
   if (diffHours < 6) {
-    return { tier: 3, priceChange: 1500, label: '4시간 경과', diffHours };
+    return { tier: 6, priceChange: 3000, label: "5시간 경과", diffHours };
   }
-  return { tier: 4, priceChange: 2000, label: '6시간 경과 (최대)', diffHours };
+  return {
+    tier: 7,
+    priceChange: 3500,
+    label: "6시간 이상 경과 (최대)",
+    diffHours
+  };
 }

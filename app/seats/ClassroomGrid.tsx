@@ -413,6 +413,7 @@ export default function ClassroomGrid({
     const isOccupied = !!seatInfo.current_group_name;
 
     const seatBidTier = getSeatBidTier(seatInfo.updated_at);
+    const tier = seatBidTier ? seatBidTier.tier : 0;
 
     // 내 그룹 소속 구역인지 체크
     const isMyGroup =
@@ -483,27 +484,27 @@ export default function ClassroomGrid({
                 </span>
               ) : (
                 <>
-                  {Array.from({
-                    length: Math.max(0, seatBidTier.tier - 1)
-                  }).map((_, index) => {
-                    if (seatBidTier.tier === 4) {
-                      return (
-                        <Shield
-                          iconKey={tile.num * 10 + index}
-                          size={index === 1 ? "17.5" : "15"}
-                          className={`ml-[-0.75px] mr-[-1.25px] ${index === 1 ? "w-2.25" : "w-2"} sm:w-full`}
-                        />
-                      );
-                    }
-
-                    return (
-                      <Shield
-                        iconKey={tile.num * 10 + index}
-                        size="15"
-                        className="-mx-px flex justify-center w-2.5 sm:w-full"
-                      />
-                    );
-                  })}
+                  {tier > 1 && (
+                    <Shield
+                      size={15}
+                      fill={tier > 4 ? "currentColor" : "none"}
+                      className={`ml-[-0.75px] mr-[-1.25px] w-2 sm:w-full`}
+                    />
+                  )}
+                  {tier > 3 && (
+                    <Shield
+                      size={17.5}
+                      fill={tier > 5 ? "currentColor" : "none"}
+                      className={`ml-[-0.75px] mr-[-1.25px] w-2.25 sm:w-full`}
+                    />
+                  )}
+                  {tier > 2 && (
+                    <Shield
+                      size={15}
+                      fill={tier > 6 ? "currentColor" : "none"}
+                      className={`ml-[-0.75px] mr-[-1.25px] w-2 sm:w-full`}
+                    />
+                  )}
                 </>
               )}
             </div>
