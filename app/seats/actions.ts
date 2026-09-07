@@ -562,7 +562,20 @@ const MATTERMOST_USER_IDS: Record<string, string> = {
 /*
  * 방패 초기화 관련 액션
  */
-export async function resetShield(roundId: number) {
+export async function resetEmptyShield(roundId: number) {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("seat_allocations")
+    .update({ updated_at: new Date() })
+    .eq("round_id", roundId)
+    .eq("group_id", null);
+
+  if (error) throw new Error(`방패 초기화 실패: ${error.message}`);
+  return;
+}
+
+export async function resetAllShields(roundId: number) {
   const supabase = await createClient();
 
   const { error } = await supabase
@@ -570,6 +583,6 @@ export async function resetShield(roundId: number) {
     .update({ updated_at: new Date() })
     .eq("round_id", roundId);
 
-  if (error) throw new Error(`방패 초기화 실패: ${error.message}`);
+  if (error) throw new Error(`모든 방패 초기화 실패: ${error.message}`);
   return;
 }

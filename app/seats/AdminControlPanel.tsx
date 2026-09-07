@@ -7,7 +7,8 @@ import {
   openRound,
   deleteRound,
   toggleGamble,
-  resetShield
+  resetEmptyShield,
+  resetAllShields
 } from "./actions";
 import {
   Lock,
@@ -81,10 +82,21 @@ export default function AdminControlPanel({
   const handleResetShield = () => {
     startShieldInitTransition(async () => {
       try {
-        await resetShield(roundId);
+        await resetEmptyShield(roundId);
         await refreshAuctionState();
       } catch (err: any) {
         alert(`방패 초기화 에러: ${err.message}`);
+      }
+    });
+  };
+  // 4. 모든 방패 초기화
+  const handleResetAllShields = () => {
+    startShieldInitTransition(async () => {
+      try {
+        await resetAllShields(roundId);
+        await refreshAuctionState();
+      } catch (err: any) {
+        alert(`모든 방패 초기화 에러: ${err.message}`);
       }
     });
   };
@@ -156,14 +168,28 @@ export default function AdminControlPanel({
         {/* 방패 초기화 버튼 */}
         <button
           onClick={handleResetShield}
-          disabled={isPending}
+          disabled={isShieldInitPending}
           className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all"
         >
           {isShieldInitPending ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
           ) : (
             <>
-              <ShieldOff className="w-3.5 h-3.5" /> 방패 초기화
+              <ShieldOff className="w-3.5 h-3.5" /> 빈자리 방패 초기화
+            </>
+          )}
+        </button>
+        {/* 모든 방패 초기화 버튼 */}
+        <button
+          onClick={handleResetAllShields}
+          disabled={isShieldInitPending}
+          className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all"
+        >
+          {isShieldInitPending ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <>
+              <ShieldOff className="w-3.5 h-3.5" /> 모든 방패 초기화
             </>
           )}
         </button>
