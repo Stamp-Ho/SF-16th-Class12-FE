@@ -73,7 +73,7 @@ export async function getAllRounds() {
     .select("*")
     .order("round", { ascending: false });
 
-  if (error) return failure(`라운드 목록 조회 실패: ${error.message}`);
+  if (error) return failure(error.message);
   return { success: true as const, data };
 }
 
@@ -95,7 +95,7 @@ export async function createRound(request: CreateRoundRequest) {
     .select()
     .single();
 
-  if (roundError) return failure(`라운드 생성 실패: ${roundError.message}`);
+  if (roundError) return failure(roundError.message);
 
   // 2. 기본 좌석 목록 구성 (입력값이 없으면 A~M)
   const defaultCodes = [
@@ -141,15 +141,13 @@ export async function createRound(request: CreateRoundRequest) {
     .from("seat_allocations")
     .insert(allocationsToInsert);
 
-  if (allocationError)
-    return failure(`좌석 생성 실패: ${allocationError.message}`);
+  if (allocationError) return failure(allocationError.message);
 
   if (seatGroupsToInsert.length > 0) {
     const { error: seatGroupError } = await supabase
       .from("seat_groups")
       .insert(seatGroupsToInsert);
-    if (seatGroupError)
-      return failure(`그룹 생성 실패: ${seatGroupError.message}`);
+    if (seatGroupError) return failure(seatGroupError.message);
   }
 
   revalidatePath("/seats");
@@ -169,7 +167,7 @@ export async function closeRound(roundId: number) {
     .select()
     .single();
 
-  if (error) return failure(`라운드 마감 실패: ${error.message}`);
+  if (error) return failure(error.message);
   revalidatePath("/seats");
   return { success: true as const, data };
 }
@@ -187,7 +185,7 @@ export async function openRound(roundId: number) {
     .select()
     .single();
 
-  if (error) return failure(`라운드 오픈 실패: ${error.message}`);
+  if (error) return failure(error.message);
   revalidatePath("/seats");
   return { success: true as const, data };
 }
@@ -219,8 +217,7 @@ export async function toggleGamble(roundId: number) {
     .select()
     .single();
 
-  if (updateError)
-    return failure(`도박 상태 변경 실패: ${updateError.message}`);
+  if (updateError) return failure(updateError.message);
   revalidatePath("/seats");
   return { success: true as const, data };
 }
@@ -236,7 +233,7 @@ export async function deleteRound(roundId: number) {
     .delete()
     .eq("id", roundId);
 
-  if (error) return failure(`라운드 삭제 실패: ${error.message}`);
+  if (error) return failure(error.message);
   revalidatePath("/seats");
   return { success: true as const, data: true };
 }
@@ -257,7 +254,7 @@ export async function getGroupsByRound(roundNumber: number) {
     .eq("round", roundNumber)
     .order("id", { ascending: true });
 
-  if (error) return failure(`그룹 목록 조회 실패: ${error.message}`);
+  if (error) return failure(error.message);
   return { success: true as const, data };
 }
 
@@ -279,7 +276,7 @@ export async function createGroup(round: number, request: GroupRequest) {
     .select()
     .single();
 
-  if (error) return failure(`그룹 생성 실패: ${error.message}`);
+  if (error) return failure(error.message);
   revalidatePath("/seats");
   return { success: true as const, data };
 }
@@ -303,7 +300,7 @@ export async function deleteAllocation(allocationId: number) {
     .select()
     .single();
 
-  if (error) return failure(`좌석 배정 초기화 실패: ${error.message}`);
+  if (error) return failure(error.message);
   revalidatePath("/seats");
   return { success: true as const, data };
 }
@@ -331,7 +328,7 @@ export async function getAllocationsByRound(round_id: number) {
     .eq("round_id", round_id)
     .order("seat_code", { ascending: true });
 
-  if (error) return failure(`좌석 배정 현황 조회 실패: ${error.message}`);
+  if (error) return failure(error.message);
   return { success: true, data };
 }
 
@@ -363,10 +360,8 @@ export async function getSeatsDataByRounds(roundIds: number[]) {
       .order("seat_code", { ascending: true })
   ]);
 
-  if (groupsRes.error)
-    return failure(`그룹 목록 조회 실패: ${groupsRes.error.message}`);
-  if (allocationsRes.error)
-    return failure(`좌석 배정 현황 조회 실패: ${allocationsRes.error.message}`);
+  if (groupsRes.error) return failure(groupsRes.error.message);
+  if (allocationsRes.error) return failure(allocationsRes.error.message);
 
   return {
     success: true as const,
@@ -386,7 +381,7 @@ export async function placeBid(request: BidRequest) {
     p_user_name: request.userName
   });
 
-  if (error) return failure(`입찰 실패: ${error.message}`);
+  if (error) return failure(error.message);
   else {
     try {
       if (
@@ -420,7 +415,7 @@ export async function gambleBid(request: GambleRequest) {
     p_price_change: request.priceChange
   });
 
-  if (error) return failure(`행운뽑기 실패: ${error.message}`);
+  if (error) return failure(error.message);
   revalidatePath("/seats");
   return { success: true as const, data };
 }
@@ -442,7 +437,7 @@ export async function assignDetailedSeat(request: DetailAssignRequest) {
     .select()
     .single();
 
-  if (error) return failure(`세부 자리 지정 실패: ${error.message}`);
+  if (error) return failure(error.message);
   revalidatePath("/seats");
   return { success: true as const, data };
 }
@@ -474,8 +469,7 @@ export async function toggleLockSeat(allocationId: number) {
     .select()
     .single();
 
-  if (updateError)
-    return failure(`좌석 잠금 변경 실패: ${updateError.message}`);
+  if (updateError) return failure(updateError.message);
   revalidatePath("/seats");
   return { success: true as const, data };
 }
@@ -496,7 +490,7 @@ export async function getHistoriesByRound(round_id: number) {
     .eq("round_id", round_id)
     .order("created_at", { ascending: false });
 
-  if (error) return failure(`히스토리 조회 실패: ${error.message}`);
+  if (error) return failure(error.message);
   return { success: true as const, data };
 }
 
@@ -582,7 +576,7 @@ export async function resetEmptyShield(roundId: number) {
     .eq("round_id", roundId)
     .is("group_id", null);
 
-  if (error) return failure(`빈자리 방패 초기화 실패: ${error.message}`);
+  if (error) return failure(error.message);
   return { success: true as const, data: null };
 }
 
@@ -594,6 +588,6 @@ export async function resetAllShields(roundId: number) {
     .update({ updated_at: new Date() })
     .eq("round_id", roundId);
 
-  if (error) return failure(`모든 방패 초기화 실패: ${error.message}`);
+  if (error) return failure(error.message);
   return { success: true as const, data: null };
 }
