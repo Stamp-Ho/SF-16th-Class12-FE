@@ -96,10 +96,14 @@ export default function SeatsMain({ profile }: { profile: any }) {
   // 현재 보고 있는 라운드의 그룹/좌석 데이터만 조회 (불필요한 전체 라운드 조회 방지)
   const loadRoundDetail = useCallback(async (roundMeta: any) => {
     try {
-      const { groups, allocations } = await getSeatsDataByRounds([
-        roundMeta.id
-      ]);
-      setSelectedRound(buildRoundDetail(roundMeta, groups, allocations));
+      const result = await getSeatsDataByRounds([roundMeta.id]);
+      if (!result.success) {
+        alert(`회차 상세 데이터 로드 에러: ${result.message}`);
+        return;
+      }
+      setSelectedRound(
+        buildRoundDetail(roundMeta, result.data.groups, result.data.allocations)
+      );
     } catch (err) {
       console.error("회차 상세 데이터 로드 에러:", err);
     }
@@ -107,7 +111,12 @@ export default function SeatsMain({ profile }: { profile: any }) {
 
   const loadData = useCallback(async () => {
     try {
-      const roundData = await getAllRounds();
+      const result = await getAllRounds();
+      if (!result.success) {
+        alert(`데이터 로드 에러: ${result.message}`);
+        return;
+      }
+      const roundData = result.data;
       if (!roundData || roundData.length === 0) {
         setRounds([]);
         setSelectedRound(null);

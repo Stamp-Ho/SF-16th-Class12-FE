@@ -55,12 +55,14 @@ export default function AdminControlPanel({
   // 1. 경매 마감 / 시작 토글
   const handleToggleStatus = () => {
     startTransition(async () => {
+      const result = isClosed
+        ? await openRound(roundId)
+        : await closeRound(roundId);
+      if (!result.success) {
+        alert(`상태 변경 에러: ${result.message}`);
+        return;
+      }
       try {
-        if (isClosed) {
-          await openRound(roundId);
-        } else {
-          await closeRound(roundId);
-        }
         await refreshAuctionState();
       } catch (err: any) {
         alert(`상태 변경 에러: ${err.message}`);
@@ -70,8 +72,12 @@ export default function AdminControlPanel({
   // 2. 도박 허용/금지 토글
   const handleToggleGamble = () => {
     startGambleTransition(async () => {
+      const result = await toggleGamble(roundId);
+      if (!result.success) {
+        alert(`도박 상태 변경 에러: ${result.message}`);
+        return;
+      }
       try {
-        await toggleGamble(roundId);
         await refreshAuctionState();
       } catch (err: any) {
         alert(`도박 상태 변경 에러: ${err.message}`);
@@ -81,8 +87,12 @@ export default function AdminControlPanel({
   // 3. 방패 초기화
   const handleResetShield = () => {
     startShieldInitTransition(async () => {
+      const result = await resetEmptyShield(roundId);
+      if (!result.success) {
+        alert(`방패 초기화 에러: ${result.message}`);
+        return;
+      }
       try {
-        await resetEmptyShield(roundId);
         await refreshAuctionState();
       } catch (err: any) {
         alert(`방패 초기화 에러: ${err.message}`);
@@ -92,8 +102,12 @@ export default function AdminControlPanel({
   // 4. 모든 방패 초기화
   const handleResetAllShields = () => {
     startShieldInitTransition(async () => {
+      const result = await resetAllShields(roundId);
+      if (!result.success) {
+        alert(`모든 방패 초기화 에러: ${result.message}`);
+        return;
+      }
       try {
-        await resetAllShields(roundId);
         await refreshAuctionState();
       } catch (err: any) {
         alert(`모든 방패 초기화 에러: ${err.message}`);
@@ -212,13 +226,13 @@ export default function AdminControlPanel({
           onClick={() => {
             if (confirm("정말로 이 회차의 경매를 삭제하시겠습니까?")) {
               startTransition(async () => {
-                try {
-                  await deleteRound(roundId);
-                  await refreshAuctionState();
-                  alert("경매가 삭제되었습니다.");
-                } catch (err: any) {
-                  alert(`삭제 에러: ${err.message}`);
+                const result = await deleteRound(roundId);
+                if (!result.success) {
+                  alert(`삭제 에러: ${result.message}`);
+                  return;
                 }
+                await refreshAuctionState();
+                alert("경매가 삭제되었습니다.");
               });
             }
           }}

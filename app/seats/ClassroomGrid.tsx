@@ -204,7 +204,7 @@ export default function ClassroomGrid({
 
     startTransition(async () => {
       try {
-        await placeBid({
+        const result = await placeBid({
           allocationId: Number(seat.id),
           nextGroupId: Number(myGroupId),
           userName: currentUserName,
@@ -215,6 +215,10 @@ export default function ClassroomGrid({
           ].filter((m) => m !== ""),
           seatCode: code
         });
+        if (!result.success) {
+          alert(`입찰 실패: ${result.message}`);
+          return;
+        }
         loadData();
         setHoveredSeatCode(null);
       } catch (err: any) {
@@ -229,12 +233,16 @@ export default function ClassroomGrid({
       const seat = getSeatInfo(code);
       if (!seat) return;
 
-      await placeBid({
+      const result = await placeBid({
         allocationId: Number(seat.id),
         nextGroupId: Number(targetGroupId),
         userName: currentUserName,
         seatCode: code
       });
+      if (!result.success) {
+        alert(`드롭 배정 실패: ${result.message}`);
+        return;
+      }
       loadData();
     } catch (err: any) {
       alert(`드롭 배정 실패: ${err.message}`);
@@ -251,7 +259,7 @@ export default function ClassroomGrid({
     if (!seat) return;
 
     try {
-      await assignDetailedSeat({
+      const result = await assignDetailedSeat({
         allocationId: Number(seatId),
         memberLeft: swap1and2
           ? (seat.member_middle ?? null)
@@ -263,6 +271,10 @@ export default function ClassroomGrid({
           ? (seat.member_right ?? null)
           : (seat.member_middle ?? null)
       });
+      if (!result.success) {
+        alert(`위치 변경 실패: ${result.message}`);
+        return;
+      }
       loadData();
     } catch (err: any) {
       alert(`위치 변경 실패: ${err.message}`);
@@ -270,7 +282,11 @@ export default function ClassroomGrid({
   };
   const handleLockClick = async (seatId: string) => {
     try {
-      await toggleLockSeat(Number(seatId));
+      const result = await toggleLockSeat(Number(seatId));
+      if (!result.success) {
+        alert(`좌석 잠금/해제 실패: ${result.message}`);
+        return;
+      }
       loadData();
     } catch (err: any) {
       alert(`좌석 잠금/해제 실패: ${err.message}`);
@@ -618,7 +634,13 @@ export default function ClassroomGrid({
                   if (confirm("정말로 이 좌석 정보를 삭제하시겠습니까?")) {
                     startTransition(async () => {
                       try {
-                        await deleteAllocation(Number(seatInfo.id));
+                        const result = await deleteAllocation(
+                          Number(seatInfo.id)
+                        );
+                        if (!result.success) {
+                          alert(`삭제 에러: ${result.message}`);
+                          return;
+                        }
                         await loadData();
                       } catch (err: any) {
                         alert(`삭제 에러: ${err.message}`);
