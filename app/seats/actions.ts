@@ -511,7 +511,7 @@ export const sendMattermostNoticeOnSeatBid = async ({
   }
   const message = `### 🚨 좌석 입찰 알림 🚨
 코드: ${seatCode} | ${attacker} ⚔️ [ ${victims.map((v) => MATTERMOST_USER_IDS[v]).join(", ")} ]
-[수복하러 가기](12ban.vercel.app)`;
+[수복하러 가기](12ban.vercel.app/seats)`;
   try {
     const response = await fetch(webhookUrl, {
       method: "POST",
