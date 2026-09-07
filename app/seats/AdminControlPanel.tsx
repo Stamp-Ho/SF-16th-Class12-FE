@@ -175,7 +175,7 @@ export default function AdminControlPanel({
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
           ) : (
             <>
-              <ShieldOff className="w-3.5 h-3.5" /> 빈자리 방패 초기화
+              <ShieldOff className="w-3.5 h-3.5" /> 빈자리 초기화
             </>
           )}
         </button>
@@ -189,7 +189,7 @@ export default function AdminControlPanel({
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
           ) : (
             <>
-              <ShieldOff className="w-3.5 h-3.5" /> 모든 방패 초기화
+              <ShieldOff className="w-3.5 h-3.5" /> 모두 초기화
             </>
           )}
         </button>

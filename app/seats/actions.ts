@@ -510,7 +510,8 @@ export const sendMattermostNoticeOnSeatBid = async ({
     throw new Error("매터모스트 클래스 웹훅이 정의되지 않았습니다.");
   }
   const message = `### 🚨 좌석 입찰 알림 🚨
-코드: ${seatCode} | ${attacker} ⚔️ [ ${victims.map((v) => MATTERMOST_USER_IDS[v]).join(", ")} ]`;
+코드: ${seatCode} | ${attacker} ⚔️ [ ${victims.map((v) => MATTERMOST_USER_IDS[v]).join(", ")} ]
+[수복하러 가기](12ban.vercel.app)`;
   try {
     const response = await fetch(webhookUrl, {
       method: "POST",
@@ -569,9 +570,9 @@ export async function resetEmptyShield(roundId: number) {
     .from("seat_allocations")
     .update({ updated_at: new Date() })
     .eq("round_id", roundId)
-    .eq("group_id", null);
+    .is("group_id", null);
 
-  if (error) throw new Error(`방패 초기화 실패: ${error.message}`);
+  if (error) throw new Error(`빈자리 방패 초기화 실패: ${error.message}`);
   return;
 }
 
