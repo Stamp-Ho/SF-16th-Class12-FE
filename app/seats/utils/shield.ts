@@ -70,19 +70,20 @@ export function getSeatBidTier(updatedAt: string | Date | null | undefined) {
   if (diffHours < 3) {
     return { tier: 3, priceChange: 1500, label: "2시간 경과", diffHours };
   }
-  if (diffHours < 4) {
-    return { tier: 4, priceChange: 2000, label: "3시간 경과", diffHours };
-  }
-  if (diffHours < 5) {
-    return { tier: 5, priceChange: 2500, label: "4시간 경과", diffHours };
-  }
-  if (diffHours < 6) {
-    return { tier: 6, priceChange: 3000, label: "5시간 경과", diffHours };
-  }
-  return {
-    tier: 7,
-    priceChange: 3500,
-    label: "6시간 이상 경과 (최대)",
-    diffHours
-  };
+  return { tier: 4, priceChange: 2000, label: "3시간 이상 경과", diffHours };
+  // if (diffHours < 4) {
+  //   return { tier: 4, priceChange: 2000, label: "3시간 경과", diffHours };
+  // }
+  // if (diffHours < 5) {
+  //   return { tier: 5, priceChange: 2500, label: "4시간 경과", diffHours };
+  // }
+  // if (diffHours < 6) {
+  //   return { tier: 6, priceChange: 3000, label: "5시간 경과", diffHours };
+  // }
+  // return {
+  //   tier: 7,
+  //   priceChange: 3500,
+  //   label: "6시간 이상 경과 (최대)",
+  //   diffHours
+  // };
 }
