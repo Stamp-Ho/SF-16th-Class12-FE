@@ -185,7 +185,12 @@ export default function ClassroomGrid({
 
   useEffect(() => {
     let result = 0;
-    seatList.forEach((s) => (result += s.current_bid_price));
+    seatList.forEach(
+      (s) =>
+        (result +=
+          s.current_bid_price *
+          (CORNER_SEATS.includes(s.seat_code) ? 1 : numberPerGroup))
+    );
     setTotalCost(result);
   }, [seatList]);
   const getSeatInfo = (code: string) =>
@@ -371,7 +376,7 @@ export default function ClassroomGrid({
         <div className="flex justify-between">
           {showMoney ? (
             <div className="px-6 sm:w-48 bg-violet-50 border-2 border-violet-300 text-violet-900 py-1.5 rounded-lg sm:py-2 sm:rounded-xl font-bold text-center">
-              총액: {(tatalCost * numberPerGroup).toLocaleString()}원
+              총액: {tatalCost.toLocaleString()}원
             </div>
           ) : (
             <div className="px-6 sm:w-48 bg-slate-50 border-2 border-slate-300 text-slate-900 py-1.5 rounded-lg sm:py-2 sm:rounded-xl font-bold text-center">
