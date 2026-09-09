@@ -407,7 +407,7 @@ export async function placeBid(request: BidRequest) {
  */
 export async function gambleBid(request: GambleRequest) {
   const supabase = await createClient();
-  const isWin = Math.random() * 100 < 21;
+  const isWin = Math.random() * 100 < 20;
   const priceChange = isWin ? 2500 : -500;
 
   const { data, error } = await supabase.rpc("gamble_bid", {
