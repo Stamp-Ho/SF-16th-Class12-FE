@@ -1,6 +1,5 @@
 "use server";
 
-import { randomInt } from "node:crypto";
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
 
@@ -408,7 +407,7 @@ export async function placeBid(request: BidRequest) {
  */
 export async function gambleBid(request: GambleRequest) {
   const supabase = await createClient();
-  const isWin = randomInt(0, 100) < 21;
+  const isWin = Math.random() * 100 < 21;
   const priceChange = isWin ? 2500 : -500;
 
   const { data, error } = await supabase.rpc("gamble_bid", {
