@@ -1,5 +1,6 @@
 "use server";
 
+import { randomInt } from "node:crypto";
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
 
@@ -39,7 +40,6 @@ export interface BidRequest {
 export interface GambleRequest {
   allocationId: number;
   userName: string;
-  priceChange: number;
 }
 
 export interface DetailAssignRequest {
@@ -408,16 +408,18 @@ export async function placeBid(request: BidRequest) {
  */
 export async function gambleBid(request: GambleRequest) {
   const supabase = await createClient();
+  const isWin = randomInt(0, 100) < 21;
+  const priceChange = isWin ? 2500 : -500;
 
   const { data, error } = await supabase.rpc("gamble_bid", {
     p_allocation_id: request.allocationId,
     p_user_name: request.userName,
-    p_price_change: request.priceChange
+    p_price_change: priceChange
   });
 
   if (error) return failure(error.message);
   revalidatePath("/seats");
-  return { success: true as const, data };
+  return { success: true as const, data: { record: data, isWin } };
 }
 
 /**

@@ -20,7 +20,7 @@ export default function GambleModal({
 
   // 초기 12개 슬롯 세팅
   const defaultItems = Array.from({ length: 12 }, (_, i) =>
-    i % 3 === 0 ? "+3,000" : "-500"
+    i % 3 === 0 ? "+2,500" : "-500"
   );
   const [reelItems, setReelItems] = useState<string[]>(defaultItems);
   const [targetRotation, setTargetRotation] = useState(0);
@@ -41,12 +41,10 @@ export default function GambleModal({
 
     const startGamble = async () => {
       try {
-        const plus3000 = Math.random() < 0.21; // 20% 확률로 +3,000 당첨
-        // 1. 서버에서 즉시 DB 변경 및 결과 수령
+        // 결과와 DB 변경은 서버에서 함께 결정한다.
         const result = await gambleBid({
           allocationId: Number(seatId),
-          userName,
-          priceChange: plus3000 ? 3000 : -500
+          userName
         });
         if (!result.success) {
           alert(`행운뽑기 실패: ${result.message}`);
@@ -56,13 +54,13 @@ export default function GambleModal({
 
         if (isCancelled) return;
 
-        const finalResult = plus3000 ? "win" : "loss";
-        const targetSymbol = plus3000 ? "+3,000" : "-500";
+        const finalResult = result.data.isWin ? "win" : "loss";
+        const targetSymbol = result.data.isWin ? "+2,500" : "-500";
 
         // 2. 당첨 기호를 정면(0번)에 배치
         const totalSlots = 12;
         const items = Array.from({ length: totalSlots }, (_, i) =>
-          i % 3 === 0 ? "+3,000" : "-500"
+          i % 3 === 0 ? "+2,500" : "-500"
         );
         items[0] = targetSymbol;
         setReelItems(items);
@@ -186,7 +184,7 @@ export default function GambleModal({
             </p>
           ) : (
             <p className="text-md font-extrabold text-rose-500 flex items-center gap-1 animate-in slide-in-from-bottom-2">
-              <Sparkles className="w-4 h-4" /> 고맙습니다! (+3,000)
+              <Sparkles className="w-4 h-4" /> 고맙습니다! (+2,500)
             </p>
           )}
         </div>
