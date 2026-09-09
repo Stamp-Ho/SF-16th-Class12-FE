@@ -287,11 +287,14 @@ export default function SnackMain({
                                   {snack.vote_count}표
                                 </span>
                               </div>
+                              <div className="text-xs text-slate-400 ml-auto">
+                                {snack.created_by}
+                              </div>
                               <button
                                 type="button"
                                 onClick={() => handleVote(snack.id)}
                                 disabled={pendingSnackId === snack.id}
-                                className={`mt-4 w-full rounded-lg px-3 py-2 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                                className={`mt-2 w-full rounded-lg px-3 py-2 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                                   isVoted
                                     ? "bg-amber-500 text-white hover:bg-amber-600"
                                     : "bg-slate-100 text-slate-700 hover:bg-amber-100 hover:text-amber-800"
