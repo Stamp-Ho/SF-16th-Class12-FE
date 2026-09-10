@@ -324,6 +324,7 @@ export default function SeatsMain({ profile }: { profile: any }) {
                 showMoney={showMoney}
                 hideDetails={hideDetails}
                 roundTitle={selectedRound.title}
+                isClosed={selectedRound.isClosed}
               />
             </div>
 

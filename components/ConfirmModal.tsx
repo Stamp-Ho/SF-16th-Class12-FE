@@ -21,7 +21,7 @@ export default function ConfirmModal({
       aria-modal="true"
       aria-label="확인"
     >
-      <div className="w-full max-w-sm overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-950/20">
+      <div className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-950/20">
         <div className="flex items-start gap-4 border-b border-slate-100 px-6 py-5">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
             <AlertTriangle className="h-5 w-5" aria-hidden="true" />

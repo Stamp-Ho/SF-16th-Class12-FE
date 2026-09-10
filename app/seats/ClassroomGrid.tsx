@@ -40,7 +40,8 @@ export default function ClassroomGrid({
   hideDetails,
   screenShotMode,
   showMoney,
-  roundTitle
+  roundTitle,
+  isClosed
 }: {
   roundId: number;
   seatList: SeatData[];
@@ -54,6 +55,7 @@ export default function ClassroomGrid({
   screenShotMode: boolean;
   showMoney: boolean;
   roundTitle: string;
+  isClosed: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -64,9 +66,14 @@ export default function ClassroomGrid({
   const [recordModalOpen, setRecordModalOpen] = useState(false);
 
   const [bidingSeatCode, setBidingSeatCode] = useState<string | null>(null);
+  const [bidingPrice, setBidingPrice] = useState<number | null>(null);
   const seatMap = numberPerGroup === 3 ? SEAT_MAP_FOR_3 : SEAT_MAP;
 
+  const [myPrice, setMyPrice] = useState<number>(0);
+
   useEffect(() => {
+    setBidingSeatCode(null);
+    setBidingPrice(0);
     let result = 0;
     seatList.forEach(
       (s) =>
@@ -74,14 +81,27 @@ export default function ClassroomGrid({
           s.current_bid_price *
           (CORNER_SEATS.includes(s.seat_code) ? 1 : numberPerGroup))
     );
+    setMyPrice(
+      seatList.filter((s) => s.current_group_id === myGroupId)[0]
+        ?.current_bid_price || 0
+    );
     setTotalCost(result);
   }, [seatList]);
   const getSeatInfo = (code: string) =>
     seatList.find((s) => s.seat_code === code);
 
   // 입찰 클릭시 처리되는 함수
-  const handleSeatClick = (code: string) => {
+  const handleSeatClick = (code: string, price: number, islocked: boolean) => {
+    if (isClosed) {
+      alert("입찰이 종료된 라운드입니다.");
+      return;
+    }
+    if (islocked) {
+      alert("이 좌석은 잠겨 있어 입찰할 수 없습니다.");
+      return;
+    }
     setBidingSeatCode(code);
+    setBidingPrice(price);
   };
   // 클릭 입찰 함수
   const onBidConfirm = (code: string) => {
@@ -235,7 +255,7 @@ export default function ClassroomGrid({
       )}
       {!!bidingSeatCode && (
         <ConfirmModal
-          message={`정말 [${bidingSeatCode}]좌석을 ${0}원에 입찰하시겠습니까?`}
+          message={`정말 [${bidingSeatCode}]좌석을 ${bidingPrice}원에 입찰하시겠습니까?`}
           warning={`확인을 누르면 절대 되돌려주지 않습니다.`}
           onConfirm={() => onBidConfirm(bidingSeatCode)}
           onCancel={() => setBidingSeatCode(null)}
@@ -333,7 +353,8 @@ export default function ClassroomGrid({
 
     const seatBidTier = getSeatBidTier(seatInfo.updated_at);
     const tier = seatBidTier ? seatBidTier.tier : 0;
-
+    const addPrice =
+      seatBidTier.priceChange - (seatInfo.current_group_id == null ? 500 : 0);
     // 내 그룹 소속 구역인지 체크
     const isMyGroup =
       isOccupied &&
@@ -369,7 +390,14 @@ export default function ClassroomGrid({
     return (
       <div key={tile.num} className={`relative`}>
         <div
-          onClick={() => !isPending && handleSeatClick(tile.code)}
+          onClick={() =>
+            !isPending &&
+            handleSeatClick(
+              tile.code,
+              myPrice + seatInfo.current_bid_price + addPrice,
+              seatInfo.is_locked
+            )
+          }
           // 💡 Drag & Drop Event Listeners 추가
           onMouseEnter={() => isMyGroup || setHoveredSeatCode(tile.code)}
           onMouseLeave={() => setHoveredSeatCode(null)}
@@ -396,11 +424,7 @@ export default function ClassroomGrid({
               {screenShotMode || hideDetails ? null : seatInfo.is_locked ? (
                 <Lock className="w-2.75 h-2.75 sm:w-3.5 sm:h-3.5 text-red-500" />
               ) : isHovered ? (
-                <span className="">
-                  +
-                  {seatBidTier.priceChange -
-                    (seatInfo.current_group_id == null ? 500 : 0)}
-                </span>
+                <span className="">+{addPrice}</span>
               ) : (
                 <>
                   {tier > 1 && (
