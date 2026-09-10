@@ -7,17 +7,12 @@ import {
   placeBid,
   toggleLockSeat
 } from "./actions";
-import {
-  ArrowLeftRight,
-  Lock,
-  LockOpen,
-  ShieldIcon,
-  Sparkles,
-  Trash
-} from "lucide-react";
-import BidRecordModal from "./BidRecordModal";
+import { ArrowLeftRight, Lock, LockOpen, Sparkles, Trash } from "lucide-react";
+import BidRecordModal from "./components/BidRecordModal";
 import { getSeatBidTier } from "./utils/shield";
 import { Shield } from "@/assets/icons";
+import ConfirmModal from "@/components/ConfirmModal";
+import { on } from "events";
 
 interface SeatData {
   id: string;
@@ -32,120 +27,6 @@ interface SeatData {
   is_locked: boolean;
   updated_at: string;
 }
-
-const positions = ["left", "middle", "right"] as const;
-const SEAT_MAP = [
-  { num: 1, type: "seat", code: "가", pos: 1 },
-  { num: 2, type: "seat", code: "A", pos: 0 },
-  { num: 3, type: "seat", code: "A", pos: 1 },
-  { num: 4, type: "seat", code: "B", pos: 0 },
-  { num: 5, type: "seat", code: "B", pos: 1 },
-  { num: 6, type: "seat", code: "나", pos: 1 },
-
-  { num: 7, type: "seat", code: "C", pos: 0 },
-  { num: 8, type: "seat", code: "C", pos: 1 },
-  { num: 9, type: "seat", code: "D", pos: 0 },
-  { num: 10, type: "seat", code: "D", pos: 1 },
-  { num: 11, type: "seat", code: "E", pos: 0 },
-  { num: 12, type: "seat", code: "E", pos: 1 },
-
-  { num: 13, type: "seat", code: "F", pos: 0 },
-  { num: 14, type: "seat", code: "F", pos: 1 },
-  { num: 15, type: "seat", code: "G", pos: 0 },
-  { num: 16, type: "seat", code: "G", pos: 1 },
-  { num: 17, type: "seat", code: "H", pos: 0 },
-  { num: 18, type: "seat", code: "H", pos: 1 },
-
-  { num: 19, type: "seat", code: "I", pos: 0 },
-  { num: 20, type: "seat", code: "I", pos: 1 },
-  { num: 21, type: "seat", code: "J", pos: 0 },
-  { num: 22, type: "seat", code: "J", pos: 1 },
-  { num: 23, type: "seat", code: "K", pos: 0 },
-  { num: 24, type: "seat", code: "K", pos: 1 },
-
-  { num: 25, type: "seat", code: "다", pos: 1 },
-  { num: 26, type: "seat", code: "L", pos: 0 },
-  { num: 27, type: "seat", code: "L", pos: 1 },
-  { num: 28, type: "seat", code: "M", pos: 0 },
-  { num: 29, type: "seat", code: "M", pos: 1 },
-  { num: 30, type: "thinking", name: "생각의자" }
-];
-const SEAT_MAP_FOR_3 = [
-  { num: 1, type: "seat", code: "A", pos: 0 },
-  { num: 2, type: "seat", code: "A", pos: 1 },
-  { num: 3, type: "seat", code: "A", pos: 2 },
-  { num: 4, type: "seat", code: "B", pos: 0 },
-  { num: 5, type: "seat", code: "B", pos: 1 },
-  { num: 6, type: "seat", code: "B", pos: 2 },
-
-  { num: 7, type: "seat", code: "C", pos: 0 },
-  { num: 8, type: "seat", code: "C", pos: 1 },
-  { num: 9, type: "seat", code: "C", pos: 2 },
-  { num: 10, type: "seat", code: "D", pos: 0 },
-  { num: 11, type: "seat", code: "D", pos: 1 },
-  { num: 12, type: "seat", code: "D", pos: 2 },
-
-  { num: 13, type: "seat", code: "E", pos: 0 },
-  { num: 14, type: "seat", code: "E", pos: 1 },
-  { num: 15, type: "seat", code: "E", pos: 2 },
-  { num: 16, type: "seat", code: "F", pos: 0 },
-  { num: 17, type: "seat", code: "F", pos: 1 },
-  { num: 18, type: "seat", code: "F", pos: 2 },
-
-  { num: 19, type: "seat", code: "G", pos: 0 },
-  { num: 20, type: "seat", code: "G", pos: 1 },
-  { num: 21, type: "seat", code: "G", pos: 2 },
-  { num: 22, type: "seat", code: "H", pos: 0 },
-  { num: 23, type: "seat", code: "H", pos: 1 },
-  { num: 24, type: "seat", code: "H", pos: 2 },
-
-  { num: 25, type: "seat", code: "I", pos: 0 },
-  { num: 26, type: "seat", code: "I", pos: 1 },
-  { num: 27, type: "seat", code: "I", pos: 2 },
-  { num: 28, type: "thinking", name: "생각의자" },
-  { num: 29, type: "thinking", name: "생각의자" },
-  { num: 30, type: "thinking", name: "생각의자" }
-];
-
-const CORNER_SEATS = ["가", "나", "다"];
-
-const CODE_COLORS: Record<string, string> = {
-  A: "bg-rose-50 border-rose-200 text-rose-900 hover:bg-rose-100",
-  B: "bg-teal-50 border-teal-200 text-teal-900 hover:bg-teal-100",
-  C: "bg-amber-50 border-amber-200 text-amber-900 hover:bg-amber-100",
-  D: "bg-indigo-50 border-indigo-200 text-indigo-900 hover:bg-indigo-100",
-  E: "bg-orange-50 border-orange-200 text-orange-900 hover:bg-orange-100",
-  F: "bg-purple-100 border-purple-300 text-purple-950 hover:bg-purple-200",
-  G: "bg-yellow-50 border-yellow-200 text-yellow-900 hover:bg-yellow-100",
-  H: "bg-blue-50 border-blue-200 text-blue-900 hover:bg-blue-100",
-  I: "bg-emerald-50 border-emerald-200 text-emerald-900 hover:bg-emerald-100",
-  J: "bg-fuchsia-100 border-fuchsia-300 text-fuchsia-950 hover:bg-fuchsia-200",
-  K: "bg-lime-50 border-lime-200 text-lime-900 hover:bg-lime-100",
-  L: "bg-sky-50 border-sky-200 text-sky-900 hover:bg-sky-100",
-  M: "bg-green-50 border-green-200 text-green-900 hover:bg-green-100",
-  가: "bg-rose-50 border-rose-200 text-rose-900 hover:bg-rose-100",
-  나: "bg-teal-50 border-teal-200 text-teal-900 hover:bg-teal-100",
-  다: "bg-sky-50 border-sky-200 text-sky-900 hover:bg-sky-100"
-};
-
-const MY_CODE_COLORS: Record<string, string> = {
-  A: "bg-rose-500 hover:bg-rose-500 text-white hover:text-white border-rose-600 ring-3 ring-rose-300 shadow-md",
-  B: "bg-teal-600 hover:bg-teal-600 text-white hover:text-white border-teal-700 ring-3 ring-teal-300 shadow-md",
-  C: "bg-amber-500 hover:bg-amber-500 text-white hover:text-white border-amber-600 ring-3 ring-amber-300 shadow-md",
-  D: "bg-indigo-600 hover:bg-indigo-600 text-white hover:text-white border-indigo-700 ring-3 ring-indigo-300 shadow-md",
-  E: "bg-orange-500 hover:bg-orange-500 text-white hover:text-white border-orange-600 ring-3 ring-orange-300 shadow-md",
-  F: "bg-purple-700 hover:bg-purple-700 text-white hover:text-white border-purple-800 ring-3 ring-purple-300 shadow-md",
-  G: "bg-yellow-500 hover:bg-yellow-500 text-slate-900 hover:text-slate-900 border-yellow-600 ring-3 ring-yellow-300 shadow-md",
-  H: "bg-blue-600 hover:bg-blue-600 text-white hover:text-white border-blue-700 ring-3 ring-blue-300 shadow-md",
-  I: "bg-emerald-600 hover:bg-emerald-600 text-white hover:text-white border-emerald-700 ring-3 ring-emerald-300 shadow-md",
-  J: "bg-fuchsia-600 hover:bg-fuchsia-600 text-white hover:text-white border-fuchsia-700 ring-3 ring-fuchsia-300 shadow-md",
-  K: "bg-lime-600 hover:bg-lime-600 text-white hover:text-white border-lime-700 ring-3 ring-lime-300 shadow-md",
-  L: "bg-sky-600 hover:bg-sky-600 text-white hover:text-white border-sky-700 ring-3 ring-sky-300 shadow-md",
-  M: "bg-green-600 hover:bg-green-600 text-white hover:text-white border-green-700 ring-3 ring-green-300 shadow-md",
-  가: "bg-rose-500 hover:bg-rose-500 text-white hover:text-white border-rose-600 ring-3 ring-rose-300 shadow-md",
-  나: "bg-teal-600 hover:bg-teal-600 text-white hover:text-white border-teal-700 ring-3 ring-teal-300 shadow-md",
-  다: "bg-sky-600 hover:bg-sky-600 text-white hover:text-white border-sky-700 ring-3 ring-sky-300 shadow-md"
-};
 
 export default function ClassroomGrid({
   roundId,
@@ -181,6 +62,8 @@ export default function ClassroomGrid({
   const [dragOverCode, setDragOverCode] = useState<string | null>(null);
   const [tatalCost, setTotalCost] = useState<number>(0);
   const [recordModalOpen, setRecordModalOpen] = useState(false);
+
+  const [bidingSeatCode, setBidingSeatCode] = useState<string | null>(null);
   const seatMap = numberPerGroup === 3 ? SEAT_MAP_FOR_3 : SEAT_MAP;
 
   useEffect(() => {
@@ -196,8 +79,12 @@ export default function ClassroomGrid({
   const getSeatInfo = (code: string) =>
     seatList.find((s) => s.seat_code === code);
 
-  // 클릭 입찰 함수
+  // 입찰 클릭시 처리되는 함수
   const handleSeatClick = (code: string) => {
+    setBidingSeatCode(code);
+  };
+  // 클릭 입찰 함수
+  const onBidConfirm = (code: string) => {
     // 이미 트랜지션 처리 중이면 중복 요청 차단
     if (isPending) return;
     if (CORNER_SEATS.includes(code) && myGroupName.includes(",")) {
@@ -228,6 +115,8 @@ export default function ClassroomGrid({
         setHoveredSeatCode(null);
       } catch (err: any) {
         alert(`입찰 실패: ${err.message}`);
+      } finally {
+        setBidingSeatCode(null);
       }
     });
   };
@@ -344,6 +233,15 @@ export default function ClassroomGrid({
           onClose={() => setRecordModalOpen(false)}
         />
       )}
+      {!!bidingSeatCode && (
+        <ConfirmModal
+          message={`정말 [${bidingSeatCode}]좌석을 ${0}원에 입찰하시겠습니까?`}
+          warning={`확인을 누르면 절대 되돌려주지 않습니다.`}
+          onConfirm={() => onBidConfirm(bidingSeatCode)}
+          onCancel={() => setBidingSeatCode(null)}
+        />
+      )}
+      {}
       {/* 스크린 / 문 / 강사님 */}
       <div className="text-[9px] sm:text-xs space-y-1.5 sm:space-y-3">
         <div className="grid grid-cols-12 gap-2 text-center font-bold">
@@ -673,3 +571,117 @@ export default function ClassroomGrid({
     );
   }
 }
+
+const positions = ["left", "middle", "right"] as const;
+const SEAT_MAP = [
+  { num: 1, type: "seat", code: "가", pos: 1 },
+  { num: 2, type: "seat", code: "A", pos: 0 },
+  { num: 3, type: "seat", code: "A", pos: 1 },
+  { num: 4, type: "seat", code: "B", pos: 0 },
+  { num: 5, type: "seat", code: "B", pos: 1 },
+  { num: 6, type: "seat", code: "나", pos: 1 },
+
+  { num: 7, type: "seat", code: "C", pos: 0 },
+  { num: 8, type: "seat", code: "C", pos: 1 },
+  { num: 9, type: "seat", code: "D", pos: 0 },
+  { num: 10, type: "seat", code: "D", pos: 1 },
+  { num: 11, type: "seat", code: "E", pos: 0 },
+  { num: 12, type: "seat", code: "E", pos: 1 },
+
+  { num: 13, type: "seat", code: "F", pos: 0 },
+  { num: 14, type: "seat", code: "F", pos: 1 },
+  { num: 15, type: "seat", code: "G", pos: 0 },
+  { num: 16, type: "seat", code: "G", pos: 1 },
+  { num: 17, type: "seat", code: "H", pos: 0 },
+  { num: 18, type: "seat", code: "H", pos: 1 },
+
+  { num: 19, type: "seat", code: "I", pos: 0 },
+  { num: 20, type: "seat", code: "I", pos: 1 },
+  { num: 21, type: "seat", code: "J", pos: 0 },
+  { num: 22, type: "seat", code: "J", pos: 1 },
+  { num: 23, type: "seat", code: "K", pos: 0 },
+  { num: 24, type: "seat", code: "K", pos: 1 },
+
+  { num: 25, type: "seat", code: "다", pos: 1 },
+  { num: 26, type: "seat", code: "L", pos: 0 },
+  { num: 27, type: "seat", code: "L", pos: 1 },
+  { num: 28, type: "seat", code: "M", pos: 0 },
+  { num: 29, type: "seat", code: "M", pos: 1 },
+  { num: 30, type: "thinking", name: "생각의자" }
+];
+const SEAT_MAP_FOR_3 = [
+  { num: 1, type: "seat", code: "A", pos: 0 },
+  { num: 2, type: "seat", code: "A", pos: 1 },
+  { num: 3, type: "seat", code: "A", pos: 2 },
+  { num: 4, type: "seat", code: "B", pos: 0 },
+  { num: 5, type: "seat", code: "B", pos: 1 },
+  { num: 6, type: "seat", code: "B", pos: 2 },
+
+  { num: 7, type: "seat", code: "C", pos: 0 },
+  { num: 8, type: "seat", code: "C", pos: 1 },
+  { num: 9, type: "seat", code: "C", pos: 2 },
+  { num: 10, type: "seat", code: "D", pos: 0 },
+  { num: 11, type: "seat", code: "D", pos: 1 },
+  { num: 12, type: "seat", code: "D", pos: 2 },
+
+  { num: 13, type: "seat", code: "E", pos: 0 },
+  { num: 14, type: "seat", code: "E", pos: 1 },
+  { num: 15, type: "seat", code: "E", pos: 2 },
+  { num: 16, type: "seat", code: "F", pos: 0 },
+  { num: 17, type: "seat", code: "F", pos: 1 },
+  { num: 18, type: "seat", code: "F", pos: 2 },
+
+  { num: 19, type: "seat", code: "G", pos: 0 },
+  { num: 20, type: "seat", code: "G", pos: 1 },
+  { num: 21, type: "seat", code: "G", pos: 2 },
+  { num: 22, type: "seat", code: "H", pos: 0 },
+  { num: 23, type: "seat", code: "H", pos: 1 },
+  { num: 24, type: "seat", code: "H", pos: 2 },
+
+  { num: 25, type: "seat", code: "I", pos: 0 },
+  { num: 26, type: "seat", code: "I", pos: 1 },
+  { num: 27, type: "seat", code: "I", pos: 2 },
+  { num: 28, type: "thinking", name: "생각의자" },
+  { num: 29, type: "thinking", name: "생각의자" },
+  { num: 30, type: "thinking", name: "생각의자" }
+];
+
+const CORNER_SEATS = ["가", "나", "다"];
+
+const CODE_COLORS: Record<string, string> = {
+  A: "bg-rose-50 border-rose-200 text-rose-900 hover:bg-rose-100",
+  B: "bg-teal-50 border-teal-200 text-teal-900 hover:bg-teal-100",
+  C: "bg-amber-50 border-amber-200 text-amber-900 hover:bg-amber-100",
+  D: "bg-indigo-50 border-indigo-200 text-indigo-900 hover:bg-indigo-100",
+  E: "bg-orange-50 border-orange-200 text-orange-900 hover:bg-orange-100",
+  F: "bg-purple-100 border-purple-300 text-purple-950 hover:bg-purple-200",
+  G: "bg-yellow-50 border-yellow-200 text-yellow-900 hover:bg-yellow-100",
+  H: "bg-blue-50 border-blue-200 text-blue-900 hover:bg-blue-100",
+  I: "bg-emerald-50 border-emerald-200 text-emerald-900 hover:bg-emerald-100",
+  J: "bg-fuchsia-100 border-fuchsia-300 text-fuchsia-950 hover:bg-fuchsia-200",
+  K: "bg-lime-50 border-lime-200 text-lime-900 hover:bg-lime-100",
+  L: "bg-sky-50 border-sky-200 text-sky-900 hover:bg-sky-100",
+  M: "bg-green-50 border-green-200 text-green-900 hover:bg-green-100",
+  가: "bg-rose-50 border-rose-200 text-rose-900 hover:bg-rose-100",
+  나: "bg-teal-50 border-teal-200 text-teal-900 hover:bg-teal-100",
+  다: "bg-sky-50 border-sky-200 text-sky-900 hover:bg-sky-100"
+};
+
+const MY_CODE_COLORS: Record<string, string> = {
+  A: "bg-rose-500 hover:bg-rose-500 text-white hover:text-white border-rose-600 ring-3 ring-rose-300 shadow-md",
+  B: "bg-teal-600 hover:bg-teal-600 text-white hover:text-white border-teal-700 ring-3 ring-teal-300 shadow-md",
+  C: "bg-amber-500 hover:bg-amber-500 text-white hover:text-white border-amber-600 ring-3 ring-amber-300 shadow-md",
+  D: "bg-indigo-600 hover:bg-indigo-600 text-white hover:text-white border-indigo-700 ring-3 ring-indigo-300 shadow-md",
+  E: "bg-orange-500 hover:bg-orange-500 text-white hover:text-white border-orange-600 ring-3 ring-orange-300 shadow-md",
+  F: "bg-purple-700 hover:bg-purple-700 text-white hover:text-white border-purple-800 ring-3 ring-purple-300 shadow-md",
+  G: "bg-yellow-500 hover:bg-yellow-500 text-slate-900 hover:text-slate-900 border-yellow-600 ring-3 ring-yellow-300 shadow-md",
+  H: "bg-blue-600 hover:bg-blue-600 text-white hover:text-white border-blue-700 ring-3 ring-blue-300 shadow-md",
+  I: "bg-emerald-600 hover:bg-emerald-600 text-white hover:text-white border-emerald-700 ring-3 ring-emerald-300 shadow-md",
+  J: "bg-fuchsia-600 hover:bg-fuchsia-600 text-white hover:text-white border-fuchsia-700 ring-3 ring-fuchsia-300 shadow-md",
+  K: "bg-lime-600 hover:bg-lime-600 text-white hover:text-white border-lime-700 ring-3 ring-lime-300 shadow-md",
+  L: "bg-sky-600 hover:bg-sky-600 text-white hover:text-white border-sky-700 ring-3 ring-sky-300 shadow-md",
+  M: "bg-green-600 hover:bg-green-600 text-white hover:text-white border-green-700 ring-3 ring-green-300 shadow-md",
+  가: "bg-rose-500 hover:bg-rose-500 text-white hover:text-white border-rose-600 ring-3 ring-rose-300 shadow-md",
+  나: "bg-teal-600 hover:bg-teal-600 text-white hover:text-white border-teal-700 ring-3 ring-teal-300 shadow-md",
+  다: "bg-sky-600 hover:bg-sky-600 text-white hover:text-white border-sky-700 ring-3 ring-sky-300 shadow-md"
+};

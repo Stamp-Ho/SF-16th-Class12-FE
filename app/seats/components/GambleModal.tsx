@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { gambleBid } from "./actions";
+import { gambleBid } from "../actions";
 import { Dices, Sparkles } from "lucide-react";
 
 interface GambleModalProps {

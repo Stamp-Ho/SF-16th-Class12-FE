@@ -1,11 +1,11 @@
 "use client";
 import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
-import { getRandomDrawHistory } from "../shuffle/actions";
+import { getRandomDrawHistory } from "../../shuffle/actions";
 
 export default function ImportShuffleModal({
   setDrawHistory,
-  onClose,
+  onClose
 }: {
   setDrawHistory: (draws: any) => void;
   onClose: () => void;

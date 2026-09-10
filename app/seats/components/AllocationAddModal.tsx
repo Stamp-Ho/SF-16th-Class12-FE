@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createRound, getSeatsDataByRounds } from "./actions";
+import { createRound, getSeatsDataByRounds } from "../actions";
 import {
   Loader2,
   ChevronLeft,
@@ -14,8 +14,8 @@ import {
   Users
 } from "lucide-react";
 import { LayoutGroup, motion } from "framer-motion";
-import { generateRingOrder, generateReverseRingOrder } from "./utils/order";
-import { getTargetUsers } from "../shuffle/actions";
+import { generateRingOrder, generateReverseRingOrder } from "../utils/order";
+import { getTargetUsers } from "../../shuffle/actions";
 
 interface AllocationAddModalProps {
   onClose: () => void;

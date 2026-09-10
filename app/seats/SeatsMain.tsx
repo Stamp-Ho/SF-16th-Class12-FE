@@ -17,15 +17,19 @@ import {
   Flame
 } from "lucide-react";
 import Link from "next/link";
-import GambleModal from "./GambleModal";
+import GambleModal from "./components/GambleModal";
+import ConfirmModal from "@/components/ConfirmModal";
 
 const AdminControlPanel = dynamic(() => import("./AdminControlPanel"), {
   ssr: false
 });
 
-const AllocationAddModal = dynamic(() => import("./AllocationAddModal"), {
-  ssr: false
-});
+const AllocationAddModal = dynamic(
+  () => import("./components/AllocationAddModal"),
+  {
+    ssr: false
+  }
+);
 
 export default function SeatsMain({ profile }: { profile: any }) {
   const supabase = useMemo(() => createClient(), []);
@@ -33,6 +37,7 @@ export default function SeatsMain({ profile }: { profile: any }) {
   const [rounds, setRounds] = useState<any[]>([]);
   const [selectedRound, setSelectedRound] = useState<any | null>(null);
 
+  const [gambleConfirmModalOpen, setGambleConfirmModalOpen] = useState(false);
   const [gambleModalOn, setGambleModalOn] = useState(false);
 
   const [hideDetails, setHideDetails] = useState(false);
@@ -422,7 +427,7 @@ export default function SeatsMain({ profile }: { profile: any }) {
                       myCurrentBidPrice >= 500 &&
                       selectedRound.isGambleEnabled
                     ) {
-                      setGambleModalOn(true);
+                      setGambleConfirmModalOpen(true);
                     }
                   }}
                 >
@@ -575,6 +580,17 @@ export default function SeatsMain({ profile }: { profile: any }) {
             seatId={myOccupiedSeat?.id || ""}
             userName={currentUser.name}
             onClose={() => setGambleModalOn(false)}
+          />
+        )}
+        {gambleConfirmModalOpen && (
+          <ConfirmModal
+            message="정말로 도박을 진행하시겠습니까?"
+            warning="확인 즉시 진행됩니다."
+            onConfirm={() => {
+              setGambleConfirmModalOpen(false);
+              setGambleModalOn(true);
+            }}
+            onCancel={() => setGambleConfirmModalOpen(false)}
           />
         )}
       </div>

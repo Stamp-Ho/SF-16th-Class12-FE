@@ -11,7 +11,7 @@ import {
   Sword,
   X
 } from "lucide-react";
-import { getHistoriesByRound } from "./actions";
+import { getHistoriesByRound } from "../actions";
 import { createClient } from "@/utils/supabase/client";
 
 type BidHistoryRecord = {
