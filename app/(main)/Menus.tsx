@@ -20,7 +20,7 @@ export default function Menus() {
   }, []);
 
   return (
-    <div className="absolute left-1/2 -translate-x-1/2 z-2 top-2.5 w-max flex flex-wrap gap-2 hover:scale-300 hover:translate-x-10 hover:p-3 border-slate-200 hover:border-2 bg-white rounded-xl">
+    <div className="absolute left-1/2 -translate-x-1/2 z-2 top-2.5 w-max flex flex-wrap gap-2 hover:scale-450 hover:translate-x-61 hover:py-3 hover:px-6 border-slate-200 hover:border-2 bg-white rounded-xl">
       {menuData.length === 0 && (
         <div className="text-sm text-slate-500">20층 메뉴 불러오는 중...</div>
       )}
@@ -30,9 +30,9 @@ export default function Menus() {
             key={index}
             src={menu.image ?? ""}
             alt={`Menu ${index}`}
-            className="w-18 h-14 object-cover"
+            style={{ height: 56, width: "auto" }}
           />
-          <p className="text-xs text-slate-500 z-3 -mt-1">{menu.text}</p>
+          <p className="text-xs text-slate-500 z-3">{menu.text}</p>
         </div>
       ))}
     </div>
