@@ -262,7 +262,7 @@ export default function ClassroomGrid({
       )}
       {!!bidingSeatCode && (
         <ConfirmModal
-          message={`정말 [${bidingSeatCode}]좌석을 ${bidingPrice}원에 입찰하시겠습니까?`}
+          message={`정말 [${bidingSeatCode}]좌석을 ${(bidingPrice ?? 0).toLocaleString()}원에 입찰하시겠습니까?`}
           warning={`확인을 누르면 절대 되돌려주지 않습니다.`}
           onConfirm={() => onBidConfirm(bidingSeatCode)}
           onCancel={() => setBidingSeatCode(null)}
