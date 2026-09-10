@@ -91,6 +91,7 @@ export default function ClassroomGrid({
   useEffect(() => {
     if (updatedSeatSignal?.seatCode === bidingSeatCode) {
       setBidingSeatCode(null);
+      alert("입찰 대상 좌석이 업데이트되었습니다.");
     }
   }, [updatedSeatSignal]);
   const getSeatInfo = (code: string) =>

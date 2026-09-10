@@ -53,6 +53,7 @@ export default function SeatsMain({ profile }: { profile: any }) {
   // 모달 상태
   const [isModalOpen, setIsModalOpen] = useState(false);
   const selectedRoundNumberRef = useRef<number | null>(null);
+  const alertedSeatLossRef = useRef<string | null>(null);
 
   // 로그인 사용자 정보
   const currentUser = profile;
@@ -182,8 +183,10 @@ export default function SeatsMain({ profile }: { profile: any }) {
             updatedSeat.seat_code === currentCode &&
             updatedSeat.group_id !== Number(currentGroupId) &&
             updatedSeat.group_id !== null &&
-            updatedSeat.round_id === currentRoundId
+            updatedSeat.round_id === currentRoundId &&
+            alertedSeatLossRef.current !== String(updatedSeat.id)
           ) {
+            alertedSeatLossRef.current = String(updatedSeat.id);
             alert(
               `⚠️ [경고] ${updatedSeat.seat_code}구역 자리를 다른 팀이 상향 입찰하여 뺏어갔습니다!`
             );
@@ -243,6 +246,9 @@ export default function SeatsMain({ profile }: { profile: any }) {
   }, [selectedRound]);
 
   useEffect(() => {
+    if (myOccupiedCode !== alertedSeatLossRef.current) {
+      alertedSeatLossRef.current = null;
+    }
     myOccupiedCodeRef.current = myOccupiedCode;
     myGroupIdRef.current = myGroupId;
   }, [myOccupiedCode, myGroupId]);
