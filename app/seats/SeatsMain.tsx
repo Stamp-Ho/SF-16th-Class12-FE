@@ -39,6 +39,10 @@ export default function SeatsMain({ profile }: { profile: any }) {
 
   const [gambleConfirmModalOpen, setGambleConfirmModalOpen] = useState(false);
   const [gambleModalOn, setGambleModalOn] = useState(false);
+  const [updatedSeatSignal, setUpdatedSeatSignal] = useState<{
+    seatCode: string;
+    sequence: number;
+  } | null>(null);
 
   const [hideDetails, setHideDetails] = useState(false);
   // 스크린 샷 모드
@@ -187,6 +191,10 @@ export default function SeatsMain({ profile }: { profile: any }) {
 
           // 현재 보고 있는 회차와 무관한 변경이면 재조회하지 않음
           if (updatedSeat.round_id === currentRoundId) {
+            setUpdatedSeatSignal((previous) => ({
+              seatCode: String(updatedSeat.seat_code),
+              sequence: (previous?.sequence ?? 0) + 1
+            }));
             void loadData();
           }
         }
@@ -325,6 +333,7 @@ export default function SeatsMain({ profile }: { profile: any }) {
                 hideDetails={hideDetails}
                 roundTitle={selectedRound.title}
                 isClosed={selectedRound.isClosed}
+                updatedSeatSignal={updatedSeatSignal}
               />
             </div>
 

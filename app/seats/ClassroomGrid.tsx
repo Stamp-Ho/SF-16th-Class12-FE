@@ -41,7 +41,8 @@ export default function ClassroomGrid({
   screenShotMode,
   showMoney,
   roundTitle,
-  isClosed
+  isClosed,
+  updatedSeatSignal
 }: {
   roundId: number;
   seatList: SeatData[];
@@ -56,6 +57,7 @@ export default function ClassroomGrid({
   showMoney: boolean;
   roundTitle: string;
   isClosed: boolean;
+  updatedSeatSignal: { seatCode: string; sequence: number } | null;
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -72,8 +74,6 @@ export default function ClassroomGrid({
   const [myPrice, setMyPrice] = useState<number>(0);
 
   useEffect(() => {
-    setBidingSeatCode(null);
-    setBidingPrice(0);
     let result = 0;
     seatList.forEach(
       (s) =>
@@ -87,6 +87,12 @@ export default function ClassroomGrid({
     );
     setTotalCost(result);
   }, [seatList]);
+
+  useEffect(() => {
+    if (updatedSeatSignal?.seatCode === bidingSeatCode) {
+      setBidingSeatCode(null);
+    }
+  }, [updatedSeatSignal]);
   const getSeatInfo = (code: string) =>
     seatList.find((s) => s.seat_code === code);
 
