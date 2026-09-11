@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDownWideNarrow, Crown, History, Loader2, X } from "lucide-react";
+import {
+  ArrowDownWideNarrow,
+  Crown,
+  History,
+  Loader2,
+  MapPin,
+  User,
+  X
+} from "lucide-react";
 import { getHistoriesByRound } from "../actions";
 import { createClient } from "@/utils/supabase/client";
 import { BidHistoryRecord } from "../history/historyTypes";
@@ -78,6 +86,39 @@ function applyRecordToRanking(
   }
 
   return next;
+}
+
+// 좌석 코드/사용자 필터를 select 대신 여러 줄로 감싸지는 칩 목록으로 표시
+function ChipFilterGroup({
+  icon: Icon,
+  options,
+  value,
+  onChange
+}: {
+  icon: typeof MapPin;
+  options: string[];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <Icon className="h-4 w-4 shrink-0 text-slate-400" />
+      {options.map((option) => (
+        <button
+          key={option}
+          type="button"
+          onClick={() => onChange(option)}
+          className={`rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
+            value === option
+              ? "bg-indigo-500 text-white"
+              : "border border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:bg-indigo-50"
+          }`}
+        >
+          {option}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 export default function BidRecordModal({
@@ -249,89 +290,72 @@ export default function BidRecordModal({
         </div>
 
         {showRanking || (
-          <div className="flex flex-row gap-2 mr-auto ml-4 py-4">
-            {(
-              [
-                ["bid", "입찰 기록"],
-                ["gamble", "도박 기록"],
-                ["graph", "가격 그래프"]
-              ] as const
-            ).map(([tab, label]) => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setActiveTab(tab)}
-                className={`rounded-full px-3 py-1 text-sm font-semibold transition-colors ${
-                  activeTab === tab
-                    ? "bg-indigo-500 text-white hover:bg-indigo-600"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+          <div className="shrink-0 border-b border-slate-100 bg-slate-50/60 px-4 py-3">
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  ["bid", "입찰 기록"],
+                  ["gamble", "도박 기록"],
+                  ["graph", "가격 그래프"]
+                ] as const
+              ).map(([tab, label]) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setActiveTab(tab)}
+                  className={`rounded-full px-3 py-1 text-sm font-semibold transition-colors ${
+                    activeTab === tab
+                      ? "bg-indigo-500 text-white hover:bg-indigo-600"
+                      : "bg-white text-slate-600 border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
             {activeTab !== "graph" && (
-              <>
-                <div className="ml-4">
-                  코드:
-                  <select
-                    className="ml-2 rounded-md border border-slate-300 bg-white py-1 px-2 text-sm text-slate-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                    value={seatCodeFilter ?? "전체"}
-                    onChange={(e) =>
-                      setSeatCodeFilter(
-                        e.target.value === "전체" ? null : e.target.value
-                      )
-                    }
-                  >
-                    {[
-                      "전체",
-                      "A",
-                      "B",
-                      "C",
-                      "D",
-                      "E",
-                      "F",
-                      "G",
-                      "H",
-                      "I",
-                      "J",
-                      "K",
-                      "L",
-                      "M",
-                      "가",
-                      "나",
-                      "다"
-                    ].map((code) => (
-                      <option key={code} value={code}>
-                        {code}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="ml-4">
-                  사용자:
-                  <select
-                    className="ml-2 rounded-md border border-slate-300 bg-white py-1 px-2 text-sm text-slate-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                    value={userNameFilter ?? "전체"}
-                    onChange={(e) =>
-                      setUserNameFilter(
-                        e.target.value === "전체" ? null : e.target.value
-                      )
-                    }
-                  >
-                    <option value="전체">전체</option>
-                    {Array.from(
+              <div className="mt-3 flex flex-col gap-2">
+                <ChipFilterGroup
+                  icon={MapPin}
+                  options={[
+                    "전체",
+                    "A",
+                    "B",
+                    "C",
+                    "D",
+                    "E",
+                    "F",
+                    "G",
+                    "H",
+                    "I",
+                    "J",
+                    "K",
+                    "L",
+                    "M",
+                    "가",
+                    "나",
+                    "다"
+                  ]}
+                  value={seatCodeFilter ?? "전체"}
+                  onChange={(value) =>
+                    setSeatCodeFilter(value === "전체" ? null : value)
+                  }
+                />
+                <ChipFilterGroup
+                  icon={User}
+                  options={[
+                    "전체",
+                    ...Array.from(
                       new Set(records.map((record) => record.user_name))
-                    )
-                      .sort((a, b) => a.localeCompare(b))
-                      .map((userName) => (
-                        <option key={userName} value={userName}>
-                          {userName}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-              </>
+                    ).sort((a, b) => a.localeCompare(b))
+                  ]}
+                  value={userNameFilter ?? "전체"}
+                  onChange={(value) =>
+                    setUserNameFilter(value === "전체" ? null : value)
+                  }
+                />
+              </div>
             )}
           </div>
         )}

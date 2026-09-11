@@ -1,7 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDownWideNarrow, Crown, History, Loader2, X } from "lucide-react";
+import {
+  ArrowDownWideNarrow,
+  Crown,
+  Dices,
+  Filter,
+  Gavel,
+  History,
+  LineChart,
+  Loader2,
+  MapPin,
+  User,
+  X
+} from "lucide-react";
 import { getHistoriesByRound } from "../actions";
 import { createClient } from "@/utils/supabase/client";
 import { BidHistoryRecord } from "./historyTypes";
@@ -80,6 +92,39 @@ function applyRecordToRanking(
   return next;
 }
 
+// 좌석 코드/사용자 필터를 select 대신 여러 줄로 감싸지는 칩 목록으로 표시
+function ChipFilterGroup({
+  icon: Icon,
+  options,
+  value,
+  onChange
+}: {
+  icon: typeof MapPin;
+  options: string[];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      <Icon className="h-4 w-4 shrink-0 mr-1 text-slate-400" />
+      {options.map((option) => (
+        <button
+          key={option}
+          type="button"
+          onClick={() => onChange(option)}
+          className={`rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
+            value === option
+              ? "bg-indigo-500 text-white"
+              : "border border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:bg-indigo-50"
+          }`}
+        >
+          {option}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function BidRecordModal({
   roundId,
   onClose
@@ -91,11 +136,11 @@ export default function BidRecordModal({
 
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"bid" | "gamble" | "graph">(
-    "bid"
-  );
+  const [activeTab, setActiveTab] = useState<
+    "bid" | "gamble" | "graph" | "ranking"
+  >("bid");
 
-  const [showRanking, setShowRanking] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   const [seatCodeFilter, setSeatCodeFilter] = useState<string | null>(null);
   const [userNameFilter, setUserNameFilter] = useState<string | null>(null);
   const [filteredRecords, setFilteredRecords] = useState<BidHistoryRecord[]>(
@@ -105,42 +150,43 @@ export default function BidRecordModal({
   const [rankingData, setRankingData] = useState<RankingData[]>([]);
   const [sortedRankingData, setSortedRankingData] = useState<RankingData[]>([]);
   const [rankBy, setRankBy] = useState<RankByType>("bid_count");
+  const [rankOrder, setRankOrder] = useState<"asc" | "desc">("desc");
 
   const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     if (rankingData.length > 0) {
+      const dir = rankOrder === "desc" ? 1 : -1;
       const sortedData = [...rankingData].sort((a, b) => {
         switch (rankBy) {
           case "bid_count":
-            return b.bid_count - a.bid_count;
+            return (b.bid_count - a.bid_count) * dir;
           case "raised_money":
-            return b.raised_money - a.raised_money;
-          case "gamble_success_rate":
-            const aRate =
-              a.success_count + a.fail_count > 0
-                ? a.success_count / (a.success_count + a.fail_count)
-                : 0;
-            const bRate =
-              b.success_count + b.fail_count > 0
-                ? b.success_count / (b.success_count + b.fail_count)
-                : 0;
-            if (bRate === aRate)
-              return (
-                b.success_count +
-                b.fail_count -
-                (a.success_count + a.fail_count)
-              );
-            return bRate - aRate;
+            return (b.raised_money - a.raised_money) * dir;
+          case "gamble_success_rate": {
+            const aTotal = a.success_count + a.fail_count;
+            const bTotal = b.success_count + b.fail_count;
+            // 시도 횟수가 0인 값은 정렬 방향과 무관하게 항상 최후순위
+            if (aTotal === 0 && bTotal === 0) return 0;
+            if (aTotal === 0) return 1;
+            if (bTotal === 0) return -1;
+            const aRate = a.success_count / aTotal;
+            const bRate = b.success_count / bTotal;
+            if (bRate === aRate) return (bTotal - aTotal) * dir;
+            return (bRate - aRate) * dir;
+          }
           case "gamble_count":
             return (
-              b.success_count + b.fail_count - (a.success_count + a.fail_count)
+              (b.success_count +
+                b.fail_count -
+                (a.success_count + a.fail_count)) *
+              dir
             );
         }
       });
       setSortedRankingData(sortedData);
     }
-  }, [rankingData, rankBy]);
+  }, [rankingData, rankBy, rankOrder]);
 
   useEffect(() => {
     let isActive = true;
@@ -224,68 +270,78 @@ export default function BidRecordModal({
     "도박 횟수": "gamble_count",
     "도박 성공률": "gamble_success_rate"
   };
+  const tabIcons = {
+    bid: Gavel,
+    gamble: Dices,
+    graph: LineChart,
+    ranking: Crown
+  } as const;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
-      <div className="flex h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-5 py-3">
+      <div className="flex h-[70vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between bg-slate-50 px-5 pt-3">
           <h2 className="flex items-center gap-2 text-lg font-bold text-slate-800">
             <History className="h-5 w-5 text-indigo-600" />
             기록
           </h2>
           <button
             type="button"
-            onClick={() => setShowRanking(!showRanking)}
-            className="mr-5 ml-auto flex flex-row items-center gap-1 rounded-full bg-rose-600 px-4 py-1 text-sm font-semibold text-white transition-colors hover:bg-rose-700"
-          >
-            <Crown className="h-4 w-4" />
-            {showRanking ? "기록 보기" : "랭킹 보기"}
-          </button>
-          <button
-            type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700"
+            className="ml-auto rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700"
             title="닫기"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {showRanking || (
-          <div className="flex flex-row gap-2 mr-auto ml-4 py-4">
+        <div className="shrink-0 border-b border-slate-100 bg-slate-50/60 px-4 py-3">
+          <div className="flex flex-wrap gap-2">
             {(
               [
                 ["bid", "입찰 기록"],
                 ["gamble", "도박 기록"],
-                ["graph", "가격 그래프"]
+                ["graph", "가격 그래프"],
+                ["ranking", "랭킹"]
               ] as const
-            ).map(([tab, label]) => (
+            ).map(([tab, label]) => {
+              const TabIcon = tabIcons[tab];
+              return (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setActiveTab(tab)}
+                  className={`flex items-center gap-1 rounded-full px-3 py-1 text-sm font-semibold transition-colors ${
+                    activeTab === tab
+                      ? "bg-indigo-500 text-white hover:bg-indigo-600"
+                      : "bg-white text-slate-600 border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50"
+                  }`}
+                >
+                  <TabIcon className="h-3.5 w-3.5" />
+                  {label}
+                </button>
+              );
+            })}
+            {(activeTab === "bid" || activeTab === "gamble") && (
               <button
-                key={tab}
                 type="button"
-                onClick={() => setActiveTab(tab)}
-                className={`rounded-full px-3 py-1 text-sm font-semibold transition-colors ${
-                  activeTab === tab
+                onClick={() => setShowFilters((prev) => !prev)}
+                className={`ml-auto flex items-center gap-1 rounded-full px-3 py-1 text-sm font-semibold transition-colors ${
+                  showFilters
                     ? "bg-indigo-500 text-white hover:bg-indigo-600"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                    : "bg-white text-slate-600 border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50"
                 }`}
               >
-                {label}
+                <Filter className="h-4 w-4" />
+                필터
               </button>
-            ))}
-            {activeTab !== "graph" && (
-              <>
-            <div className="ml-4">
-              코드:
-              <select
-                className="ml-2 rounded-md border border-slate-300 bg-white py-1 px-2 text-sm text-slate-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                value={seatCodeFilter ?? "전체"}
-                onChange={(e) =>
-                  setSeatCodeFilter(
-                    e.target.value === "전체" ? null : e.target.value
-                  )
-                }
-              >
-                {[
+            )}
+          </div>
+
+          {(activeTab === "bid" || activeTab === "gamble") && showFilters && (
+            <div className="mt-3 flex flex-col gap-2">
+              <ChipFilterGroup
+                icon={MapPin}
+                options={[
                   "전체",
                   "A",
                   "B",
@@ -303,40 +359,30 @@ export default function BidRecordModal({
                   "가",
                   "나",
                   "다"
-                ].map((code) => (
-                  <option key={code} value={code}>
-                    {code}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="ml-4">
-              사용자:
-              <select
-                className="ml-2 rounded-md border border-slate-300 bg-white py-1 px-2 text-sm text-slate-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                value={userNameFilter ?? "전체"}
-                onChange={(e) =>
-                  setUserNameFilter(
-                    e.target.value === "전체" ? null : e.target.value
-                  )
+                ]}
+                value={seatCodeFilter ?? "전체"}
+                onChange={(value) =>
+                  setSeatCodeFilter(value === "전체" ? null : value)
                 }
-              >
-                <option value="전체">전체</option>
-                {Array.from(new Set(records.map((record) => record.user_name)))
-                  .sort((a, b) => a.localeCompare(b))
-                  .map((userName) => (
-                    <option key={userName} value={userName}>
-                      {userName}
-                    </option>
-                  ))}
-              </select>
+              />
+              <ChipFilterGroup
+                icon={User}
+                options={[
+                  "전체",
+                  ...Array.from(
+                    new Set(records.map((record) => record.user_name))
+                  ).sort((a, b) => a.localeCompare(b))
+                ]}
+                value={userNameFilter ?? "전체"}
+                onChange={(value) =>
+                  setUserNameFilter(value === "전체" ? null : value)
+                }
+              />
             </div>
-              </>
-            )}
-          </div>
-        )}
+          )}
+        </div>
         <div
-          className={`min-h-0 flex-1 ${showRanking ? "overflow-hidden" : "overflow-y-auto"}`}
+          className={`min-h-0 flex-1 ${activeTab === "ranking" ? "overflow-hidden" : "overflow-y-auto"}`}
         >
           {isLoading ? (
             <div className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
@@ -347,7 +393,7 @@ export default function BidRecordModal({
             <p className="py-12 text-center text-sm text-rose-500">
               {errorMessage}
             </p>
-          ) : showRanking ? (
+          ) : activeTab === "ranking" ? (
             <div className="px-2 pb-2 flex h-full min-h-0 flex-col">
               <div className="grid shrink-0 grid-cols-[0.4fr_repeat(4,minmax(0,1fr))] gap-x-2 border-b border-slate-200 bg-slate-50 pl-4 pr-6 py-3 text-center text-xs font-bold text-slate-600">
                 <span className="text-left ml-2">이름</span>
@@ -355,11 +401,20 @@ export default function BidRecordModal({
                   <div
                     key={title}
                     className={`cursor-pointer ${rankBy === rankByDict[title] ? "bg-indigo-500 text-white rounded-full py-1.5 -my-1.5 mx-1" : ""}`}
-                    onClick={() => setRankBy(rankByDict[title])}
+                    onClick={() => {
+                      if (rankBy === rankByDict[title]) {
+                        setRankOrder((prev) =>
+                          prev === "desc" ? "asc" : "desc"
+                        );
+                      } else {
+                        setRankBy(rankByDict[title]);
+                        setRankOrder("desc");
+                      }
+                    }}
                   >
                     {title}
                     <ArrowDownWideNarrow
-                      className={`inline-block h-4 w-4 ml-1 -mr-5 ${rankBy === rankByDict[title] ? "text-white" : "text-slate-400/90"}`}
+                      className={`inline-block h-4 w-4 ml-1 -mr-5 transition-transform ${rankBy === rankByDict[title] ? "text-white" : "text-slate-400/90"} ${rankBy === rankByDict[title] && rankOrder === "asc" ? "rotate-180" : ""}`}
                     />
                   </div>
                 ))}
