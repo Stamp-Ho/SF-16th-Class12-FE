@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, WheelEvent } from "react";
-import { ChartLine, LineChart, Sword, Wallet } from "lucide-react";
+import {
+  ChartCandlestick,
+  ChartLine,
+  LineChart,
+  Sword,
+  Wallet
+} from "lucide-react";
 import { BidHistoryRecord, formatDate, formatTime } from "./historyTypes";
 
 const MIN_ZOOM = 1;
@@ -39,6 +45,21 @@ type ChartSeries = {
   strokeColor: string;
   markers: ChartMarker[];
 };
+
+type Candle = {
+  key: string;
+  x: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  isUp: boolean;
+  title: string;
+  hoverLabel: string;
+};
+
+const BASE_CANDLE_COUNT = 20;
+const MAX_CANDLE_COUNT = 60;
 
 const toIndexX = (index: number, total: number) =>
   total <= 1 ? 50 : X_PADDING + (index / (total - 1)) * (100 - X_PADDING * 2);
@@ -161,6 +182,7 @@ export default function PriceGraph({
 }) {
   const [mode, setMode] = useState<"group" | "total" | "all">("total");
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+  const [candleView, setCandleView] = useState(false);
   const [zoom, setZoom] = useState(1);
   const scrollRef = useRef<HTMLDivElement>(null);
   const zoomAnchorRef = useRef<{ ratio: number; mouseX: number } | null>(null);
@@ -201,10 +223,16 @@ export default function PriceGraph({
     return map;
   }, [records, groups]);
 
+  // 그룹 상세 모드에서 공용하는 선택된 그룹의 시간순 기록
+  const selectedGroupRecords = useMemo(
+    () => (selectedGroup ? (recordsByGroup.get(selectedGroup) ?? []) : []),
+    [selectedGroup, recordsByGroup]
+  );
+
   // 그룹 상세 모드에서 보여줄 그룹 전체/구성원별 통계
   const groupStats = useMemo(() => {
     if (mode !== "group" || selectedGroup == null) return null;
-    const groupRecords = recordsByGroup.get(selectedGroup) ?? [];
+    const groupRecords = selectedGroupRecords;
     const members = selectedGroup.split(",").map((m) => m.trim());
 
     return {
@@ -216,7 +244,7 @@ export default function PriceGraph({
         )
       }))
     };
-  }, [mode, selectedGroup, recordsByGroup]);
+  }, [mode, selectedGroup, selectedGroupRecords]);
 
   // 전체 그룹 비교 모드에서 보여줄 전체 합산 통계
   const allStats = useMemo(() => {
@@ -237,9 +265,7 @@ export default function PriceGraph({
   // 모드별 시리즈 계산 (Y축 범위는 현재 보이는 구간에 맞춰 뜻에서 다시 계산)
   const series = useMemo((): ChartSeries[] => {
     if (mode === "group") {
-      const groupRecords = selectedGroup
-        ? (recordsByGroup.get(selectedGroup) ?? [])
-        : [];
+      const groupRecords = selectedGroupRecords;
       if (groupRecords.length === 0) return [];
 
       const markers: ChartMarker[] = groupRecords.map((record, index) => ({
@@ -346,6 +372,64 @@ export default function PriceGraph({
     return [];
   }, [mode, selectedGroup, records, groups, recordsByGroup, title]);
 
+  // 그룹 상세 모드 전용: 연속된 기록을 묶어 주식차트쳘럼 시가/고가/저가/종가(OHLC)를 계산
+  const candles = useMemo((): Candle[] => {
+    if (mode !== "group" || !candleView || selectedGroupRecords.length === 0) {
+      return [];
+    }
+
+    // 확대할수록 더 잘게 묶어 최대 40개까지 캔들 수가 늘어난다
+    const candleCount = Math.min(
+      MAX_CANDLE_COUNT,
+      Math.max(1, Math.round(BASE_CANDLE_COUNT * zoom))
+    );
+    const bucketSize = Math.max(
+      1,
+      Math.ceil(selectedGroupRecords.length / candleCount)
+    );
+    const buckets: BidHistoryRecord[][] = [];
+    for (let i = 0; i < selectedGroupRecords.length; i += bucketSize) {
+      buckets.push(selectedGroupRecords.slice(i, i + bucketSize));
+    }
+
+    return buckets.map((bucket, index) => {
+      const prices = bucket.map((record) => record.bid_price);
+      const open = prices[0];
+      const close = prices[prices.length - 1];
+      const high = Math.max(...prices);
+      const low = Math.min(...prices);
+      const first = bucket[0];
+      const last = bucket[bucket.length - 1];
+
+      return {
+        key: `${first.id}-${last.id}-${index}`,
+        x: toIndexX(index, buckets.length),
+        open,
+        high,
+        low,
+        close,
+        isUp: close >= open,
+        title: `${formatDate(first.created_at)} ${formatTime(first.created_at)} ~ ${formatTime(last.created_at)}`,
+        hoverLabel: `시가 ${open} · 고가 ${high} · 저가 ${low} · 종가 ${close}`
+      };
+    });
+  }, [mode, candleView, selectedGroupRecords, zoom]);
+
+  // 캔들 차트의 가격 축 범위/눈금
+  const { candleMin, candleMax, candleYTicks } = useMemo(() => {
+    if (candles.length === 0) {
+      return { candleMin: 0, candleMax: 0, candleYTicks: [] };
+    }
+    const values = candles.flatMap((c) => [c.high, c.low]);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const yTicks = Array.from({ length: TICK_COUNT + 1 }, (_, i) => {
+      const value = min + ((max - min) * i) / TICK_COUNT;
+      return { value: Math.round(value), y: toY(value, min, max) };
+    });
+    return { candleMin: min, candleMax: max, candleYTicks: yTicks };
+  }, [candles]);
+
   // 현재 스크롤/줄 상태에서 보이는 구간(0~100, 전체 도메인 기준)
   const [viewport, setViewport] = useState({ start: 0, end: 100 });
 
@@ -445,9 +529,19 @@ export default function PriceGraph({
     });
   };
 
+  // 캔들 차트는 스크롤/패닝 없이 확대 배율만으로 캔들 해상도(최대 40개)를 조절
+  const handleCandleWheel = (e: WheelEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setZoom((prev) => {
+      const next = prev * (e.deltaY < 0 ? 1.15 : 1 / 1.15);
+      return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, next));
+    });
+  };
+
   const selectMode = (nextMode: "total" | "all" | "group", group?: string) => {
     setMode(nextMode);
     setSelectedGroup(nextMode === "group" ? (group ?? null) : null);
+    setCandleView(false);
     setZoom(1);
     setViewport({ start: 0, end: 100 });
   };
@@ -506,8 +600,26 @@ export default function PriceGraph({
 
       <div className="flex shrink-0 items-center gap-2 px-4 pt-3">
         <span className="font-bold text-slate-800">{title}</span>
-        <span className="ml-auto text-xs text-slate-400">
-          마우스 위치 기준 스크롤로 확대/축소 ({Math.round(zoom * 100)}%)
+        {mode === "group" && (
+          <button
+            type="button"
+            onClick={() => setCandleView((prev) => !prev)}
+            className={`ml-auto flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+              candleView
+                ? "bg-indigo-500 text-white"
+                : "border border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:bg-indigo-50"
+            }`}
+          >
+            <ChartCandlestick className="h-3.5 w-3.5" />
+            캔들 그래프로 보기
+          </button>
+        )}
+        <span
+          className={`${mode === "group" ? "" : "ml-auto"} text-xs text-slate-400`}
+        >
+          {mode === "group" && candleView
+            ? `스크롤로 캔들 개수 조절 (${candles.length}개)`
+            : `마우스 위치 기준 스크롤로 확대/축소 (${Math.round(zoom * 100)}%)`}
         </span>
       </div>
 
@@ -526,7 +638,88 @@ export default function PriceGraph({
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        {series.length === 0 || series.every((s) => s.markers.length === 0) ? (
+        {mode === "group" && candleView ? (
+          candles.length === 0 ? (
+            <p className="py-12 text-center text-sm text-slate-400">
+              해당 그룹의 기록이 없습니다.
+            </p>
+          ) : (
+            <div className="flex h-64 w-full">
+              {/* 가격 축 */}
+              <div className="relative mr-1 w-12 shrink-0">
+                {candleYTicks.map((tick) => (
+                  <span
+                    key={tick.value}
+                    className="absolute right-1 -translate-y-1/2 text-[10px] text-slate-400"
+                    style={{ top: `${tick.y}%` }}
+                  >
+                    {tick.value}
+                  </span>
+                ))}
+              </div>
+
+              <div
+                className="relative h-full flex-1"
+                onWheel={handleCandleWheel}
+              >
+                {/* 가격 축 눈금선 */}
+                {candleYTicks.map((tick) => (
+                  <div
+                    key={tick.value}
+                    className="absolute inset-x-0 border-t border-dashed border-slate-100"
+                    style={{ top: `${tick.y}%` }}
+                  />
+                ))}
+
+                {candles.map((candle) => {
+                  const highY = toY(candle.high, candleMin, candleMax);
+                  const lowY = toY(candle.low, candleMin, candleMax);
+                  const openY = toY(candle.open, candleMin, candleMax);
+                  const closeY = toY(candle.close, candleMin, candleMax);
+                  const bodyTop = Math.min(openY, closeY);
+                  const bodyHeight = Math.max(Math.abs(closeY - openY), 0.5);
+                  const colorClass = candle.isUp
+                    ? "bg-emerald-500"
+                    : "bg-rose-500";
+
+                  return (
+                    <div
+                      key={candle.key}
+                      className="group absolute inset-y-0 -translate-x-1/2"
+                      style={{ left: `${candle.x}%` }}
+                      title={candle.title}
+                    >
+                      {/* 고가~저가 꼬리 */}
+                      <div
+                        className={`absolute left-1/2 w-px -translate-x-1/2 ${colorClass}`}
+                        style={{
+                          top: `${highY}%`,
+                          height: `${lowY - highY}%`
+                        }}
+                      />
+                      {/* 시가~종가 몸통 */}
+                      <div
+                        className={`absolute left-1/2 w-2 -translate-x-1/2 rounded-sm ${colorClass}`}
+                        style={{
+                          top: `${bodyTop}%`,
+                          height: `${bodyHeight}%`
+                        }}
+                      />
+                      {/* 마우스를 올렸을 때만 상세 정보 표시 */}
+                      <span
+                        className="z-30 pointer-events-none absolute left-1/2 -translate-x-1/2 -translate-y-full rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+                        style={{ top: `${highY}%` }}
+                      >
+                        {candle.hoverLabel}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )
+        ) : series.length === 0 ||
+          series.every((s) => s.markers.length === 0) ? (
           <p className="py-12 text-center text-sm text-slate-400">
             해당 그래프의 기록이 없습니다.
           </p>
