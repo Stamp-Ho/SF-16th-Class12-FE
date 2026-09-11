@@ -4,10 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowDownWideNarrow, Crown, History, Loader2, X } from "lucide-react";
 import { getHistoriesByRound } from "../actions";
 import { createClient } from "@/utils/supabase/client";
-import { BidHistoryRecord } from "../history/historyTypes";
-import BidHistory from "../history/BidHistory";
-import GambleHistory from "../history/GambleHistory";
-import PriceGraph from "../history/PriceGraph";
+import { BidHistoryRecord } from "./historyTypes";
+import BidHistory from "./BidHistory";
+import GambleHistory from "./GambleHistory";
+import PriceGraph from "./PriceGraph";
 
 type RankingData = {
   user_name: string;
@@ -91,7 +91,9 @@ export default function BidRecordModal({
 
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"bid" | "gamble" | "graph">("bid");
+  const [activeTab, setActiveTab] = useState<"bid" | "gamble" | "graph">(
+    "bid"
+  );
 
   const [showRanking, setShowRanking] = useState(false);
   const [seatCodeFilter, setSeatCodeFilter] = useState<string | null>(null);
@@ -272,65 +274,63 @@ export default function BidRecordModal({
             ))}
             {activeTab !== "graph" && (
               <>
-                <div className="ml-4">
-                  코드:
-                  <select
-                    className="ml-2 rounded-md border border-slate-300 bg-white py-1 px-2 text-sm text-slate-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                    value={seatCodeFilter ?? "전체"}
-                    onChange={(e) =>
-                      setSeatCodeFilter(
-                        e.target.value === "전체" ? null : e.target.value
-                      )
-                    }
-                  >
-                    {[
-                      "전체",
-                      "A",
-                      "B",
-                      "C",
-                      "D",
-                      "E",
-                      "F",
-                      "G",
-                      "H",
-                      "I",
-                      "J",
-                      "K",
-                      "L",
-                      "M",
-                      "가",
-                      "나",
-                      "다"
-                    ].map((code) => (
-                      <option key={code} value={code}>
-                        {code}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="ml-4">
-                  사용자:
-                  <select
-                    className="ml-2 rounded-md border border-slate-300 bg-white py-1 px-2 text-sm text-slate-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                    value={userNameFilter ?? "전체"}
-                    onChange={(e) =>
-                      setUserNameFilter(
-                        e.target.value === "전체" ? null : e.target.value
-                      )
-                    }
-                  >
-                    <option value="전체">전체</option>
-                    {Array.from(
-                      new Set(records.map((record) => record.user_name))
-                    )
-                      .sort((a, b) => a.localeCompare(b))
-                      .map((userName) => (
-                        <option key={userName} value={userName}>
-                          {userName}
-                        </option>
-                      ))}
-                  </select>
-                </div>
+            <div className="ml-4">
+              코드:
+              <select
+                className="ml-2 rounded-md border border-slate-300 bg-white py-1 px-2 text-sm text-slate-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                value={seatCodeFilter ?? "전체"}
+                onChange={(e) =>
+                  setSeatCodeFilter(
+                    e.target.value === "전체" ? null : e.target.value
+                  )
+                }
+              >
+                {[
+                  "전체",
+                  "A",
+                  "B",
+                  "C",
+                  "D",
+                  "E",
+                  "F",
+                  "G",
+                  "H",
+                  "I",
+                  "J",
+                  "K",
+                  "L",
+                  "M",
+                  "가",
+                  "나",
+                  "다"
+                ].map((code) => (
+                  <option key={code} value={code}>
+                    {code}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="ml-4">
+              사용자:
+              <select
+                className="ml-2 rounded-md border border-slate-300 bg-white py-1 px-2 text-sm text-slate-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                value={userNameFilter ?? "전체"}
+                onChange={(e) =>
+                  setUserNameFilter(
+                    e.target.value === "전체" ? null : e.target.value
+                  )
+                }
+              >
+                <option value="전체">전체</option>
+                {Array.from(new Set(records.map((record) => record.user_name)))
+                  .sort((a, b) => a.localeCompare(b))
+                  .map((userName) => (
+                    <option key={userName} value={userName}>
+                      {userName}
+                    </option>
+                  ))}
+              </select>
+            </div>
               </>
             )}
           </div>

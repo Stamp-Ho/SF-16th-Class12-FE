@@ -8,7 +8,7 @@ import {
   toggleLockSeat
 } from "./actions";
 import { ArrowLeftRight, Lock, LockOpen, Sparkles, Trash } from "lucide-react";
-import BidRecordModal from "./components/BidRecordModal";
+import BidRecordModal from "./history/BidRecordModal";
 import { getSeatBidTier } from "./utils/shield";
 import { Shield } from "@/assets/icons";
 import ConfirmModal from "@/components/ConfirmModal";
