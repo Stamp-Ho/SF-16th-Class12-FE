@@ -68,3 +68,27 @@ strong {
   scrollbar-width: thin; /* 얇은 스크롤바 */
   scrollbar-color: #cbd5e1 transparent; /* thumb 색상, track 색상 */
 }
+@keyframes diceBounce {
+  0% {
+    transform: translateY(0) scale(1, 1);
+  }
+  20% {
+    transform: translateY(-90px) scale(0.9, 1.1); /* 공중으로 치솟음 */
+  }
+  50% {
+    transform: translateY(0) scale(1.15, 0.85); /* 바닥 1차 충돌 후 찌그러짐 */
+  }
+  70% {
+    transform: translateY(-40px) scale(0.95, 1.05); /* 2차 작은 튐 */
+  }
+  90% {
+    transform: translateY(0) scale(1.05, 0.95); /* 2차 바닥 안착 */
+  }
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+}
+
+.animate-dice-bounce {
+  animation: diceBounce 1.1s cubic-bezier(0.28, 0.84, 0.42, 1);
+}

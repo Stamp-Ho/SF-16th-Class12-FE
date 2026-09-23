@@ -3,7 +3,6 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getTargetUsers } from './actions';
 import {
-	Dices,
 	Shuffle,
 	ArrowLeft,
 	Loader2,
@@ -79,7 +78,7 @@ export default function ShuffleMain() {
 							<ArrowLeft className="w-3.5 h-3.5" /> 메인 대시보드로
 						</Link>
 						<h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-							<Dices className="w-7 h-7 text-emerald-600" />
+							<Shuffle className="w-7 h-7 text-emerald-600" />
 							순서 무작위 추첨 (Randomizer)
 						</h1>
 						<p className="text-xs text-slate-500 mt-1">
