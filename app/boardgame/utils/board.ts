@@ -1,5 +1,6 @@
 // utils/board.ts
 import * as THREE from 'three';
+import { drawGoldCardArtwork } from '../gold-cards/utils/cardArtwork';
 
 export interface BoardTile {
   id: string;
@@ -107,10 +108,9 @@ export function createTileTexture(num: number, isCorner: boolean): THREE.CanvasT
 
 export function createDynamicTileTexture(
   label: string,
-  subLabel?: string,
   bgColor = '#1e293b',
   textColor = '#ffffff',
-  subLabelColor = '#94a3b8'
+  isGoldCardTile = false,
 ): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
@@ -127,18 +127,16 @@ export function createDynamicTileTexture(
     ctx.lineWidth = 8;
     ctx.strokeRect(8, 8, 496, 496);
 
-    // 메인 라벨
-    ctx.fillStyle = textColor;
-    ctx.font = 'bold 56px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(label || '타일', 256, subLabel ? 200 : 256);
-
-    // 서브 라벨 / 액션 표시
-    if (subLabel) {
-      ctx.fillStyle = subLabelColor;
-      ctx.font = '36px sans-serif';
-      ctx.fillText(subLabel, 256, 300);
+    if (isGoldCardTile) {
+      // 황금 카드 칸은 라벨 대신 카드 한 장을 타일 윗면에 표시한다.
+      drawGoldCardArtwork(ctx, 256, 256, 236, 332);
+    } else {
+      // 설명은 도착 팝업에서만 보여주고 타일 표면에는 제목만 표시한다.
+      ctx.fillStyle = textColor;
+      ctx.font = 'bold 56px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label || '타일', 256, 256);
     }
   }
 

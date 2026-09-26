@@ -1,6 +1,7 @@
 export type TileActionType =
   | 'NONE'
   | 'MOVE_STEPS'
+  | 'DIRECTION_CHANGE'
   | 'TELEPORT'
   | 'SPLIT_CHOICE'
   | 'DRAW_GOLD_CARD'
@@ -35,7 +36,6 @@ export interface BoardTileData {
   subLabel?: string;               // 세부 설명
   color?: string;                  // 타일 테마 색상 (hex)
   textColor?: string;              // 제목 텍스트 색상 (hex)
-  subLabelColor?: string;          // 서브 텍스트 색상 (hex)
   icon?: string;                   // 아이콘 식별자
 
   // 그래프 연결 (말의 이동 경로)

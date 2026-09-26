@@ -29,13 +29,16 @@ export function executeTileAction(action: TileAction, ctx: ActionExecutionContex
       break;
 
     case 'DRAW_GOLD_CARD':
-      ctx.showToast('황금카드', '황금카드를 1장 뽑습니다!');
       ctx.openGoldCardModal(params?.deckId || 'default_deck');
       break;
 
     case 'SPLIT_CHOICE':
       // 내부 지름길 진입로에 도착했을 때 분기 처리
       // params에 갈림길 옵션을 넘겨 플레이어에게 팝업을 띄움
+      break;
+
+    case 'DIRECTION_CHANGE':
+      // 방향 전환 타일에 설정한 다음 칸은 다음 주사위 이동 때 적용한다.
       break;
 
     case 'CUSTOM_SCRIPT':
