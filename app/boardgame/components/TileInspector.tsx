@@ -38,12 +38,7 @@ export default function TileInspector({
 		onUpdate({
 			action: {
 				type,
-				params:
-					type === 'MOVE_STEPS'
-						? { steps: 2 }
-						: type === 'CUSTOM_SCRIPT'
-							? { promptMessage: 'test' }
-							: {},
+				params: type === 'MOVE_STEPS' ? { steps: 2 } : {},
 			},
 		});
 	};
@@ -209,7 +204,6 @@ export default function TileInspector({
 					<option value="DIRECTION_CHANGE">방향 전환</option>
 					<option value="TELEPORT">특정 타일로 워프</option>
 					<option value="DRAW_GOLD_CARD">황금카드 뽑기</option>
-					<option value="CUSTOM_SCRIPT">커스텀 룰/미션</option>
 				</select>
 
 				{/* 액션별 세부 옵션 UI */}
@@ -278,29 +272,6 @@ export default function TileInspector({
 								다음 주사위 이동 목적지: {tile.action.params.targetTileId}
 							</span>
 						)}
-					</div>
-				)}
-
-				{tile.action.type === 'CUSTOM_SCRIPT' && (
-					<div className="bg-slate-800/60 p-2.5 rounded-lg border border-slate-700/50 flex flex-col gap-1.5 mt-1">
-						<span className="text-[11px] text-slate-400">알림 메시지</span>
-						<input
-							type="text"
-							value={tile.action.params?.promptMessage ?? ''}
-							onChange={(e) =>
-								onUpdate({
-									action: {
-										...tile.action,
-										params: {
-											...tile.action.params,
-											promptMessage: e.target.value,
-										},
-									},
-								})
-							}
-							placeholder="예: 오른쪽 사람과 러브샷!"
-							className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
-						/>
 					</div>
 				)}
 			</div>

@@ -1,594 +1,509 @@
 "use server";
 
+import { requireAuth } from "@/utils/auth";
 import { createClient } from "@/utils/supabase/server";
-import { revalidatePath } from "next/cache";
+import type { BoardTileData, TileActionType } from "./types/board";
+import type { GoldCardData, GoldCardEventType } from "./gold-cards/types";
 
-// =================================================================
-// Types
-// =================================================================
-
-export interface CreateRoundRequest {
-  round: number;
-  title: string;
-  peoplePerGroup: number;
-  isGambleEnabled?: boolean;
-  seatCodes?: string[];
-  initialGroups?: {
-    groupName: string;
-    member_1?: string;
-    member_2?: string;
-    member_3?: string;
-  }[];
-}
-
-export interface GroupRequest {
-  groupName: string;
-  member_1?: string;
-  member_2?: string;
-  member_3?: string;
-}
-
-export interface BidRequest {
-  allocationId: number;
-  nextGroupId: number;
-  userName: string;
-  prevUsers?: string[];
-  seatCode: string;
-}
-
-export interface GambleRequest {
-  allocationId: number;
-  userName: string;
-}
-
-export interface DetailAssignRequest {
-  allocationId: number;
-  memberLeft: string | null;
-  memberMiddle: string | null;
-  memberRight: string | null;
-}
-
-export type ActionResult<T> =
+export type BoardgameResult<T> =
   | { success: true; data: T }
   | { success: false; message: string };
 
-const failure = (message: string): { success: false; message: string } => ({
+export interface BoardgameSummary {
+  id: string;
+  name: string;
+  grid_rows: number;
+  grid_cols: number;
+  maker_user_name: string;
+  can_edit: boolean;
+  is_maker: boolean;
+	editors: string[];
+}
+
+export interface BoardgameSnapshot {
+  id: string;
+  name: string;
+  grid_rows: number;
+  grid_cols: number;
+	tiles: BoardTileData[];
+  gold_cards: GoldCardData[];
+}
+
+const failure = <T = never>(message: string): BoardgameResult<T> => ({
   success: false,
-  message
+  message,
 });
 
-// =================================================================
-// 1. 라운드 관리 (Round Management)
-// =================================================================
-
-/**
- * 모든 라운드 조회 (round 오름차순)
- */
-export async function getAllRounds() {
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("seat_rounds")
-    .select("*")
-    .order("round", { ascending: false });
-
-  if (error) return failure(error.message);
-  return { success: true as const, data };
-}
-
-/**
- * 라운드 생성 및 기본 좌석(기본 A~M) 일괄 생성
- */
-export async function createRound(request: CreateRoundRequest) {
-  const supabase = await createClient();
-
-  // 1. 라운드 생성
-  const { data: roundData, error: roundError } = await supabase
-    .from("seat_rounds")
-    .insert({
-      round: request.round,
-      title: request.title,
-      people_per_group: request.peoplePerGroup,
-      is_gamble_enabled: request.isGambleEnabled ?? true
-    })
-    .select()
-    .single();
-
-  if (roundError) return failure(roundError.message);
-
-  // 2. 기본 좌석 목록 구성 (입력값이 없으면 A~M)
-  const defaultCodes = [
-    "A",
-    "B",
-    "C",
-    "D",
-    "E",
-    "F",
-    "G",
-    "H",
-    "I",
-    "J",
-    "K",
-    "L",
-    "M",
-    "가",
-    "나",
-    "다"
-  ];
-  const seatCodes =
-    request.seatCodes && request.seatCodes.length > 0
-      ? request.seatCodes
-      : defaultCodes;
-
-  const allocationsToInsert = seatCodes.map((code) => ({
-    round_id: roundData.id,
-    seat_code: code,
-    bid_price: 0,
-    is_locked: false
-  }));
-
-  const seatGroupsToInsert =
-    request.initialGroups?.map((group) => ({
-      round_id: roundData.id,
-      group_name: group.groupName,
-      member_1: group.member_1 ?? null,
-      member_2: group.member_2 ?? null,
-      member_3: group.member_3 ?? null
-    })) ?? [];
-
-  const { error: allocationError } = await supabase
-    .from("seat_allocations")
-    .insert(allocationsToInsert);
-
-  if (allocationError) return failure(allocationError.message);
-
-  if (seatGroupsToInsert.length > 0) {
-    const { error: seatGroupError } = await supabase
-      .from("seat_groups")
-      .insert(seatGroupsToInsert);
-    if (seatGroupError) return failure(seatGroupError.message);
-  }
-
-  revalidatePath("/seats");
-  return { success: true as const, data: roundData };
-}
-
-/**
- * 라운드 마감
- */
-export async function closeRound(roundId: number) {
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("seat_rounds")
-    .update({ is_closed: true })
-    .eq("id", roundId)
-    .select()
-    .single();
-
-  if (error) return failure(error.message);
-  revalidatePath("/seats");
-  return { success: true as const, data };
-}
-
-/**
- * 라운드 재오픈
- */
-export async function openRound(roundId: number) {
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("seat_rounds")
-    .update({ is_closed: false })
-    .eq("id", roundId)
-    .select()
-    .single();
-
-  if (error) return failure(error.message);
-  revalidatePath("/seats");
-  return { success: true as const, data };
-}
-
-/**
- * 라운드 도박 허용/금지 토글
- */
-export async function toggleGamble(roundId: number) {
-  const supabase = await createClient();
-
-  // 1. 현재 도박 허용 상태 조회
-  const { data: current, error: fetchError } = await supabase
-    .from("seat_rounds")
-    .select("is_gamble_enabled")
-    .eq("id", roundId)
-    .single();
-
-  if (fetchError || !current) {
-    return failure("존재하지 않는 라운드입니다.");
-  }
-
-  // 2. 상태 반전 업데이트
-  const { data, error: updateError } = await supabase
-    .from("seat_rounds")
-    .update({
-      is_gamble_enabled: !current.is_gamble_enabled
-    })
-    .eq("id", roundId)
-    .select()
-    .single();
-
-  if (updateError) return failure(updateError.message);
-  revalidatePath("/seats");
-  return { success: true as const, data };
-}
-
-/**
- * 라운드 삭제 (CASCADE에 의해 관련 그룹, 좌석, 히스토리 자동 삭제)
- */
-export async function deleteRound(roundId: number) {
-  const supabase = await createClient();
-
-  const { error } = await supabase
-    .from("seat_rounds")
-    .delete()
-    .eq("id", roundId);
-
-  if (error) return failure(error.message);
-  revalidatePath("/seats");
-  return { success: true as const, data: true };
-}
-
-// =================================================================
-// 2. 그룹 편성 (Group Management)
-// =================================================================
-
-/**
- * 특정 라운드의 그룹 목록 조회
- */
-export async function getGroupsByRound(roundNumber: number) {
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("seat_groups")
-    .select("*")
-    .eq("round", roundNumber)
-    .order("id", { ascending: true });
-
-  if (error) return failure(error.message);
-  return { success: true as const, data };
-}
-
-/**
- * 신규 그룹 등록
- */
-export async function createGroup(round: number, request: GroupRequest) {
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("seat_groups")
-    .insert({
-      round: round,
-      group_name: request.groupName,
-      member_1: request.member_1 ?? null,
-      member_2: request.member_2 ?? null,
-      member_3: request.member_3 ?? null
-    })
-    .select()
-    .single();
-
-  if (error) return failure(error.message);
-  revalidatePath("/seats");
-  return { success: true as const, data };
-}
-
-/**
- * 좌석 배정 초기화 (deleteAllocation)
- */
-export async function deleteAllocation(allocationId: number) {
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("seat_allocations")
-    .update({
-      group_id: null,
-      member_left: null,
-      member_middle: null,
-      member_right: null,
-      bid_price: 0
-    })
-    .eq("id", allocationId)
-    .select()
-    .single();
-
-  if (error) return failure(error.message);
-  revalidatePath("/seats");
-  return { success: true as const, data };
-}
-
-// =================================================================
-// 3. 좌석 배정 및 입찰 / Gamble (Seat Allocation & Bidding)
-// =================================================================
-
-/**
- * 특정 라운드의 좌석 배정 현황 조회 (seat_code 오름차순)
- */
-export async function getAllocationsByRound(round_id: number) {
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("seat_allocations")
-    .select(
-      `
-      *,
-      seat_group:group_id (
-        group_name
-      )
-    `
-    )
-    .eq("round_id", round_id)
-    .order("seat_code", { ascending: true });
-
-  if (error) return failure(error.message);
-  return { success: true, data };
-}
-
-export async function getSeatsDataByRounds(roundIds: number[]) {
-  if (!roundIds.length)
-    return { success: true as const, data: { groups: [], allocations: [] } };
-
-  const supabase = await createClient();
-
-  // 단 2번의 DB 쿼리를 병렬 실행
-  const [groupsRes, allocationsRes] = await Promise.all([
-    supabase
-      .from("seat_groups")
-      .select("*")
-      .in("round_id", roundIds)
-      .order("id", { ascending: true }),
-
-    supabase
-      .from("seat_allocations")
-      .select(
-        `
-        *,
-        seat_group:group_id (
-          group_name
-        )
-      `
-      )
-      .in("round_id", roundIds)
-      .order("seat_code", { ascending: true })
-  ]);
-
-  if (groupsRes.error) return failure(groupsRes.error.message);
-  if (allocationsRes.error) return failure(allocationsRes.error.message);
-
+async function getActor() {
+  const auth = await requireAuth();
+  if (auth.status !== "AUTHORIZED" || !auth.profile?.username) return null;
   return {
-    success: true as const,
-    data: { groups: groupsRes.data, allocations: allocationsRes.data }
+    userName: String(auth.profile.username),
+    role: String(auth.profile.role ?? ""),
   };
 }
-/**
- * 일반 입찰 (RPC 호출)
- */
-export async function placeBid(request: BidRequest) {
-  const supabase = await createClient();
-  console.log(request.nextGroupId);
 
-  const { data, error } = await supabase.rpc("place_bid_with_shield", {
-    p_allocation_id: request.allocationId,
-    p_next_group_id: request.nextGroupId,
-    p_user_name: request.userName
-  });
+async function canEditBoardgame(
+  boardgameId: string,
+  userName: string,
+  makerOnly = false,
+) {
+  const supabase = await createClient();
+  const { data: game, error } = await supabase
+    .from("boardgames")
+    .select("maker_user_name")
+    .eq("id", boardgameId)
+    .maybeSingle();
+
+  if (error || !game) return { allowed: false, error: error?.message };
+  if (game.maker_user_name === userName) return { allowed: true };
+  if (makerOnly) return { allowed: false };
+
+  const { data: editor, error: editorError } = await supabase
+    .from("boardgame_editors")
+    .select("id")
+    .eq("boardgame_id", boardgameId)
+    .eq("user_name", userName)
+    .maybeSingle();
+
+  return {
+    allowed: Boolean(editor),
+    error: editorError?.message,
+  };
+}
+
+export async function listBoardgames(): Promise<BoardgameResult<BoardgameSummary[]>> {
+  const actor = await getActor();
+  if (!actor) return failure("로그인이 필요합니다.");
+
+  const supabase = await createClient();
+  const [{ data: games, error }, { data: edits, error: editError }] =
+    await Promise.all([
+      supabase
+        .from("boardgames")
+        .select(
+			"id, name, grid_rows, grid_cols, maker_user_name",
+        )
+        .order("updated_at", { ascending: false }),
+      supabase
+        .from("boardgame_editors")
+        .select("boardgame_id, user_name"),
+    ]);
 
   if (error) return failure(error.message);
-  else {
-    try {
-      if (
-        request.prevUsers &&
-        request.prevUsers.length > 0 &&
-        request.seatCode
-      ) {
-        sendMattermostNoticeOnSeatBid({
-          seatCode: request.seatCode,
-          attacker: request.userName,
-          victims: request.prevUsers
-        });
-      }
-    } catch (err: any) {
-      console.error(`Failed to send Mattermost notice: ${err.message}`);
+  if (editError) return failure(editError.message);
+
+  const editableIds = new Set(
+    (edits ?? [])
+      .filter((edit) => edit.user_name === actor.userName)
+      .map((edit) => edit.boardgame_id),
+  );
+  return {
+    success: true,
+    data: (games ?? []).map((game) => ({
+      ...game,
+      is_maker: game.maker_user_name === actor.userName,
+      can_edit:
+        game.maker_user_name === actor.userName || editableIds.has(game.id),
+		editors: (edits ?? [])
+        .filter((edit) => edit.boardgame_id === game.id)
+        .map((edit) => edit.user_name),
+    })),
+  };
+}
+
+export async function createBoardgame(input: {
+  name: string;
+  gridRows: number;
+  gridCols: number;
+}): Promise<BoardgameResult<BoardgameSummary>> {
+  const actor = await getActor();
+  if (!actor) return failure("로그인이 필요합니다.");
+  if (actor.role !== "super_admin") {
+    return failure("새 보드게임은 관리자만 만들 수 있습니다.");
+  }
+
+  const name = input.name.trim();
+  if (!name) return failure("게임 이름을 입력해 주세요.");
+  if (
+    !Number.isInteger(input.gridRows) ||
+    !Number.isInteger(input.gridCols) ||
+    input.gridRows < 3 || input.gridRows > 20 ||
+    input.gridCols < 3 || input.gridCols > 20
+  ) {
+    return failure("행과 열은 3부터 20 사이의 정수여야 합니다.");
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("boardgames")
+    .insert({
+      name,
+      grid_rows: input.gridRows,
+      grid_cols: input.gridCols,
+      maker_user_name: actor.userName,
+	})
+    .select(
+		"id, name, grid_rows, grid_cols, maker_user_name",
+    )
+    .single();
+
+  if (error) return failure(error.message);
+  return {
+    success: true,
+    data: {
+      ...data,
+      can_edit: true,
+      is_maker: true,
+		editors: [],
+    },
+  };
+}
+
+export async function getBoardgame(
+  boardgameId: string,
+): Promise<BoardgameResult<BoardgameSnapshot>> {
+  const actor = await getActor();
+  if (!actor) return failure("로그인이 필요합니다.");
+
+  const supabase = await createClient();
+  const [gameResult, tileResult, linkResult, cardResult] = await Promise.all([
+    supabase
+		.from("boardgames")
+		.select("id, name, grid_rows, grid_cols")
+      .eq("id", boardgameId)
+      .maybeSingle(),
+    supabase.from("boardgame_tiles").select("*").eq("boardgame_id", boardgameId),
+    supabase
+      .from("boardgame_tile_next")
+      .select("source_tile_id, target_tile_id, sort_order")
+      .eq("boardgame_id", boardgameId)
+      .order("sort_order"),
+    supabase
+      .from("boardgame_gold_cards")
+      .select("*")
+      .eq("boardgame_id", boardgameId)
+      .order("sort_order"),
+  ]);
+
+  const queryError =
+    gameResult.error || tileResult.error || linkResult.error || cardResult.error;
+  if (queryError) return failure(queryError.message);
+  if (!gameResult.data) return failure("보드게임을 찾을 수 없습니다.");
+
+  const nextIdsBySource = new Map<string, string[]>();
+  for (const link of linkResult.data ?? []) {
+    const ids = nextIdsBySource.get(link.source_tile_id) ?? [];
+    ids.push(link.target_tile_id);
+    nextIdsBySource.set(link.source_tile_id, ids);
+  }
+
+  const tiles: BoardTileData[] = (tileResult.data ?? []).map((tile) => ({
+    id: tile.id,
+    category: tile.category,
+    gridR: tile.grid_row,
+    gridC: tile.grid_col,
+    // 월드 좌표와 회전은 현재 격자 크기에서 다시 계산한다.
+    position: { x: 0, y: 0.2, z: 0 },
+    rotationY: 0,
+    label: tile.label,
+    subLabel: tile.sub_label,
+    color: tile.color ?? undefined,
+    textColor: tile.text_color ?? undefined,
+    icon: tile.icon ?? undefined,
+    nextTileIds: nextIdsBySource.get(tile.id) ?? [],
+    action: {
+      type: tile.action_type as TileActionType,
+      params: tile.action_params ?? {},
+    },
+		isLocked: tile.is_locked,
+		lockedByUserName: tile.locked_by_user_name,
+	}));
+
+  const gold_cards: GoldCardData[] = (cardResult.data ?? []).map((card) => ({
+    id: card.id,
+    title: card.title,
+    description: card.description,
+    event: {
+      type: card.event_type as GoldCardEventType,
+      ...(card.event_params ?? {}),
+    },
+  }));
+
+  return {
+    success: true,
+    data: { ...gameResult.data, tiles, gold_cards },
+  };
+}
+
+export async function saveBoardgame(input: {
+  id: string;
+  gridRows: number;
+  gridCols: number;
+  tiles: BoardTileData[];
+  goldCards: GoldCardData[];
+  saveGridSize?: boolean;
+  saveGoldCards?: boolean;
+  tileIdRenames?: Array<{ from: string; to: string }>;
+}): Promise<BoardgameResult<null>> {
+  const actor = await getActor();
+  if (!actor) return failure("로그인이 필요합니다.");
+  const permission = await canEditBoardgame(input.id, actor.userName);
+  if (!permission.allowed) {
+    return failure(permission.error ?? "이 보드게임을 수정할 권한이 없습니다.");
+  }
+
+  const supabase = await createClient();
+  if (
+    !Number.isInteger(input.gridRows) || !Number.isInteger(input.gridCols) ||
+    input.gridRows < 3 || input.gridRows > 20 ||
+    input.gridCols < 3 || input.gridCols > 20
+  ) {
+    return failure("격자 크기를 확인해 주세요.");
+  }
+
+  const tileIds = new Set(input.tiles.map((tile) => tile.id));
+  const occupiedCells = new Set<string>();
+  for (const tile of input.tiles) {
+    if (
+      !Number.isInteger(tile.gridR) || !Number.isInteger(tile.gridC) ||
+      tile.gridR < 0 || tile.gridR >= input.gridRows ||
+      tile.gridC < 0 || tile.gridC >= input.gridCols
+    ) {
+      return failure(`타일 ${tile.id}의 격자 위치가 범위를 벗어났습니다.`);
+    }
+    const cell = `${tile.gridR}:${tile.gridC}`;
+    if (occupiedCells.has(cell)) return failure("같은 격자 위치에 타일이 중복되었습니다.");
+    occupiedCells.add(cell);
+    if (tile.nextTileIds.some((id) => !tileIds.has(id))) {
+      return failure(`타일 ${tile.id}의 다음 칸 설정에 없는 타일이 포함되어 있습니다.`);
     }
   }
-  revalidatePath("/seats");
-  return { success: true as const, data };
-}
 
-/**
- * 행운 뽑기 입찰 (RPC 호출)
- */
-export async function gambleBid(request: GambleRequest) {
-  const supabase = await createClient();
-  const isWin = Math.random() * 100 < 20;
-  const priceChange = isWin ? 2500 : -500;
-
-  const { data, error } = await supabase.rpc("gamble_bid", {
-    p_allocation_id: request.allocationId,
-    p_user_name: request.userName,
-    p_price_change: priceChange
-  });
-
-  if (error) return failure(error.message);
-  revalidatePath("/seats");
-  return { success: true as const, data: { record: data, isWin } };
-}
-
-/**
- * 최종 낙찰 후 세부 자리(좌/중/우) 지정
- */
-export async function assignDetailedSeat(request: DetailAssignRequest) {
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("seat_allocations")
-    .update({
-      member_left: request.memberLeft ?? null,
-      member_middle: request.memberMiddle ?? null,
-      member_right: request.memberRight ?? null
-    })
-    .eq("id", request.allocationId)
-    .select()
-    .single();
-
-  if (error) return failure(error.message);
-  revalidatePath("/seats");
-  return { success: true as const, data };
-}
-
-/**
- * 좌석 잠금 및 잠금 해제 토글
- */
-export async function toggleLockSeat(allocationId: number) {
-  const supabase = await createClient();
-
-  // 1. 현재 락 상태 조회
-  const { data: current, error: fetchError } = await supabase
-    .from("seat_allocations")
-    .select("is_locked")
-    .eq("id", allocationId)
-    .single();
-
-  if (fetchError || !current) {
-    return failure("존재하지 않는 좌석입니다.");
-  }
-
-  // 2. 상태 반전 업데이트
-  const { data, error: updateError } = await supabase
-    .from("seat_allocations")
-    .update({
-      is_locked: !current.is_locked
-    })
-    .eq("id", allocationId)
-    .select()
-    .single();
-
-  if (updateError) return failure(updateError.message);
-  revalidatePath("/seats");
-  return { success: true as const, data };
-}
-
-// =================================================================
-// 4. 히스토리 조회 (History)
-// =================================================================
-
-/**
- * 특정 라운드의 입찰 기록 조회 (created_at 내림차순)
- */
-export async function getHistoriesByRound(round_id: number) {
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("seat_bid_histories")
-    .select("*")
-    .eq("round_id", round_id)
-    .order("created_at", { ascending: false });
-
-  if (error) return failure(error.message);
-  return { success: true as const, data };
-}
-
-/**
- * 좌석 입찰시 메터모스트 알림 전송
- */
-export const sendMattermostNoticeOnSeatBid = async ({
-  victims,
-  seatCode,
-  attacker
-}: {
-  victims: string[];
-  seatCode: string;
-  attacker: string;
-}) => {
-  const webhookUrl = process.env.MATTERMOST_CLASS_WEBHOOK;
-  console.log("webhookUrl:", webhookUrl);
-  if (!webhookUrl) {
-    return failure("매터모스트 클래스 웹훅이 정의되지 않았습니다.");
-  }
-  const message = `### 🚨 좌석 입찰 알림 🚨
-코드: ${seatCode} | ${attacker} ⚔️ [ ${victims.map((v) => MATTERMOST_USER_IDS[v]).join(", ")} ]
-[수복하러 가기](https://12ban.vercel.app/seats)`;
-  try {
-    const response = await fetch(webhookUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        text: message
+  if (input.saveGridSize) {
+    const { error: gameError } = await supabase
+      .from("boardgames")
+      .update({
+        grid_rows: input.gridRows,
+        grid_cols: input.gridCols,
+        updated_at: new Date().toISOString(),
       })
-    });
-    if (!response.ok) {
-      return failure(`매터모스트 알림 전송 실패: ${response.statusText}`);
-    }
-  } catch (error) {
-    console.error("Failed to send Mattermost webhook:", error);
-    return failure("매터모스트 알림 전송 중 오류가 발생했습니다.");
+      .eq("id", input.id);
+    if (gameError) return failure(gameError.message);
   }
-  return { success: true as const, data: null };
-};
 
-const MATTERMOST_USER_IDS: Record<string, string> = {
-  강명환: "@myunghwan0421",
-  강명묵: "@b2000kang",
-  강정훈: "@leokang123",
-  김민철: "@alscjf126",
-  김태엽: "@tyup303",
-  김태원: "@ktw495",
-  김한나: "@govmfkdtm",
-  박경진: "@p_star16",
-  박재윤: "@dbslzhs77",
-  박현도: "@atto08",
-  윤동현: "@daven1210",
-  이가은: "@helenalee02",
-  이동원: "@atropic159",
-  이찬원: "@clw8679",
-  이채원: "@sandy2011",
-  이상은: "@sangrlo",
-  송강규: "@sgk1004s",
-  장세정: "@jjssj343",
-  장익환: "@bluensky0213",
-  장지현: "@wlguswlgus989",
-  전승현: "@dokv1004",
-  정승현: "@sj06937",
-  정인호: "@stampho",
-  정제영: "@aia1235",
-  조동휘: "@whehdgnl1998",
-  차민수: "@minns00",
-  차은수: "@eunsu321"
-};
+  const { data: storedTiles, error: storedTilesError } = await supabase
+    .from("boardgame_tiles")
+    .select("id, locked_by_user_name")
+    .eq("boardgame_id", input.id);
+  if (storedTilesError) return failure(storedTilesError.message);
+  const storedById = new Map((storedTiles ?? []).map((tile) => [tile.id, tile]));
+  const ownedTileIds = new Set(
+    (storedTiles ?? [])
+      .filter((tile) => tile.locked_by_user_name === actor.userName)
+      .map((tile) => tile.id),
+  );
+  const tilesToSave = input.tiles.filter(
+    (tile) => ownedTileIds.has(tile.id) || !storedById.has(tile.id),
+  );
+  const tileRows = tilesToSave.map((tile) => ({
+    boardgame_id: input.id,
+    id: tile.id,
+    category: tile.category,
+    grid_row: tile.gridR,
+    grid_col: tile.gridC,
+    label: tile.label,
+    sub_label: tile.subLabel ?? "",
+    color: tile.color ?? null,
+    text_color: tile.textColor ?? null,
+    icon: tile.icon ?? null,
+    action_type: tile.action.type,
+    action_params: tile.action.params ?? {},
+    is_locked: tile.isLocked ?? false,
+  }));
 
-/*
- * 방패 초기화 관련 액션
- */
-export async function resetEmptyShield(roundId: number) {
-  const supabase = await createClient();
+  if (tileRows.length) {
+    const { error } = await supabase
+      .from("boardgame_tiles")
+      .upsert(tileRows, { onConflict: "boardgame_id,id" });
+    if (error) return failure(error.message);
+  }
 
-  const { error } = await supabase
-    .from("seat_allocations")
-    .update({ updated_at: new Date() })
-    .eq("round_id", roundId)
-    .is("group_id", null);
+  for (const rename of input.tileIdRenames ?? []) {
+    if (rename.from === rename.to) continue;
+    const { error } = await supabase
+      .from("boardgame_tile_next")
+      .update({ target_tile_id: rename.to })
+      .eq("boardgame_id", input.id)
+      .eq("target_tile_id", rename.from);
+    if (error) return failure(error.message);
+  }
 
-  if (error) return failure(error.message);
-  return { success: true as const, data: null };
+  const removedTileIds = [...ownedTileIds].filter((id) => !tileIds.has(id));
+  const savedSourceIds = new Set(tilesToSave.map((tile) => tile.id));
+  const clearSourceIds = [...savedSourceIds].filter((id) => storedById.has(id));
+  if (clearSourceIds.length) {
+    const { error: clearLinksError } = await supabase
+      .from("boardgame_tile_next")
+      .delete()
+      .eq("boardgame_id", input.id)
+      .in("source_tile_id", clearSourceIds);
+    if (clearLinksError) return failure(clearLinksError.message);
+  }
+
+  const linkRows = tilesToSave.flatMap((tile) =>
+    tile.nextTileIds.map((targetTileId, sortOrder) => ({
+      boardgame_id: input.id,
+      source_tile_id: tile.id,
+      target_tile_id: targetTileId,
+      sort_order: sortOrder,
+    })),
+  );
+  if (linkRows.length) {
+    const { error } = await supabase.from("boardgame_tile_next").insert(linkRows);
+    if (error) return failure(error.message);
+  }
+
+  if (removedTileIds.length) {
+    const { error } = await supabase
+      .from("boardgame_tiles")
+      .delete()
+      .eq("boardgame_id", input.id)
+      .in("id", removedTileIds);
+    if (error) return failure(error.message);
+  }
+
+  if (input.saveGoldCards) {
+    const cardRows = input.goldCards.map((card, sortOrder) => ({
+      boardgame_id: input.id,
+      id: card.id,
+      title: card.title,
+      description: card.description,
+      sort_order: sortOrder,
+      event_type: card.event.type,
+      event_params: Object.fromEntries(
+        Object.entries(card.event).filter(([key]) => key !== "type"),
+      ),
+    }));
+    if (cardRows.length) {
+      const { error } = await supabase
+        .from("boardgame_gold_cards")
+        .upsert(cardRows, { onConflict: "boardgame_id,id" });
+      if (error) return failure(error.message);
+    }
+
+    const { data: currentCards, error: currentCardsError } = await supabase
+      .from("boardgame_gold_cards")
+      .select("id")
+      .eq("boardgame_id", input.id);
+    if (currentCardsError) return failure(currentCardsError.message);
+    const cardIds = new Set(input.goldCards.map((card) => card.id));
+    const removedCardIds = (currentCards ?? [])
+      .map((card) => card.id)
+      .filter((id) => !cardIds.has(id));
+    if (removedCardIds.length) {
+      const { error } = await supabase
+        .from("boardgame_gold_cards")
+        .delete()
+        .eq("boardgame_id", input.id)
+        .in("id", removedCardIds);
+      if (error) return failure(error.message);
+    }
+  }
+
+  const { error: releaseError } = await supabase
+    .from("boardgame_tiles")
+    .update({ locked_by_user_name: null })
+    .eq("boardgame_id", input.id)
+    .eq("locked_by_user_name", actor.userName);
+  if (releaseError) return failure(releaseError.message);
+
+  return { success: true, data: null };
 }
 
-export async function resetAllShields(roundId: number) {
+export async function acquireBoardgameTileEditLock(
+  boardgameId: string,
+  tileId: string,
+): Promise<BoardgameResult<string>> {
+  const actor = await getActor();
+  if (!actor) return failure("로그인이 필요합니다.");
+  const permission = await canEditBoardgame(boardgameId, actor.userName);
+  if (!permission.allowed) {
+    return failure(permission.error ?? "이 보드게임을 편집할 권한이 없습니다.");
+  }
+
   const supabase = await createClient();
+  const { data: current, error: currentError } = await supabase
+    .from("boardgame_tiles")
+    .select("locked_by_user_name")
+    .eq("id", tileId)
+    .eq("boardgame_id", boardgameId)
+    .maybeSingle();
+  if (currentError) return failure(currentError.message);
+  if (!current) return { success: true, data: actor.userName };
+  if (current.locked_by_user_name === actor.userName) return { success: true, data: actor.userName };
+  if (current.locked_by_user_name) return failure(`다른 사용자가 편집 중입니다: ${current.locked_by_user_name}`);
 
-  const { error } = await supabase
-    .from("seat_allocations")
-    .update({ updated_at: new Date() })
-    .eq("round_id", roundId);
-
+  const { data: claimed, error } = await supabase
+    .from("boardgame_tiles")
+    .update({ locked_by_user_name: actor.userName })
+    .eq("boardgame_id", boardgameId)
+    .eq("id", tileId)
+    .is("locked_by_user_name", null)
+    .select("id")
+    .maybeSingle();
   if (error) return failure(error.message);
-  return { success: true as const, data: null };
+  if (!claimed) return failure("다른 사용자가 먼저 편집을 시작했습니다.");
+  return { success: true, data: actor.userName };
+}
+
+export async function grantBoardgameEditor(
+  boardgameId: string,
+  userName: string,
+): Promise<BoardgameResult<null>> {
+  const actor = await getActor();
+  if (!actor) return failure("로그인이 필요합니다.");
+  const permission = await canEditBoardgame(boardgameId, actor.userName, true);
+  if (!permission.allowed) return failure("수정 권한은 제작자만 부여할 수 있습니다.");
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("boardgame_editors").insert({
+    boardgame_id: boardgameId,
+    user_name: userName.trim(),
+  });
+  if (error) return failure(error.message);
+  return { success: true, data: null };
+}
+
+export async function revokeBoardgameEditor(
+  boardgameId: string,
+  userName: string,
+): Promise<BoardgameResult<null>> {
+  const actor = await getActor();
+  if (!actor) return failure("로그인이 필요합니다.");
+  const permission = await canEditBoardgame(boardgameId, actor.userName, true);
+  if (!permission.allowed) return failure("수정 권한은 제작자만 회수할 수 있습니다.");
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("boardgame_editors")
+    .delete()
+    .eq("boardgame_id", boardgameId)
+    .eq("user_name", userName.trim());
+  if (error) return failure(error.message);
+  return { success: true, data: null };
+}
+
+export async function deleteBoardgame(
+  boardgameId: string,
+): Promise<BoardgameResult<null>> {
+  const actor = await getActor();
+  if (!actor) return failure("로그인이 필요합니다.");
+  const permission = await canEditBoardgame(boardgameId, actor.userName, true);
+  if (!permission.allowed) return failure("게임 삭제는 제작자만 할 수 있습니다.");
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("boardgames").delete().eq("id", boardgameId);
+  if (error) return failure(error.message);
+  return { success: true, data: null };
 }

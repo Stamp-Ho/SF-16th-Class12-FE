@@ -1,14 +1,15 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
+import { createClient as createSupabaseClient } from '@/utils/supabase/client';
+import ConfirmModal from '@/components/ConfirmModal';
 import {
 	createHighQualityDiceTemplate,
 	getPreciseDiceScore,
 	DiceTemplate,
 } from '../utils/diceFactory';
-import TileInspector from './TileInspector';
 import { BoardTileData } from '../types/board';
 import {
 	BoardTile,
@@ -16,7 +17,20 @@ import {
 	generateBoardTiles,
 } from '../utils/board';
 import { executeTileAction } from '../utils/tileActionEngine';
-import GoldCardManager from '../gold-cards/components/GoldCardManager';
+import {
+	acquireBoardgameTileEditLock,
+	grantBoardgameEditor,
+	getBoardgame,
+	listBoardgames,
+	revokeBoardgameEditor,
+	saveBoardgame,
+	type BoardgameSummary,
+} from '../actions';
+import BoardgameHeader from './BoardgameHeader';
+import DiceArenaSidebar, {
+	type DiceArenaTeamInfo,
+	type TileSelectionMode,
+} from './DiceArenaSidebar';
 import GoldCardDrawModal from '../gold-cards/components/GoldCardDrawModal';
 import { GoldCardData } from '../gold-cards/types';
 import { drawCard } from '../gold-cards/utils/deck';
@@ -31,11 +45,6 @@ interface DiceItem {
 	isSleeping: boolean;
 	lastValue: number;
 	mesh: THREE.Group;
-}
-
-interface TeamInfo {
-	name: string;
-	color: string;
 }
 
 interface OrbitSnapshot {
@@ -55,6 +64,8 @@ const TEAM_PAWN_OFFSETS = [
 	{ x: -0.9, z: 0.9 },
 	{ x: 0.9, z: 0.9 },
 ];
+const DEFAULT_TEAM_NAMES = ['팀 1', '팀 2', '팀 3', '팀 4'];
+const TEAM_COLORS = ['#38bdf8', '#fbbf24', '#f472b6', '#a78bfa'];
 
 function getPawnPosition(tile: Pick<BoardTile, 'x' | 'z'>, teamIndex: number) {
 	const offset = TEAM_PAWN_OFFSETS[teamIndex] ?? { x: 0, z: 0 };
@@ -67,24 +78,39 @@ function getOrbitDefaults(mode: '2.5d' | 'top', rows: number, cols: number) {
 		: {
 				theta: Math.PI / 4,
 				phi: Math.PI / 3.4,
-				radius: Math.max(rows, cols) * 8,
+				radius: Math.max(rows, cols) * 8.5,
 			};
 }
 
-export default function DiceArena() {
+export default function DiceArena({
+	canCreateBoardgame,
+}: {
+	canCreateBoardgame: boolean;
+}) {
+	const supabase = useMemo(() => createSupabaseClient(), []);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 
 	// 보드 규격 설정 (M x N)
 	const [boardSize, setBoardSize] = useState<{ rows: number; cols: number }>({
-		rows: 10,
-		cols: 12,
+		rows: 8,
+		cols: 10,
 	});
 	const [gridSizeDraft, setGridSizeDraft] = useState({
-		rows: '10',
-		cols: '12',
+		rows: '8',
+		cols: '10',
 	});
 	const [gridSizeError, setGridSizeError] = useState('');
+	const [boardgames, setBoardgames] = useState<BoardgameSummary[]>([]);
+	const [activeBoardgameId, setActiveBoardgameId] = useState<string | null>(
+		null,
+	);
+	const [activeBoardgameCanEdit, setActiveBoardgameCanEdit] = useState(false);
+	const [activeBoardgameIsMaker, setActiveBoardgameIsMaker] = useState(false);
+	const [boardgameStatus, setBoardgameStatus] = useState('');
+	const [isBoardgameBusy, setIsBoardgameBusy] = useState(false);
+	const [, setIsBoardReady] = useState(false);
+	const [boardRefreshKey, setBoardRefreshKey] = useState(0);
 
 	// 상태 관리
 	const [scores, setScores] = useState<number[]>([]);
@@ -92,6 +118,10 @@ export default function DiceArena() {
 	const viewModeRef = useRef<'2.5d' | 'top'>('top');
 	const [isRolling, setIsRolling] = useState<boolean>(false);
 	const isRollingRef = useRef(false);
+	const [hasRolledThisGame, setHasRolledThisGame] = useState(false);
+	const hasRolledThisGameRef = useRef(false);
+	const [diceCount, setDiceCount] = useState(2);
+	const diceCountRef = useRef(2);
 	const [isFullscreen, setIsFullscreen] = useState(false);
 	const [playerTileIndex, setPlayerTileIndex] = useState<number>(0);
 	const playerTileIndexRef = useRef(0);
@@ -100,13 +130,19 @@ export default function DiceArena() {
 	const currentTeamIndexRef = useRef(0);
 	const [teamPositions, setTeamPositions] = useState<number[]>([0, 0, 0, 0]);
 	const teamPositionsRef = useRef<number[]>([0, 0, 0, 0]);
-	const teamTileIdsRef = useRef<string[]>([
+	const [teamTileIds, setTeamTileIds] = useState<string[]>([
 		'outer_0',
 		'outer_0',
 		'outer_0',
 		'outer_0',
 	]);
+	const teamTileIdsRef = useRef(teamTileIds);
+	const [teamNames, setTeamNames] = useState<string[]>(DEFAULT_TEAM_NAMES);
+	const [isRestartConfirmOpen, setIsRestartConfirmOpen] = useState(false);
+	const loadedProgressBoardgameIdRef = useRef<string | null>(null);
 	const [goldCards, setGoldCards] = useState<GoldCardData[]>([]);
+	const persistedGridSizeRef = useRef(boardSize);
+	const persistedGoldCardsRef = useRef('[]');
 	const [goldCardDrawPile, setGoldCardDrawPile] = useState<string[]>([]);
 	const [drawnGoldCard, setDrawnGoldCard] = useState<GoldCardData | null>(null);
 	const drawnGoldCardRef = useRef<GoldCardData | null>(null);
@@ -118,12 +154,10 @@ export default function DiceArena() {
 	const goldCardActorTeamRef = useRef(0);
 	const [goldCardActorTeamIndex, setGoldCardActorTeamIndex] = useState(0);
 	const lastMovedTeamIndexRef = useRef(0);
-	const teams: TeamInfo[] = [
-		{ name: '팀 1', color: '#38bdf8' },
-		{ name: '팀 2', color: '#fbbf24' },
-		{ name: '팀 3', color: '#f472b6' },
-		{ name: '팀 4', color: '#a78bfa' },
-	];
+	const teams: DiceArenaTeamInfo[] = teamNames.map((name, index) => ({
+		name,
+		color: TEAM_COLORS[index],
+	}));
 	const [pendingTileEvent, setPendingTileEvent] =
 		useState<BoardTileData | null>(null);
 	const [eventCountdown, setEventCountdown] = useState<number | null>(null);
@@ -177,27 +211,15 @@ export default function DiceArena() {
 	const isAddingInnerTileRef = useRef(isAddingInnerTile);
 	const [isMovingInnerTile, setIsMovingInnerTile] = useState(false);
 	const isMovingInnerTileRef = useRef(false);
-	const [tileSelectionMode, setTileSelectionMode] = useState<
-		| 'next'
-		| 'teleport'
-		| 'direction'
-		| 'gold-card-target'
-		| 'gold-card-effect-target'
-		| null
-	>(null);
-	const tileSelectionModeRef = useRef<
-		| 'next'
-		| 'teleport'
-		| 'direction'
-		| 'gold-card-target'
-		| 'gold-card-effect-target'
-		| null
-	>(null);
+	const [tileSelectionMode, setTileSelectionMode] =
+		useState<TileSelectionMode>(null);
+	const tileSelectionModeRef = useRef<TileSelectionMode>(null);
 	const [selectedTileId, setSelectedTileId] = useState<string | null>(null);
 	const selectedTileIdRef = useRef<string | null>(null);
 	const [boardTilesMap, setBoardTilesMap] = useState<
 		Map<string, BoardTileData>
 	>(new Map());
+	const tileIdRenamesRef = useRef(new Map<string, string>());
 	const boardTilesMapRef = useRef(boardTilesMap);
 	const editModeRef = useRef(isEditMode);
 	const tileMeshMapRef = useRef<Map<string, THREE.Mesh>>(new Map());
@@ -208,10 +230,60 @@ export default function DiceArena() {
 	const innerCellGridRef = useRef<THREE.Group | null>(null);
 	const selectionBoxRef = useRef<THREE.BoxHelper | null>(null);
 	const orbitSnapshotRef = useRef<OrbitSnapshot | null>(null);
+	const cameraViewRestoreRef = useRef<OrbitSnapshot | null>(null);
 
 	useEffect(() => {
 		boardTilesMapRef.current = boardTilesMap;
 	}, [boardTilesMap]);
+
+	useEffect(() => {
+		if (
+			!activeBoardgameId ||
+			loadedProgressBoardgameIdRef.current !== activeBoardgameId
+		)
+			return;
+		try {
+			window.localStorage.setItem(
+				`dice-arena-progress:${activeBoardgameId}`,
+				JSON.stringify({
+					teamNames,
+					teamPositions: teamPositionsRef.current,
+					teamTileIds,
+					currentTeamIndex,
+					hasRolled: hasRolledThisGame,
+					scores,
+				}),
+			);
+		} catch {
+			// 저장소 접근이 차단된 환경에서는 현재 탭의 메모리 상태만 유지합니다.
+		}
+	}, [
+		activeBoardgameId,
+		currentTeamIndex,
+		hasRolledThisGame,
+		scores,
+		teamNames,
+		teamTileIds,
+		teamPositions,
+	]);
+
+	useEffect(() => {
+		let isActive = true;
+		void listBoardgames().then((result) => {
+			if (!isActive) return;
+			if (result.success) setBoardgames(result.data);
+			else setBoardgameStatus(result.message);
+		});
+		return () => {
+			isActive = false;
+		};
+	}, []);
+
+	useEffect(() => {
+		if (boardgameStatus !== '') {
+			setTimeout(() => setBoardgameStatus(''), 3000);
+		}
+	}, [boardgameStatus]);
 
 	useEffect(() => {
 		editModeRef.current = isEditMode;
@@ -283,7 +355,7 @@ export default function DiceArena() {
 				orbit.targetCenter.set(tileMesh.position.x, 0, tileMesh.position.z);
 				orbit.targetTheta = tileMesh.rotation.y;
 				orbit.targetPhi = 0.001;
-				orbit.targetRadius = 8.5;
+				orbit.targetRadius = 12.5;
 			}
 		} else if (!tileId && runtime && orbitSnapshotRef.current) {
 			const snapshot = orbitSnapshotRef.current;
@@ -438,6 +510,7 @@ export default function DiceArena() {
 							};
 				teamPositionsRef.current[teamIndex] = targetIdx;
 				teamTileIdsRef.current[teamIndex] = targetTile.id;
+				setTeamTileIds([...teamTileIdsRef.current]);
 				playerTileIndexRef.current = targetIdx;
 				setPlayerTileIndex(targetIdx);
 				setTeamPositions([...teamPositionsRef.current]);
@@ -469,7 +542,7 @@ export default function DiceArena() {
 					setTimeout(() => {
 						showTileEvent(targetTile.id);
 						const nextTeamIndex =
-							(currentTeamIndexRef.current + 1) % teams.length;
+							(currentTeamIndexRef.current + 1) % TEAM_COLORS.length;
 						currentTeamIndexRef.current = nextTeamIndex;
 						setCurrentTeamIndex(nextTeamIndex);
 						setTimeout(() => {
@@ -542,6 +615,7 @@ export default function DiceArena() {
 
 		teamPositionsRef.current[teamIndex] = targetIndex;
 		teamTileIdsRef.current[teamIndex] = tileId;
+		setTeamTileIds([...teamTileIdsRef.current]);
 		setTeamPositions([...teamPositionsRef.current]);
 		if (teamIndex === goldCardActorTeamRef.current) {
 			playerTileIndexRef.current = targetIndex;
@@ -583,6 +657,7 @@ export default function DiceArena() {
 							teamTileIdsRef.current[swapTeamIndex],
 							teamTileIdsRef.current[actorTeamIndex],
 						];
+						setTeamTileIds([...teamTileIdsRef.current]);
 						const actorPawn = runtime.pawnMeshes[actorTeamIndex];
 						const targetPawn = runtime.pawnMeshes[swapTeamIndex];
 						if (actorPawn && targetPawn) {
@@ -640,6 +715,7 @@ export default function DiceArena() {
 
 				teamPositionsRef.current[currentTeamIndexRef.current] = targetIndex;
 				teamTileIdsRef.current[currentTeamIndexRef.current] = targetTileId;
+				setTeamTileIds([...teamTileIdsRef.current]);
 				setTeamPositions([...teamPositionsRef.current]);
 				playerTileIndexRef.current = targetIndex;
 				setPlayerTileIndex(targetIndex);
@@ -688,6 +764,8 @@ export default function DiceArena() {
 			return;
 		const { diceList, orbit } = runtimeRef.current;
 
+		hasRolledThisGameRef.current = true;
+		setHasRolledThisGame(true);
 		setIsRolling(true);
 		isRollingRef.current = true;
 		setScores([]);
@@ -794,6 +872,216 @@ export default function DiceArena() {
 		switchView('top');
 	};
 
+	const selectEditableTile = async (tileId: string) => {
+		if (!isEditMode || !activeBoardgameId || !activeBoardgameCanEdit) {
+			selectTile(tileId);
+			return;
+		}
+		const result = await acquireBoardgameTileEditLock(
+			activeBoardgameId,
+			tileId,
+		);
+		if (!result.success) {
+			setBoardgameStatus(result.message);
+			return;
+		}
+		setBoardTilesMap((current) => {
+			const next = new Map(current);
+			const tile = next.get(tileId);
+			if (tile) next.set(tileId, { ...tile, lockedByUserName: result.data });
+			boardTilesMapRef.current = next;
+			return next;
+		});
+		setBoardgameStatus(`타일 ${tileId} 편집 잠금을 확보했습니다.`);
+		selectTile(tileId);
+	};
+	const selectEditableTileRef = useRef<(tileId: string) => void>(() => {});
+	useEffect(() => {
+		selectEditableTileRef.current = (tileId) => void selectEditableTile(tileId);
+	});
+
+	const handleToggleEditMode = async () => {
+		if (!isEditMode) {
+			if (!activeBoardgameId || !activeBoardgameCanEdit || isBoardgameBusy)
+				return;
+			if (selectedTileId) {
+				setIsBoardgameBusy(true);
+				const lockResult = await acquireBoardgameTileEditLock(
+					activeBoardgameId,
+					selectedTileId,
+				);
+				setIsBoardgameBusy(false);
+				if (!lockResult.success) {
+					setBoardgameStatus(lockResult.message);
+					return;
+				}
+				setBoardTilesMap((current) => {
+					const next = new Map(current);
+					const tile = next.get(selectedTileId);
+					if (tile) {
+						next.set(selectedTileId, {
+							...tile,
+							lockedByUserName: lockResult.data,
+						});
+					}
+					boardTilesMapRef.current = next;
+					return next;
+				});
+			}
+			editModeRef.current = true;
+			setIsEditMode(true);
+			setBoardgameStatus(
+				'편집할 타일을 선택하세요. 타일 잠금은 선택 시 설정됩니다.',
+			);
+			return;
+		}
+		if (!activeBoardgameId || isBoardgameBusy) return;
+		setIsBoardgameBusy(true);
+		const tiles = [...boardTilesMap.values()];
+		const shouldSaveGridSize =
+			boardSize.rows !== persistedGridSizeRef.current.rows ||
+			boardSize.cols !== persistedGridSizeRef.current.cols;
+		const shouldSaveGoldCards =
+			JSON.stringify(goldCards) !== persistedGoldCardsRef.current;
+		const result = await saveBoardgame({
+			id: activeBoardgameId,
+			gridRows: boardSize.rows,
+			gridCols: boardSize.cols,
+			tiles,
+			goldCards,
+			saveGridSize: shouldSaveGridSize,
+			saveGoldCards: shouldSaveGoldCards,
+			tileIdRenames: [...tileIdRenamesRef.current].map(([from, to]) => ({
+				from,
+				to,
+			})),
+		});
+		if (!result.success) {
+			setBoardgameStatus(result.message);
+			setIsBoardgameBusy(false);
+			return;
+		}
+		tileIdRenamesRef.current.clear();
+		persistedGridSizeRef.current = boardSize;
+		persistedGoldCardsRef.current = JSON.stringify(goldCards);
+		editModeRef.current = false;
+		setIsEditMode(false);
+		setIsAddingInnerTile(false);
+		isAddingInnerTileRef.current = false;
+		setIsMovingInnerTile(false);
+		isMovingInnerTileRef.current = false;
+		tileSelectionModeRef.current = null;
+		setTileSelectionMode(null);
+		selectingGoldCardIdRef.current = null;
+		setSelectingGoldCardId(null);
+		selectTile(null);
+		setBoardgameStatus('변경 사항을 저장하고 타일 잠금을 해제했습니다.');
+		const refreshed = await getBoardgame(activeBoardgameId);
+		if (refreshed.success) {
+			const game = refreshed.data;
+			setBoardTilesMap(new Map(game.tiles.map((tile) => [tile.id, tile])));
+			setGoldCards(game.gold_cards);
+			setBoardSize({ rows: game.grid_rows, cols: game.grid_cols });
+			persistedGridSizeRef.current = {
+				rows: game.grid_rows,
+				cols: game.grid_cols,
+			};
+			persistedGoldCardsRef.current = JSON.stringify(game.gold_cards);
+			setGridSizeDraft({
+				rows: String(game.grid_rows),
+				cols: String(game.grid_cols),
+			});
+			setBoardRefreshKey((current) => current + 1);
+		}
+		await refreshBoardgameList();
+		setIsBoardgameBusy(false);
+	};
+
+	const handleToggleAddingInnerTile = () => {
+		if (isAddingInnerTile) {
+			setIsAddingInnerTile(false);
+			isAddingInnerTileRef.current = false;
+			return;
+		}
+		setIsAddingInnerTile(true);
+		isAddingInnerTileRef.current = true;
+		setIsMovingInnerTile(false);
+		isMovingInnerTileRef.current = false;
+		tileSelectionModeRef.current = null;
+		setTileSelectionMode(null);
+		selectTile(null);
+		switchView('top');
+	};
+
+	const handleMoveTilePosition = () => {
+		if (isMovingInnerTile) {
+			setIsMovingInnerTile(false);
+			isMovingInnerTileRef.current = false;
+			return;
+		}
+		setIsAddingInnerTile(false);
+		isAddingInnerTileRef.current = false;
+		tileSelectionModeRef.current = null;
+		setTileSelectionMode(null);
+		setIsMovingInnerTile(true);
+		isMovingInnerTileRef.current = true;
+		switchView('top');
+	};
+
+	const handleCloseTileInspector = () => {
+		setIsMovingInnerTile(false);
+		isMovingInnerTileRef.current = false;
+		tileSelectionModeRef.current = null;
+		setTileSelectionMode(null);
+		selectTile(null);
+	};
+
+	const handleChangeTeamName = (teamIndex: number, name: string) => {
+		setTeamNames((current) =>
+			current.map((teamName, index) =>
+				index === teamIndex ? name.slice(0, 24) : teamName,
+			),
+		);
+	};
+
+	const handleRestartGame = () => {
+		const runtime = runtimeRef.current;
+		const startTile = runtime?.boardTiles[0];
+		const startTileId = startTile?.id ?? 'outer_0';
+		teamPositionsRef.current = teams.map(() => 0);
+		teamTileIdsRef.current = teams.map(() => startTileId);
+		setTeamTileIds([...teamTileIdsRef.current]);
+		currentTeamIndexRef.current = 0;
+		lastMovedTeamIndexRef.current = 0;
+		playerTileIndexRef.current = 0;
+		hasRolledThisGameRef.current = false;
+		setTeamPositions([...teamPositionsRef.current]);
+		setCurrentTeamIndex(0);
+		setPlayerTileIndex(0);
+		setScores([]);
+		setHasRolledThisGame(false);
+		setGoldCardDrawPile([]);
+		setDrawnGoldCard(null);
+		drawnGoldCardRef.current = null;
+		setIsGoldCardModalOpen(false);
+		setPendingTileEvent(null);
+		setEventCountdown(null);
+		setEventNotice(null);
+		setSelectedTileId(null);
+		selectedTileIdRef.current = null;
+		if (runtime && startTile) {
+			runtime.pawnMeshes.forEach((pawn, index) => {
+				pawn.position.copy(getPawnPosition(startTile, index));
+				pawn.scale.set(1, 1, 1);
+			});
+		}
+		diceCountRef.current = 2;
+		setDiceCount(2);
+		syncDiceCount(2);
+		setIsRestartConfirmOpen(false);
+		setBoardgameStatus('게임을 처음부터 다시 시작합니다.');
+	};
+
 	// 주사위 개수 변경
 	const syncDiceCount = (count: number) => {
 		if (!runtimeRef.current) return;
@@ -836,8 +1124,26 @@ export default function DiceArena() {
 		}
 	};
 
+	const handleDiceCountChange = (nextCount: number) => {
+		if (
+			!Number.isInteger(nextCount) ||
+			nextCount < 1 ||
+			nextCount > 3 ||
+			isRollingRef.current ||
+			isMovingPawn
+		)
+			return;
+		diceCountRef.current = nextCount;
+		setDiceCount(nextCount);
+		syncDiceCount(nextCount);
+	};
+
 	useEffect(() => {
 		if (!canvasRef.current || !containerRef.current) return;
+		const tileMeshMap = tileMeshMapRef.current;
+		const innerCellMeshMap = innerCellMeshMapRef.current;
+		const innerCellOutlineMap = innerCellOutlineMapRef.current;
+		setIsBoardReady(false);
 
 		// 1. Scene & Camera
 		const scene = new THREE.Scene();
@@ -846,7 +1152,7 @@ export default function DiceArena() {
 		const width = containerRef.current.clientWidth;
 		const height = containerRef.current.clientHeight;
 
-		const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 150);
+		const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 150);
 		const renderer = new THREE.WebGLRenderer({
 			canvas: canvasRef.current,
 			antialias: true,
@@ -894,14 +1200,17 @@ export default function DiceArena() {
 		world.addBody(floorBody);
 
 		// 3. M * N 주루마블 외곽 타일 빌드 부분
-		const tileSize = 4.8;
-		const step = tileSize + 0.15;
-		const halfW = ((boardSize.cols - 1) * step) / 2;
-		const halfH = ((boardSize.rows - 1) * step) / 2;
+		const tileWidth = 4.8;
+		const tileHeight = 4.8;
+		const stepX = tileWidth + 0.15;
+		const stepZ = tileHeight + 0.15;
+		const halfW = ((boardSize.cols - 1) * stepX) / 2;
+		const halfH = ((boardSize.rows - 1) * stepZ) / 2;
 		const boardTiles = generateBoardTiles(
 			boardSize.rows,
 			boardSize.cols,
-			tileSize,
+			tileWidth,
+			tileHeight,
 			0.15,
 		);
 		const tileMeshGroup = new THREE.Group();
@@ -918,9 +1227,7 @@ export default function DiceArena() {
 					position: { x: tile.x, y: 0.2, z: tile.z },
 					rotationY: tile.rotationY,
 					label: `${tile.index}번 타일!`,
-					subLabel: tile.isCorner
-						? '코너'
-						: '무슨 이벤트를 넣을지 고민해보세요',
+					subLabel: '무슨 이벤트를 넣을지 고민해보세요',
 					color: '#1e293b',
 					textColor: '#ffffff',
 					nextTileIds: [boardTiles[(tile.index + 1) % boardTiles.length].id],
@@ -937,6 +1244,7 @@ export default function DiceArena() {
 							...previousTile,
 							gridR: tile.gridR,
 							gridC: tile.gridC,
+							rotationY: tile.rotationY,
 							position: defaultTile.position,
 						}
 					: defaultTile;
@@ -958,22 +1266,36 @@ export default function DiceArena() {
 			tileDataMap.set(previousTile.id, {
 				...previousTile,
 				position: {
-					x: previousTile.gridC * step - halfW,
+					x: previousTile.gridC * stepX - halfW,
 					y: 0.2,
-					z: previousTile.gridR * step - halfH,
+					z: previousTile.gridR * stepZ - halfH,
 				},
 			});
 		}
 
 		setBoardTilesMap(tileDataMap);
+		setIsBoardReady(true);
 
-		const boxGeo = new THREE.BoxGeometry(tileSize, 0.4, tileSize);
+		const boxGeo = new THREE.BoxGeometry(tileWidth, 0.4, tileHeight);
 		const createTileMesh = (tileData: BoardTileData) => {
+			const isOuter = tileData.category === 'OUTER';
+			const isCorner =
+				isOuter &&
+				(tileData.gridR === 0 || tileData.gridR === boardSize.rows - 1) &&
+				(tileData.gridC === 0 || tileData.gridC === boardSize.cols - 1);
+			const tileGeometry = isOuter
+				? new THREE.BoxGeometry(
+						isCorner ? tileWidth * 1.6 : tileWidth,
+						0.4,
+						tileHeight * 1.6,
+					)
+				: boxGeo;
 			const topTexture = createDynamicTileTexture(
 				tileData.label,
 				tileData.color,
 				tileData.textColor,
 				tileData.action.type === 'DRAW_GOLD_CARD',
+				isCorner ? 1 : tileWidth / (tileHeight * (isOuter ? 1.6 : 1)),
 			);
 			const sideMat = new THREE.MeshStandardMaterial({
 				color: 0x1e293b,
@@ -986,7 +1308,7 @@ export default function DiceArena() {
 
 			// Material 순서: [right, left, top, bottom, front, back]
 			const materials = [sideMat, sideMat, topMat, sideMat, sideMat, sideMat];
-			const mesh = new THREE.Mesh(boxGeo, materials);
+			const mesh = new THREE.Mesh(tileGeometry, materials);
 			mesh.position.set(
 				tileData.position.x,
 				tileData.position.y,
@@ -1012,7 +1334,7 @@ export default function DiceArena() {
 				const cellId = `inner_${gridR}_${gridC}`;
 
 				const cellPlane = new THREE.Mesh(
-					new THREE.PlaneGeometry(tileSize, tileSize),
+					new THREE.PlaneGeometry(tileWidth, tileHeight),
 					new THREE.MeshBasicMaterial({
 						color: 0x38bdf8,
 						transparent: true,
@@ -1032,13 +1354,15 @@ export default function DiceArena() {
 					(isAddingInnerTileRef.current || isMovingInnerTileRef.current);
 				cellPlane.rotation.x = -Math.PI / 2;
 				cellPlane.position.set(
-					gridC * step - halfW,
+					gridC * stepX - halfW,
 					0.08,
-					gridR * step - halfH,
+					gridR * stepZ - halfH,
 				);
 				cellPlane.userData = { gridR, gridC };
 				const cellOutline = new THREE.LineSegments(
-					new THREE.EdgesGeometry(new THREE.PlaneGeometry(tileSize, tileSize)),
+					new THREE.EdgesGeometry(
+						new THREE.PlaneGeometry(tileWidth, tileHeight),
+					),
 					new THREE.LineBasicMaterial({
 						color: 0x38bdf8,
 						transparent: true,
@@ -1061,13 +1385,20 @@ export default function DiceArena() {
 		selectionBox.visible = false;
 		scene.add(selectionBox);
 		selectionBoxRef.current = selectionBox;
+		const selectedMesh = selectedTileIdRef.current
+			? tileMeshMapRef.current.get(selectedTileIdRef.current)
+			: undefined;
+		if (selectedMesh) {
+			selectionBox.setFromObject(selectedMesh);
+			selectionBox.visible = true;
+		}
 
 		scene.add(tileMeshGroup);
 		scene.add(innerCellGrid);
 
 		// 4. 중앙 주사위 투척 구역 (펠트 필드 + 반투명 아크릴 안전 가벽)
-		const innerW = (boardSize.cols - 2) * step;
-		const innerH = (boardSize.rows - 2) * step;
+		const innerW = (boardSize.cols - 2) * stepX;
+		const innerH = (boardSize.rows - 2) * stepZ;
 
 		// 중앙 바닥 펠트
 		const centerFloorGeo = new THREE.PlaneGeometry(innerW, innerH);
@@ -1090,7 +1421,7 @@ export default function DiceArena() {
 		goldCardDeckGroup.visible = true;
 		const startTile = boardTiles[0];
 		goldCardDeckGroup.position.set(
-			startTile.x + tileSize / 2 + 1.9 / 2 + 0.25,
+			startTile.x + tileWidth * 0.8 + 1.9 / 2 + 0.25,
 			0.15,
 			startTile.z,
 		);
@@ -1125,9 +1456,9 @@ export default function DiceArena() {
 		});
 
 		// 5. 팀별 플레이어 3D 말 생성
-		const pawnMeshes = teams.map((team, teamIndex) => {
+		const pawnMeshes = TEAM_COLORS.map((color, teamIndex) => {
 			const pawnMesh = new THREE.Group();
-			const teamColor = new THREE.Color(team.color);
+			const teamColor = new THREE.Color(color);
 			const pawnBase = new THREE.Mesh(
 				new THREE.CylinderGeometry(0.65, 0.75, 0.3, 32),
 				new THREE.MeshStandardMaterial({
@@ -1160,7 +1491,15 @@ export default function DiceArena() {
 				if (child instanceof THREE.Mesh) child.castShadow = true;
 			});
 
-			pawnMesh.position.copy(getPawnPosition(boardTiles[0], teamIndex));
+			const savedTileId = teamTileIdsRef.current[teamIndex];
+			const savedOuterTile = boardTiles.find((tile) => tile.id === savedTileId);
+			const savedInnerTile = boardTilesMapRef.current.get(savedTileId);
+			const pawnStart =
+				savedOuterTile ??
+				(savedInnerTile?.category === 'INNER'
+					? { x: savedInnerTile.position.x, z: savedInnerTile.position.z }
+					: boardTiles[0]);
+			pawnMesh.position.copy(getPawnPosition(pawnStart, teamIndex));
 			pawnMesh.visible = !editModeRef.current;
 			scene.add(pawnMesh);
 			return pawnMesh;
@@ -1197,6 +1536,18 @@ export default function DiceArena() {
 				x: false,
 			},
 		};
+		const cameraView = cameraViewRestoreRef.current;
+		if (cameraView) {
+			orbitState.center.copy(cameraView.center);
+			orbitState.targetCenter.copy(cameraView.targetCenter);
+			orbitState.theta = cameraView.theta;
+			orbitState.targetTheta = cameraView.targetTheta;
+			orbitState.phi = cameraView.phi;
+			orbitState.targetPhi = cameraView.targetPhi;
+			orbitState.radius = cameraView.radius;
+			orbitState.targetRadius = cameraView.targetRadius;
+			cameraViewRestoreRef.current = null;
+		}
 
 		runtimeRef.current = {
 			scene,
@@ -1213,7 +1564,7 @@ export default function DiceArena() {
 			orbit: orbitState,
 		};
 
-		syncDiceCount(2);
+		syncDiceCount(diceCountRef.current);
 
 		// 7. 애니메이션 & 렌더 루프
 		let lastCallTime = performance.now();
@@ -1479,7 +1830,7 @@ export default function DiceArena() {
 						!isMovingInnerTileRef.current &&
 						!selectionMode
 					) {
-						selectTile(tileId);
+						selectEditableTileRef.current(tileId);
 					}
 				} else if (
 					editModeRef.current &&
@@ -1515,11 +1866,12 @@ export default function DiceArena() {
 									gridR,
 									gridC,
 									position: {
-										x: gridC * step - halfW,
+										x: gridC * stepX - halfW,
 										y: 0.2,
-										z: gridR * step - halfH,
+										z: gridR * stepZ - halfH,
 									},
 								};
+								tileIdRenamesRef.current.set(movingTileId, newTileId);
 								const nextTileMap = new Map(boardTilesMapRef.current);
 								nextTileMap.delete(movingTileId);
 								nextTileMap.set(newTileId, movedTile);
@@ -1544,6 +1896,8 @@ export default function DiceArena() {
 								teamTileIdsRef.current = teamTileIdsRef.current.map((tileId) =>
 									tileId === movingTileId ? newTileId : tileId,
 								);
+								setTeamTileIds([...teamTileIdsRef.current]);
+								setTeamPositions([...teamPositionsRef.current]);
 								const tileMesh = tileMeshMapRef.current.get(movingTileId);
 								if (tileMesh) {
 									tileMesh.position.set(
@@ -1570,9 +1924,9 @@ export default function DiceArena() {
 								gridR,
 								gridC,
 								position: {
-									x: gridC * step - halfW,
+									x: gridC * stepX - halfW,
 									y: 0.2,
-									z: gridR * step - halfH,
+									z: gridR * stepZ - halfH,
 								},
 								rotationY: 0,
 								label: `내부 타일 ${gridR}, ${gridC}`,
@@ -1719,6 +2073,7 @@ export default function DiceArena() {
 			}
 			tileMeshGroup.traverse((object) => {
 				if (!(object instanceof THREE.Mesh)) return;
+				if (object.geometry !== boxGeo) object.geometry.dispose();
 				const materials = Array.isArray(object.material)
 					? object.material
 					: [object.material];
@@ -1743,14 +2098,20 @@ export default function DiceArena() {
 			});
 			selectionBox.geometry.dispose();
 			disposeGoldCardDeckGroup(goldCardDeckGroup);
-			tileMeshMapRef.current.clear();
-			innerCellMeshMapRef.current.clear();
-			innerCellOutlineMapRef.current.clear();
+			tileMeshMap.clear();
+			innerCellMeshMap.clear();
+			innerCellOutlineMap.clear();
 			innerCellGridRef.current = null;
 			diceTemplate.dispose();
 			renderer.dispose();
 		};
-	}, [applyDrawnGoldCard, boardSize, movePawnSteps]);
+	}, [
+		activeBoardgameId,
+		applyDrawnGoldCard,
+		boardRefreshKey,
+		boardSize,
+		movePawnSteps,
+	]);
 
 	const applyGridSize = () => {
 		const rows = Number(gridSizeDraft.rows);
@@ -1773,6 +2134,7 @@ export default function DiceArena() {
 
 		teamPositionsRef.current = teams.map(() => 0);
 		teamTileIdsRef.current = teams.map(() => 'outer_0');
+		setTeamTileIds([...teamTileIdsRef.current]);
 		setTeamPositions([...teamPositionsRef.current]);
 		currentTeamIndexRef.current = 0;
 		setCurrentTeamIndex(0);
@@ -1784,445 +2146,609 @@ export default function DiceArena() {
 		setBoardSize({ rows, cols });
 	};
 
+	const refreshBoardgameList = useCallback(async () => {
+		const result = await listBoardgames();
+		if (result.success) setBoardgames(result.data);
+		else setBoardgameStatus(result.message);
+	}, []);
+
+	useEffect(() => {
+		let isActive = true;
+		let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+		const refreshActiveBoard = () => {
+			if (!activeBoardgameId || editModeRef.current) return;
+			if (refreshTimer) clearTimeout(refreshTimer);
+			refreshTimer = setTimeout(() => {
+				void (async () => {
+					const result = await getBoardgame(activeBoardgameId);
+					if (!isActive) return;
+					if (!result.success) {
+						setBoardgameStatus(result.message);
+						return;
+					}
+
+					const game = result.data;
+					const currentOrbit = runtimeRef.current?.orbit;
+					if (currentOrbit) {
+						cameraViewRestoreRef.current = {
+							center: currentOrbit.center.clone(),
+							targetCenter: currentOrbit.targetCenter.clone(),
+							theta: currentOrbit.theta,
+							phi: currentOrbit.phi,
+							radius: currentOrbit.radius,
+							targetTheta: currentOrbit.targetTheta,
+							targetPhi: currentOrbit.targetPhi,
+							targetRadius: currentOrbit.targetRadius,
+						};
+					}
+
+					const tiles = new Map(game.tiles.map((tile) => [tile.id, tile]));
+					if (
+						selectedTileIdRef.current &&
+						!tiles.has(selectedTileIdRef.current)
+					) {
+						selectedTileIdRef.current = null;
+						setSelectedTileId(null);
+						orbitSnapshotRef.current = null;
+					}
+					setBoardSize({ rows: game.grid_rows, cols: game.grid_cols });
+					persistedGridSizeRef.current = {
+						rows: game.grid_rows,
+						cols: game.grid_cols,
+					};
+					setGridSizeDraft({
+						rows: String(game.grid_rows),
+						cols: String(game.grid_cols),
+					});
+					setBoardTilesMap(tiles);
+					setGoldCards(game.gold_cards);
+					persistedGoldCardsRef.current = JSON.stringify(game.gold_cards);
+					setGoldCardDrawPile([]);
+					setBoardRefreshKey((current) => current + 1);
+					setBoardgameStatus('다른 사용자의 변경 사항을 반영했습니다.');
+				})();
+			}, 300);
+		};
+
+		let channel = supabase
+			.channel(`boardgame-realtime-${activeBoardgameId ?? 'list'}`)
+			.on(
+				'postgres_changes',
+				{ event: '*', schema: 'public', table: 'boardgames' },
+				(payload) => {
+					void refreshBoardgameList();
+					const row = (
+						payload.eventType === 'DELETE' ? payload.old : payload.new
+					) as { id?: string };
+					if (row.id !== activeBoardgameId) return;
+					if (payload.eventType === 'DELETE') {
+						editModeRef.current = false;
+						setIsEditMode(false);
+						const orbit = runtimeRef.current?.orbit;
+						if (orbit) {
+							cameraViewRestoreRef.current = {
+								center: orbit.center.clone(),
+								targetCenter: orbit.targetCenter.clone(),
+								theta: orbit.theta,
+								phi: orbit.phi,
+								radius: orbit.radius,
+								targetTheta: orbit.targetTheta,
+								targetPhi: orbit.targetPhi,
+								targetRadius: orbit.targetRadius,
+							};
+						}
+						setActiveBoardgameId(null);
+						loadedProgressBoardgameIdRef.current = null;
+						setActiveBoardgameCanEdit(false);
+						setActiveBoardgameIsMaker(false);
+						setBoardTilesMap(new Map());
+						setGoldCards([]);
+						setSelectedTileId(null);
+						selectedTileIdRef.current = null;
+						orbitSnapshotRef.current = null;
+						setBoardRefreshKey((current) => current + 1);
+						setBoardgameStatus('선택한 보드게임이 삭제되었습니다.');
+						return;
+					}
+					refreshActiveBoard();
+				},
+			);
+
+		if (activeBoardgameId) {
+			const filter = `boardgame_id=eq.${activeBoardgameId}`;
+			channel = channel
+				.on(
+					'postgres_changes',
+					{ event: '*', schema: 'public', table: 'boardgame_tiles', filter },
+					refreshActiveBoard,
+				)
+				.on(
+					'postgres_changes',
+					{
+						event: '*',
+						schema: 'public',
+						table: 'boardgame_tile_next',
+						filter,
+					},
+					refreshActiveBoard,
+				)
+				.on(
+					'postgres_changes',
+					{
+						event: '*',
+						schema: 'public',
+						table: 'boardgame_gold_cards',
+						filter,
+					},
+					refreshActiveBoard,
+				);
+		}
+		channel.subscribe();
+
+		return () => {
+			isActive = false;
+			if (refreshTimer) clearTimeout(refreshTimer);
+			void supabase.removeChannel(channel);
+		};
+	}, [activeBoardgameId, refreshBoardgameList, supabase]);
+
+	const activeBoardgameEditors =
+		boardgames.find((game) => game.id === activeBoardgameId)?.editors ?? [];
+
+	const handleLoadBoardgame = async (boardgameId: string) => {
+		if (!boardgameId) {
+			loadedProgressBoardgameIdRef.current = null;
+			editModeRef.current = false;
+			setIsEditMode(false);
+			selectedTileIdRef.current = null;
+			orbitSnapshotRef.current = null;
+			cameraViewRestoreRef.current = null;
+			setActiveBoardgameId(null);
+			setActiveBoardgameCanEdit(false);
+			setActiveBoardgameIsMaker(false);
+			setBoardTilesMap(new Map());
+			setGoldCards([]);
+			setGoldCardDrawPile([]);
+			setSelectedTileId(null);
+			setBoardRefreshKey((current) => current + 1);
+			return;
+		}
+
+		setIsBoardgameBusy(true);
+		setBoardgameStatus('게임을 불러오는 중…');
+		const result = await getBoardgame(boardgameId);
+		if (!result.success) {
+			setBoardgameStatus(result.message);
+			setIsBoardgameBusy(false);
+			return;
+		}
+
+		const game = result.data;
+		const summary = boardgames.find((item) => item.id === game.id);
+		const progressKey = `dice-arena-progress:${game.id}`;
+		let savedProgress: {
+			teamNames?: unknown;
+			teamTileIds?: unknown;
+			currentTeamIndex?: unknown;
+			hasRolled?: unknown;
+			scores?: unknown;
+		} = {};
+		try {
+			const rawProgress = window.localStorage.getItem(progressKey);
+			if (rawProgress) {
+				const parsed: unknown = JSON.parse(rawProgress);
+				if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+					savedProgress = parsed;
+				}
+			}
+		} catch {
+			try {
+				window.localStorage.removeItem(progressKey);
+			} catch {
+				// 저장소 접근이 불가능하면 기본 진행 상태로 시작합니다.
+			}
+		}
+		const outerTiles = generateBoardTiles(
+			game.grid_rows,
+			game.grid_cols,
+			4.8,
+			4.8,
+			0.15,
+		);
+		const outerTileIndexById = new Map(
+			outerTiles.map((tile, index) => [tile.id, index]),
+		);
+		const validTileIds = new Set([
+			...outerTiles.map((tile) => tile.id),
+			...game.tiles.map((tile) => tile.id),
+		]);
+		const savedTileIds = Array.isArray(savedProgress.teamTileIds)
+			? savedProgress.teamTileIds
+			: [];
+		const restoredTileIds = DEFAULT_TEAM_NAMES.map((_, index) => {
+			const candidate = savedTileIds[index];
+			return typeof candidate === 'string' && validTileIds.has(candidate)
+				? candidate
+				: (outerTiles[0]?.id ?? 'outer_0');
+		});
+		const restoredPositions = restoredTileIds.map(
+			(tileId) => outerTileIndexById.get(tileId) ?? -1,
+		);
+		const restoredNames = DEFAULT_TEAM_NAMES.map((fallback, index) => {
+			const candidate = Array.isArray(savedProgress.teamNames)
+				? savedProgress.teamNames[index]
+				: null;
+			return typeof candidate === 'string' && candidate.trim()
+				? candidate.trim().slice(0, 24)
+				: fallback;
+		});
+		const restoredCurrentTeam =
+			typeof savedProgress.currentTeamIndex === 'number' &&
+			Number.isInteger(savedProgress.currentTeamIndex) &&
+			savedProgress.currentTeamIndex >= 0 &&
+			savedProgress.currentTeamIndex < DEFAULT_TEAM_NAMES.length
+				? savedProgress.currentTeamIndex
+				: 0;
+		const restoredScores = Array.isArray(savedProgress.scores)
+			? savedProgress.scores
+					.filter(
+						(value): value is number =>
+							typeof value === 'number' && Number.isFinite(value),
+					)
+					.slice(0, 6)
+			: [];
+		const restoredHasRolled = savedProgress.hasRolled === true;
+		selectedTileIdRef.current = null;
+		orbitSnapshotRef.current = null;
+		cameraViewRestoreRef.current = null;
+		setActiveBoardgameId(game.id);
+		loadedProgressBoardgameIdRef.current = game.id;
+		editModeRef.current = false;
+		setIsEditMode(false);
+		setActiveBoardgameCanEdit(summary?.can_edit ?? false);
+		setActiveBoardgameIsMaker(summary?.is_maker ?? false);
+		setBoardSize({ rows: game.grid_rows, cols: game.grid_cols });
+		persistedGridSizeRef.current = {
+			rows: game.grid_rows,
+			cols: game.grid_cols,
+		};
+		setGridSizeDraft({
+			rows: String(game.grid_rows),
+			cols: String(game.grid_cols),
+		});
+		setBoardTilesMap(new Map(game.tiles.map((tile) => [tile.id, tile])));
+		setGoldCards(game.gold_cards);
+		persistedGoldCardsRef.current = JSON.stringify(game.gold_cards);
+		setGoldCardDrawPile([]);
+		setSelectedTileId(null);
+		teamPositionsRef.current = restoredPositions;
+		teamTileIdsRef.current = restoredTileIds;
+		setTeamTileIds([...teamTileIdsRef.current]);
+		setTeamPositions([...teamPositionsRef.current]);
+		setTeamNames(restoredNames);
+		setCurrentTeamIndex(restoredCurrentTeam);
+		currentTeamIndexRef.current = restoredCurrentTeam;
+		setPlayerTileIndex(restoredPositions[restoredCurrentTeam] ?? 0);
+		playerTileIndexRef.current = restoredPositions[restoredCurrentTeam] ?? 0;
+		setHasRolledThisGame(restoredHasRolled);
+		hasRolledThisGameRef.current = restoredHasRolled;
+		setScores(restoredScores);
+		setSelectedTileId(null);
+		setBoardRefreshKey((current) => current + 1);
+		setBoardgameStatus('게임을 불러왔습니다.');
+		setIsBoardgameBusy(false);
+	};
+
+	const handleCreatedBoardgame = (game: BoardgameSummary) => {
+		setBoardgames((current) => [
+			game,
+			...current.filter((item) => item.id !== game.id),
+		]);
+		setActiveBoardgameId(game.id);
+		loadedProgressBoardgameIdRef.current = game.id;
+		setActiveBoardgameCanEdit(true);
+		setActiveBoardgameIsMaker(true);
+		setBoardSize({ rows: game.grid_rows, cols: game.grid_cols });
+		persistedGridSizeRef.current = {
+			rows: game.grid_rows,
+			cols: game.grid_cols,
+		};
+		setGridSizeDraft({
+			rows: String(game.grid_rows),
+			cols: String(game.grid_cols),
+		});
+		setBoardTilesMap(new Map());
+		setGoldCards([]);
+		setTeamNames(DEFAULT_TEAM_NAMES);
+		teamPositionsRef.current = teams.map(() => 0);
+		teamTileIdsRef.current = teams.map(() => 'outer_0');
+		setTeamTileIds([...teamTileIdsRef.current]);
+		setTeamPositions([...teamPositionsRef.current]);
+		currentTeamIndexRef.current = 0;
+		setCurrentTeamIndex(0);
+		setPlayerTileIndex(0);
+		playerTileIndexRef.current = 0;
+		hasRolledThisGameRef.current = false;
+		setHasRolledThisGame(false);
+		setScores([]);
+		persistedGoldCardsRef.current = '[]';
+		setGoldCardDrawPile([]);
+		setSelectedTileId(null);
+		selectedTileIdRef.current = null;
+		setBoardRefreshKey((current) => current + 1);
+		setBoardgameStatus('보드게임이 생성되었습니다.');
+	};
+
+	const handleGrantEditor = async (userName: string): Promise<boolean> => {
+		if (!activeBoardgameId || !userName.trim()) return false;
+		setIsBoardgameBusy(true);
+		const result = await grantBoardgameEditor(
+			activeBoardgameId,
+			userName.trim(),
+		);
+		if (!result.success) {
+			setBoardgameStatus(result.message);
+			setIsBoardgameBusy(false);
+			return false;
+		}
+		await refreshBoardgameList();
+		setBoardgameStatus('편집 권한을 추가했습니다.');
+		setIsBoardgameBusy(false);
+		return true;
+	};
+
+	const handleRevokeEditor = async (userName: string) => {
+		if (!activeBoardgameId) return;
+		setIsBoardgameBusy(true);
+		const result = await revokeBoardgameEditor(activeBoardgameId, userName);
+		if (!result.success) {
+			setBoardgameStatus(result.message);
+			setIsBoardgameBusy(false);
+			return;
+		}
+		await refreshBoardgameList();
+		setBoardgameStatus('편집 권한을 회수했습니다.');
+		setIsBoardgameBusy(false);
+	};
+
 	const totalScore = scores.reduce((acc, cur) => acc + cur, 0);
 	return (
-		<div
-			className={`flex w-full flex-col overflow-hidden border border-slate-800 bg-slate-950 shadow-2xl select-none lg:flex-row ${
-				isFullscreen
-					? 'fixed inset-0 z-50 h-screen rounded-none'
-					: 'rounded-3xl lg:h-[840px]'
-			}`}
-		>
-			<div
-				ref={containerRef}
-				className={`relative min-w-0 flex-1 overflow-hidden bg-slate-950 ${
-					isFullscreen ? 'min-h-0' : 'min-h-[700px]'
-				}`}
-			>
-				{/* 3D 뷰포트 */}
-				<canvas
-					ref={canvasRef}
-					tabIndex={0}
-					className="w-full h-full cursor-grab active:cursor-grabbing outline-none"
-				/>
+		<>
+			<BoardgameHeader
+				boardgames={boardgames}
+				activeBoardgameId={activeBoardgameId}
+				canCreateBoardgame={canCreateBoardgame}
+				isBusy={isBoardgameBusy || isEditMode}
+				onSelect={(id) => void handleLoadBoardgame(id)}
+				onCreated={handleCreatedBoardgame}
+				activeBoardgameIsMaker={activeBoardgameIsMaker}
+				editors={activeBoardgameEditors}
+				status={boardgameStatus}
+				onGrantEditor={handleGrantEditor}
+				onRevokeEditor={handleRevokeEditor}
+			/>
 
-				{pendingTileEvent && (
-					<div className="absolute inset-0 z-40 flex items-center justify-center bg-slate-950/65 px-4 backdrop-blur-sm pointer-events-auto">
-						<div className="w-full max-w-sm overflow-hidden rounded-2xl border border-sky-400/40 bg-slate-900 shadow-2xl shadow-sky-950/40">
-							<div
-								className="flex min-h-44 flex-col items-center justify-center gap-3 px-6 py-8 text-center"
-								style={{ backgroundColor: pendingTileEvent.color || '#1e293b' }}
-							>
-								<span className="rounded-full border border-sky-300/50 bg-slate-950/40 px-3 py-1 text-xs font-bold text-sky-100">
-									{pendingTileEvent.category}
-								</span>
-								<h2
-									className="text-3xl font-black drop-shadow-md"
-									style={{ color: pendingTileEvent.textColor || '#ffffff' }}
-								>
-									{pendingTileEvent.label || '타일'}
-								</h2>
-								{pendingTileEvent.subLabel && (
-									<p className="text-sm text-slate-300">
-										{pendingTileEvent.subLabel}
-									</p>
-								)}
-							</div>
-							<div className="space-y-4 p-5 text-center">
-								{pendingTileEvent.action.type === 'NONE' ? null : (
-									<p className="text-sm font-semibold text-slate-200">
-										{pendingTileEvent.action.type === 'MOVE_STEPS'
-											? `${Math.abs(pendingTileEvent.action.params?.steps ?? 0)}칸 이동합니다.`
-											: '이 타일의 이벤트를 실행합니다.'}
-									</p>
-								)}
-								{pendingTileEvent.action.type === 'MOVE_STEPS' ? (
-									<p className="text-sm font-bold text-amber-300">
-										{eventCountdown !== null
-											? `${eventCountdown}초 후 실행`
-											: '이동 중'}
-									</p>
-								) : null}
-								<button
-									ref={popupConfirmButtonRef}
-									type="button"
-									onClick={executePendingTileEvent}
-									className="w-full rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-bold text-slate-950 transition-colors hover:bg-sky-400"
-								>
-									확인
-								</button>
-							</div>
-						</div>
-					</div>
-				)}
-
-				{eventNotice && (
-					<div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-sm pointer-events-auto">
-						<div className="w-full max-w-sm rounded-2xl border border-amber-400/40 bg-slate-900 p-6 text-center shadow-2xl">
-							<h2 className="text-xl font-black text-amber-300">
-								{eventNotice.title}
-							</h2>
-							<p className="mt-3 text-sm text-slate-200">
-								{eventNotice.message}
-							</p>
-							<button
-								ref={popupConfirmButtonRef}
-								type="button"
-								onClick={() => setEventNotice(null)}
-								className="mt-5 w-full rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-bold text-slate-950 hover:bg-amber-300"
-							>
-								확인
-							</button>
-						</div>
-					</div>
-				)}
-
-				{(isGoldCardModalOpen ||
-					tileSelectionMode === 'gold-card-effect-target') && (
-					<GoldCardDrawModal
-						card={drawnGoldCard}
-						teamNames={teams.map((team) => team.name)}
-						actorTeamIndex={goldCardActorTeamIndex}
-						selectingTarget={tileSelectionMode === 'gold-card-effect-target'}
-						onApply={() => applyDrawnGoldCard()}
-						onChooseTarget={beginGoldCardEffectTargetSelection}
-						onChooseSwapTeam={(teamIndex) => applyDrawnGoldCard({ teamIndex })}
-						onCancelTarget={() => {
-							tileSelectionModeRef.current = null;
-							setTileSelectionMode(null);
-							setIsGoldCardModalOpen(true);
-						}}
-						onClose={() => {
-							drawnGoldCardRef.current = null;
-							setIsGoldCardModalOpen(false);
-							setDrawnGoldCard(null);
-							tileSelectionModeRef.current = null;
-							setTileSelectionMode(null);
-						}}
-					/>
-				)}
-
-				<div className="absolute top-4 inset-x-4 flex items-center justify-between gap-3 pointer-events-none">
-					<div className="flex items-center bg-slate-900/80 backdrop-blur-md border border-slate-700/60 rounded-xl p-1 pointer-events-auto shadow-lg">
-						<button
-							type="button"
-							onClick={() => switchView('2.5d')}
-							className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-								viewMode === '2.5d'
-									? 'bg-blue-600 text-white'
-									: 'text-slate-400 hover:text-slate-200'
-							}`}
-						>
-							2.5D 쿼터뷰
-						</button>
-						<button
-							type="button"
-							onClick={() => switchView('top')}
-							className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-								viewMode === 'top'
-									? 'bg-blue-600 text-white'
-									: 'text-slate-400 hover:text-slate-200'
-							}`}
-						>
-							탑뷰
-						</button>
-					</div>
-				</div>
-
-				<div className="absolute bottom-2 left-6 hidden text-[11px] text-slate-500 pointer-events-none md:block">
-					Space: 주사위 굴리기 | WASD: 화면 이동 | Q/E: 회전 | Z/X: 확대·축소 |
-					R: 현재 뷰 초기화 | 드래그: 화면 회전 | 휠: 확대·축소
-				</div>
-			</div>
-
-			<aside
-				className={`flex w-full shrink-0 flex-col gap-4 overflow-y-auto border-t border-slate-800 bg-slate-900/95 p-4 text-slate-200 lg:min-h-0 lg:w-[22rem] lg:border-l lg:border-t-0 ${
-					isFullscreen ? 'min-h-0' : 'min-h-[700px]'
-				}`}
-			>
-				<div className="grid grid-cols-2 gap-2">
-					<button
-						type="button"
-						onClick={() => {
-							if (isEditMode) {
-								setIsEditMode(false);
-								setIsAddingInnerTile(false);
-								setIsMovingInnerTile(false);
-								isMovingInnerTileRef.current = false;
-								tileSelectionModeRef.current = null;
-								setTileSelectionMode(null);
-								selectingGoldCardIdRef.current = null;
-								setSelectingGoldCardId(null);
-								selectTile(null);
-							} else {
-								setIsEditMode(true);
-							}
-						}}
-						className={`rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${
-							isEditMode
-								? 'border-amber-500/50 bg-amber-500/20 text-amber-300'
-								: 'border-slate-700 bg-slate-900 text-slate-300 hover:border-sky-400'
+			{activeBoardgameId && (
+				<div
+					className={`flex w-full flex-col overflow-hidden border border-slate-800 bg-slate-950 shadow-2xl select-none lg:flex-row ${
+						isFullscreen
+							? 'fixed inset-0 z-50 h-screen rounded-none'
+							: 'rounded-3xl h-180'
+					}`}
+				>
+					<div
+						ref={containerRef}
+						className={`relative min-w-0 flex-1 overflow-hidden bg-slate-950 ${
+							isFullscreen ? 'min-h-0' : 'min-h-[700px]'
 						}`}
 					>
-						{isEditMode ? '편집 모드 ON' : '플레이 모드'}
-					</button>
-					<button
-						type="button"
-						onClick={() => setIsFullscreen((current) => !current)}
-						className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-300 transition-colors hover:border-sky-400 hover:text-white"
-						aria-label={isFullscreen ? '전체화면 종료' : '전체화면'}
-					>
-						{isFullscreen ? '전체화면 종료' : '전체화면'}
-					</button>
-				</div>
+						{/* 3D 뷰포트 */}
+						<canvas
+							ref={canvasRef}
+							tabIndex={0}
+							className="w-full h-full cursor-grab active:cursor-grabbing outline-none"
+						/>
 
-				{isEditMode && (
-					<section className="space-y-3 rounded-xl border border-slate-700 bg-slate-950/50 p-3">
-						<div>
-							<h2 className="text-sm font-bold text-white">격자 크기</h2>
-							<p className="mt-1 text-[11px] text-slate-400">
-								각 변은 3~20칸으로 설정할 수 있습니다.
-							</p>
-						</div>
-						<div className="grid grid-cols-3 gap-3">
-							<label className="space-y-1 text-xs font-semibold text-slate-300">
-								세로 (행)
-								<input
-									type="number"
-									min={3}
-									max={20}
-									step={1}
-									value={gridSizeDraft.rows}
-									onChange={(event) =>
-										setGridSizeDraft((current) => ({
-											...current,
-											rows: event.target.value,
-										}))
-									}
-									className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-sky-500"
-								/>
-							</label>
-							<label className="space-y-1 text-xs font-semibold text-slate-300">
-								가로 (열)
-								<input
-									type="number"
-									min={3}
-									max={20}
-									step={1}
-									value={gridSizeDraft.cols}
-									onChange={(event) =>
-										setGridSizeDraft((current) => ({
-											...current,
-											cols: event.target.value,
-										}))
-									}
-									className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-sky-500"
-								/>
-							</label>
-							<button
-								type="button"
-								onClick={applyGridSize}
-								disabled={
-									isRolling ||
-									isMovingPawn ||
-									Boolean(pendingTileEvent || eventNotice)
-								}
-								className="w-full rounded-lg bg-sky-600 px-3 h-9.5 text-xs font-bold text-white transition-colors self-end border border-sky-600 hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
-							>
-								격자 적용
-							</button>
-						</div>
-						{gridSizeError && (
-							<p className="text-xs text-rose-300">{gridSizeError}</p>
+						{pendingTileEvent && (
+							<div className="absolute inset-0 z-40 flex items-center justify-center bg-slate-950/65 px-4 backdrop-blur-sm pointer-events-auto">
+								<div className="w-full max-w-sm overflow-hidden rounded-2xl border border-sky-400/40 bg-slate-900 shadow-2xl shadow-sky-950/40">
+									<div
+										className="flex min-h-44 flex-col items-center justify-center gap-3 px-6 py-8 text-center"
+										style={{
+											backgroundColor: pendingTileEvent.color || '#1e293b',
+										}}
+									>
+										<span className="rounded-full border border-sky-300/50 bg-slate-950/40 px-3 py-1 text-xs font-bold text-sky-100">
+											{pendingTileEvent.category}
+										</span>
+										<h2
+											className="text-3xl font-black drop-shadow-md"
+											style={{ color: pendingTileEvent.textColor || '#ffffff' }}
+										>
+											{pendingTileEvent.label || '타일'}
+										</h2>
+										{pendingTileEvent.subLabel && (
+											<p className="text-sm text-slate-300">
+												{pendingTileEvent.subLabel}
+											</p>
+										)}
+									</div>
+									<div className="space-y-4 p-5 text-center">
+										{pendingTileEvent.action.type === 'NONE' ? null : (
+											<p className="text-sm font-semibold text-slate-200">
+												{pendingTileEvent.action.type === 'MOVE_STEPS'
+													? `${Math.abs(pendingTileEvent.action.params?.steps ?? 0)}칸 이동합니다.`
+													: '이 타일의 이벤트를 실행합니다.'}
+											</p>
+										)}
+										{pendingTileEvent.action.type === 'MOVE_STEPS' ? (
+											<p className="text-sm font-bold text-amber-300">
+												{eventCountdown !== null
+													? `${eventCountdown}초 후 실행`
+													: '이동 중'}
+											</p>
+										) : null}
+										<button
+											ref={popupConfirmButtonRef}
+											type="button"
+											onClick={executePendingTileEvent}
+											className="w-full rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-bold text-slate-950 transition-colors hover:bg-sky-400"
+										>
+											확인
+										</button>
+									</div>
+								</div>
+							</div>
 						)}
-						<div className="border-t border-slate-800 pt-3">
-							<div className="flex gap-2">
+
+						{eventNotice && (
+							<div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-sm pointer-events-auto">
+								<div className="w-full max-w-sm rounded-2xl border border-amber-400/40 bg-slate-900 p-6 text-center shadow-2xl">
+									<h2 className="text-xl font-black text-amber-300">
+										{eventNotice.title}
+									</h2>
+									<p className="mt-3 text-sm text-slate-200">
+										{eventNotice.message}
+									</p>
+									<button
+										ref={popupConfirmButtonRef}
+										type="button"
+										onClick={() => setEventNotice(null)}
+										className="mt-5 w-full rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-bold text-slate-950 hover:bg-amber-300"
+									>
+										확인
+									</button>
+								</div>
+							</div>
+						)}
+
+						{(isGoldCardModalOpen ||
+							tileSelectionMode === 'gold-card-effect-target') && (
+							<GoldCardDrawModal
+								card={drawnGoldCard}
+								teamNames={teams.map((team) => team.name)}
+								actorTeamIndex={goldCardActorTeamIndex}
+								selectingTarget={
+									tileSelectionMode === 'gold-card-effect-target'
+								}
+								onApply={() => applyDrawnGoldCard()}
+								onChooseTarget={beginGoldCardEffectTargetSelection}
+								onChooseSwapTeam={(teamIndex) =>
+									applyDrawnGoldCard({ teamIndex })
+								}
+								onCancelTarget={() => {
+									tileSelectionModeRef.current = null;
+									setTileSelectionMode(null);
+									setIsGoldCardModalOpen(true);
+								}}
+								onClose={() => {
+									drawnGoldCardRef.current = null;
+									setIsGoldCardModalOpen(false);
+									setDrawnGoldCard(null);
+									tileSelectionModeRef.current = null;
+									setTileSelectionMode(null);
+								}}
+							/>
+						)}
+
+						<div className="absolute top-4 inset-x-4 flex items-center justify-between gap-3 pointer-events-none">
+							<div className="flex items-center bg-slate-900/80 backdrop-blur-md border border-slate-700/60 rounded-xl p-1 pointer-events-auto shadow-lg">
 								<button
 									type="button"
-									onClick={() => {
-										if (isAddingInnerTile) {
-											setIsAddingInnerTile(false);
-											isAddingInnerTileRef.current = false;
-										} else {
-											setIsAddingInnerTile(true);
-											isAddingInnerTileRef.current = true;
-											setIsMovingInnerTile(false);
-											isMovingInnerTileRef.current = false;
-											tileSelectionModeRef.current = null;
-											setTileSelectionMode(null);
-											selectTile(null);
-											switchView('top');
-										}
-									}}
-									className={`min-w-0 flex-1 rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${
-										isAddingInnerTile
-											? 'border-sky-400 bg-sky-500/20 text-sky-200'
-											: 'border-slate-700 bg-slate-900 text-slate-300 hover:border-sky-400'
+									onClick={() => switchView('2.5d')}
+									className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+										viewMode === '2.5d'
+											? 'bg-blue-600 text-white'
+											: 'text-slate-400 hover:text-slate-200'
 									}`}
 								>
-									{isAddingInnerTile ? '내부 칸 추가 취소' : '내부 격자 추가'}
+									2.5D 쿼터뷰
 								</button>
 								<button
 									type="button"
-									aria-pressed={isGoldCardManagerOpen}
-									onClick={() => setIsGoldCardManagerOpen((open) => !open)}
-									className={`min-w-0 flex-1 rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${isGoldCardManagerOpen ? 'border-amber-400 bg-amber-400/20 text-amber-100' : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-amber-400'}`}
+									onClick={() => switchView('top')}
+									className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+										viewMode === 'top'
+											? 'bg-blue-600 text-white'
+											: 'text-slate-400 hover:text-slate-200'
+									}`}
 								>
-									황금 카드 덱 보기 {isGoldCardManagerOpen ? 'ON' : 'OFF'}
+									탑뷰
 								</button>
 							</div>
-							{isAddingInnerTile && (
-								<p className="mt-2 text-[11px] leading-5 text-sky-200">
-									보드 안쪽의 표시된 칸을 클릭하면 타일이 추가됩니다.
-								</p>
-							)}
 						</div>
-					</section>
-				)}
 
-				{isEditMode && isGoldCardManagerOpen && (
-					<GoldCardManager
-						cards={goldCards}
-						availableTiles={[...boardTilesMap.values()].map((tile) => ({
-							id: tile.id,
-							label: tile.label,
-						}))}
-						selectingCardId={selectingGoldCardId}
-						onChange={setGoldCards}
-						onSelectTarget={selectGoldCardTarget}
+						{boardgameStatus && (
+							<div className="pointer-events-none absolute right-4 top-4 w-[min(10,calc(100%-2rem))] rounded-xl border border-slate-700/60 bg-slate-900/80 px-3 py-2 text-right shadow-lg backdrop-blur-md">
+								<p className="text-[11px] text-slate-300">{boardgameStatus}</p>
+							</div>
+						)}
+
+						<div className="absolute bottom-2 left-6 hidden text-[11px] text-slate-500 pointer-events-none md:block">
+							Space: 주사위 굴리기 | WASD: 화면 이동 | Q/E: 회전 | Z/X:
+							확대·축소 | R: 현재 뷰 초기화 | 드래그: 화면 회전 | 휠: 확대·축소
+						</div>
+					</div>
+
+					<DiceArenaSidebar
+						activeBoardgameCanEdit={activeBoardgameCanEdit}
+						isFullscreen={isFullscreen}
+						isEditMode={isEditMode}
+						isBusy={isBoardgameBusy}
+						isAddingInnerTile={isAddingInnerTile}
+						isMovingInnerTile={isMovingInnerTile}
+						isGoldCardManagerOpen={isGoldCardManagerOpen}
+						gridSizeDraft={gridSizeDraft}
+						setGridSizeDraft={setGridSizeDraft}
+						gridSizeError={gridSizeError}
+						boardSize={boardSize}
+						isRolling={isRolling}
+						diceCount={diceCount}
+						isMovingPawn={isMovingPawn}
+						pendingTileEvent={pendingTileEvent}
+						eventNotice={eventNotice}
+						goldCards={goldCards}
+						setGoldCards={setGoldCards}
+						boardTilesMap={boardTilesMap}
+						selectingGoldCardId={selectingGoldCardId}
+						teams={teams}
+						hasRolledThisGame={hasRolledThisGame}
+						currentTeamIndex={currentTeamIndex}
+						teamPositions={teamPositions}
+						teamTileIds={teamTileIds}
+						playerTileIndex={playerTileIndex}
+						totalScore={totalScore}
+						scores={scores}
+						selectedTileId={selectedTileId}
+						tileSelectionMode={tileSelectionMode}
+						onToggleEditMode={() => void handleToggleEditMode()}
+						onToggleFullscreen={() => setIsFullscreen((current) => !current)}
+						onApplyGridSize={applyGridSize}
+						onToggleAddInnerTile={handleToggleAddingInnerTile}
+						onToggleGoldCardManager={() =>
+							setIsGoldCardManagerOpen((open) => !open)
+						}
+						onRollDice={rollDice}
+						onChangeDiceCount={handleDiceCountChange}
+						onChangeTeamName={handleChangeTeamName}
+						onRestartGame={() => setIsRestartConfirmOpen(true)}
+						onSelectGoldCardTarget={selectGoldCardTarget}
+						onBeginTileSelection={beginTileSelection}
+						onMoveTilePosition={handleMoveTilePosition}
+						onUpdateTile={handleUpdateTile}
+						onDeleteTile={handleDeleteTile}
+						onCloseTileInspector={handleCloseTileInspector}
 					/>
-				)}
-
-				{!isEditMode ? (
-					<>
-						<div className="flex items-center justify-between">
-							<div>
-								<p className="text-[11px] font-bold uppercase tracking-[0.2em] text-sky-400">
-									Game Board
-								</p>
-								<h2 className="text-lg font-black text-white">게임 기판</h2>
-							</div>
-							<span className="text-xs text-slate-400">
-								{boardSize.rows} × {boardSize.cols}
-							</span>
-						</div>
-						<button
-							type="button"
-							disabled={
-								isRolling ||
-								isMovingPawn ||
-								Boolean(pendingTileEvent || eventNotice)
-							}
-							onClick={rollDice}
-							className="w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-500/20 transition-all hover:from-blue-500 hover:to-indigo-500 disabled:pointer-events-none disabled:opacity-50"
-						>
-							{isRolling
-								? '주사위 굴리는 중...'
-								: isMovingPawn
-									? '말 이동 중...'
-									: '주사위 던지기'}
-						</button>
-
-						<div className="grid grid-cols-2 gap-3">
-							<div className="rounded-xl border border-slate-700 bg-slate-950/70 p-3">
-								<p className="text-[11px] font-semibold text-slate-400">
-									주사위 결과
-								</p>
-								<p className="mt-1 text-2xl font-black text-amber-400">
-									{isRolling ? '...' : totalScore || '-'}
-								</p>
-								<p className="mt-1 text-[10px] text-slate-500">
-									{scores.length ? scores.join(' + ') : '대기 중'}
-								</p>
-							</div>
-							<div className="rounded-xl border border-slate-700 bg-slate-950/70 p-3">
-								<p className="text-[11px] font-semibold text-slate-400">
-									현재 턴
-								</p>
-								<p
-									className="mt-1 truncate text-lg font-black"
-									style={{ color: teams[currentTeamIndex].color }}
-								>
-									{teams[currentTeamIndex].name}
-								</p>
-								<p className="mt-1 text-[10px] text-slate-500">
-									말 위치 {playerTileIndex}번
-								</p>
-							</div>
-						</div>
-
-						<section className="rounded-xl border border-slate-700 bg-slate-950/50 p-3">
-							<div className="mb-3 flex items-center justify-between">
-								<h3 className="text-xs font-bold text-white">참가 팀</h3>
-								<span className="text-[10px] text-slate-500">
-									{teams.length}팀
-								</span>
-							</div>
-							<div className="space-y-2">
-								{teams.map((team, index) => (
-									<div
-										key={team.name}
-										className={`flex items-center justify-between rounded-lg border px-3 py-2 ${
-											index === currentTeamIndex
-												? 'border-sky-400/50 bg-sky-400/10'
-												: 'border-slate-800 bg-slate-900/60'
-										}`}
-									>
-										<div className="flex min-w-0 items-center gap-2">
-											<span
-												className="h-2.5 w-2.5 shrink-0 rounded-full"
-												style={{ backgroundColor: team.color }}
-											/>
-											<span className="truncate text-xs font-semibold text-slate-200">
-												{team.name}
-											</span>
-										</div>
-										<span className="text-[11px] font-bold text-slate-400">
-											{teamPositions[index]}번
-										</span>
-									</div>
-								))}
-							</div>
-						</section>
-					</>
-				) : selectedTileId ? (
-					<TileInspector
-						tile={boardTilesMap.get(selectedTileId) || null}
-						availableTiles={[...boardTilesMap.values()]}
-						isMovingPosition={isMovingInnerTile}
-						isSelectingNextTile={tileSelectionMode === 'next'}
-						isSelectingTeleportTile={tileSelectionMode === 'teleport'}
-						isSelectingDirectionTile={tileSelectionMode === 'direction'}
-						onSelectNextTile={() => beginTileSelection('next')}
-						onSelectTeleportTile={() => beginTileSelection('teleport')}
-						onSelectDirectionTile={() => beginTileSelection('direction')}
-						onMovePosition={() => {
-							if (isMovingInnerTile) {
-								setIsMovingInnerTile(false);
-								isMovingInnerTileRef.current = false;
-							} else {
-								setIsAddingInnerTile(false);
-								tileSelectionModeRef.current = null;
-								setTileSelectionMode(null);
-								setIsMovingInnerTile(true);
-								isMovingInnerTileRef.current = true;
-								switchView('top');
-							}
-						}}
-						onUpdate={handleUpdateTile}
-						onDelete={handleDeleteTile}
-						onClose={() => {
-							setIsMovingInnerTile(false);
-							isMovingInnerTileRef.current = false;
-							tileSelectionModeRef.current = null;
-							setTileSelectionMode(null);
-							selectTile(null);
-						}}
-					/>
-				) : (
-					<div>선택된 타일이 없습니다.</div>
-				)}
-			</aside>
-		</div>
+				</div>
+			)}
+			{isRestartConfirmOpen && (
+				<ConfirmModal
+					message="게임을 처음부터 다시 시작할까요?"
+					warning="팀 위치, 현재 턴, 주사위 결과가 초기화됩니다. 팀 이름은 유지됩니다."
+					onConfirm={handleRestartGame}
+					onCancel={() => setIsRestartConfirmOpen(false)}
+				/>
+			)}
+		</>
 	);
 }

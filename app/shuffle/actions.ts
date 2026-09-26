@@ -22,3 +22,14 @@ export async function getTargetUsers() {
 			role: profile.role,
 		}));
 }
+
+export async function getRandomDrawHistory() {
+	const supabase = await createClient();
+	const { data, error } = await supabase
+		.from('random_draws')
+		.select('id, title, description, result_data, created_at')
+		.order('created_at', { ascending: false });
+
+	if (error) throw new Error(`추첨 이력 조회 실패: ${error.message}`);
+	return data ?? [];
+}
