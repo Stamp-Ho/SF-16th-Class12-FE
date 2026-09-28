@@ -1,120 +1,21 @@
 'use client';
 
-import type { Dispatch, SetStateAction } from 'react';
-import type { BoardTileData } from '../types/board';
-import type { GoldCardData } from '../gold-cards/types';
 import GoldCardManager from '../gold-cards/components/GoldCardManager';
+import { DiceArenaSidebarProps } from '../types/DiceArenaProps';
 import TileInspector from './TileInspector';
 
-export interface DiceArenaTeamInfo {
-	name: string;
-	color: string;
-}
+export default function DiceArenaSidebar({
+	props: { game, editor, goldCard, view },
+}: DiceArenaSidebarProps) {
+	const { state: gameState, actions: gameActions } = game;
+	const { state: editorState, actions: editorActions } = editor;
+	const { state: goldCardState, actions: goldCardActions } = goldCard;
+	const { isFullscreen, onToggleFullscreen } = view;
 
-export type TileSelectionMode =
-	| 'next'
-	| 'teleport'
-	| 'direction'
-	| 'gold-card-target'
-	| 'gold-card-effect-target'
-	| null;
-
-export interface DiceArenaSidebarProps {
-	activeBoardgameCanEdit: boolean;
-	isFullscreen: boolean;
-	isEditMode: boolean;
-	isBusy: boolean;
-	isAddingInnerTile: boolean;
-	isMovingInnerTile: boolean;
-	isGoldCardManagerOpen: boolean;
-	gridSizeDraft: { rows: string; cols: string };
-	setGridSizeDraft: Dispatch<SetStateAction<{ rows: string; cols: string }>>;
-	gridSizeError: string;
-	boardSize: { rows: number; cols: number };
-	isRolling: boolean;
-	diceCount: number;
-	isMovingPawn: boolean;
-	pendingTileEvent: unknown;
-	eventNotice: unknown;
-	goldCards: GoldCardData[];
-	setGoldCards: Dispatch<SetStateAction<GoldCardData[]>>;
-	boardTilesMap: Map<string, BoardTileData>;
-	selectingGoldCardId: string | null;
-	teams: DiceArenaTeamInfo[];
-	hasRolledThisGame: boolean;
-	currentTeamIndex: number;
-	teamPositions: number[];
-	teamTileIds: string[];
-	playerTileIndex: number;
-	totalScore: number;
-	scores: number[];
-	selectedTileId: string | null;
-	tileSelectionMode: TileSelectionMode;
-	onToggleEditMode: () => void;
-	onToggleFullscreen: () => void;
-	onApplyGridSize: () => void;
-	onToggleAddInnerTile: () => void;
-	onToggleGoldCardManager: () => void;
-	onRollDice: () => void;
-	onChangeDiceCount: (count: number) => void;
-	onChangeTeamName: (teamIndex: number, name: string) => void;
-	onRestartGame: () => void;
-	onSelectGoldCardTarget: (cardId: string) => void;
-	onBeginTileSelection: (mode: 'next' | 'teleport' | 'direction') => void;
-	onMoveTilePosition: () => void;
-	onUpdateTile: (tile: Partial<BoardTileData>) => void;
-	onDeleteTile: (tileId: string) => void;
-	onCloseTileInspector: () => void;
-}
-
-export default function DiceArenaSidebar(props: DiceArenaSidebarProps) {
-	const {
-		activeBoardgameCanEdit,
-		isFullscreen,
-		isEditMode,
-		isBusy,
-		isAddingInnerTile,
-		isMovingInnerTile,
-		isGoldCardManagerOpen,
-		gridSizeDraft,
-		setGridSizeDraft,
-		gridSizeError,
-		boardSize,
-		isRolling,
-		diceCount,
-		isMovingPawn,
-		pendingTileEvent,
-		eventNotice,
-		goldCards,
-		setGoldCards,
-		boardTilesMap,
-		selectingGoldCardId,
-		teams,
-		hasRolledThisGame,
-		currentTeamIndex,
-		teamPositions,
-		teamTileIds,
-		playerTileIndex,
-		totalScore,
-		scores,
-		selectedTileId,
-		tileSelectionMode,
-		onToggleEditMode,
-		onToggleFullscreen,
-		onApplyGridSize,
-		onToggleAddInnerTile,
-		onToggleGoldCardManager,
-		onRollDice,
-		onChangeDiceCount,
-		onChangeTeamName,
-		onRestartGame,
-		onSelectGoldCardTarget,
-		onBeginTileSelection,
-		onMoveTilePosition,
-		onUpdateTile,
-		onDeleteTile,
-		onCloseTileInspector,
-	} = props;
+	const preventRoll =
+		gameState.isRolling ||
+		gameState.isMovingPawn ||
+		Boolean(gameState.pendingTileEvent || gameState.eventNotice);
 
 	return (
 		<aside
@@ -125,15 +26,15 @@ export default function DiceArenaSidebar(props: DiceArenaSidebarProps) {
 			<div className="grid grid-cols-2 gap-2">
 				<button
 					type="button"
-					disabled={isBusy || !activeBoardgameCanEdit}
-					onClick={onToggleEditMode}
+					disabled={editorState.isBusy || !editorState.canEdit}
+					onClick={editorActions.onToggleEditMode}
 					className={`rounded-lg border px-3 py-2 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-						isEditMode
+						editorState.isEditMode
 							? 'border-amber-500/50 bg-amber-500/20 text-amber-300'
 							: 'border-slate-700 bg-slate-900 text-slate-300 hover:border-sky-400'
 					}`}
 				>
-					{isEditMode ? '완료' : '편집 시작'}
+					{editorState.isEditMode ? '완료' : '편집 시작'}
 				</button>
 				<button
 					type="button"
@@ -145,7 +46,7 @@ export default function DiceArenaSidebar(props: DiceArenaSidebarProps) {
 				</button>
 			</div>
 
-			{isEditMode && (
+			{editorState.isEditMode && (
 				<section className="space-y-3 rounded-xl border border-slate-700 bg-slate-950/50 p-3">
 					<div>
 						<h2 className="text-sm font-bold text-white">격자 크기</h2>
@@ -161,9 +62,9 @@ export default function DiceArenaSidebar(props: DiceArenaSidebarProps) {
 								min={3}
 								max={20}
 								step={1}
-								value={gridSizeDraft.rows}
+								value={editorState.boardSize.rows}
 								onChange={(event) =>
-									setGridSizeDraft((current) => ({
+									editorActions.setGridSizeDraft((current) => ({
 										...current,
 										rows: event.target.value,
 									}))
@@ -178,9 +79,9 @@ export default function DiceArenaSidebar(props: DiceArenaSidebarProps) {
 								min={3}
 								max={20}
 								step={1}
-								value={gridSizeDraft.cols}
+								value={editorState.boardSize.cols}
 								onChange={(event) =>
-									setGridSizeDraft((current) => ({
+									editorActions.setGridSizeDraft((current) => ({
 										...current,
 										cols: event.target.value,
 									}))
@@ -190,43 +91,41 @@ export default function DiceArenaSidebar(props: DiceArenaSidebarProps) {
 						</label>
 						<button
 							type="button"
-							onClick={onApplyGridSize}
-							disabled={
-								isRolling ||
-								isMovingPawn ||
-								Boolean(pendingTileEvent || eventNotice)
-							}
+							onClick={editorActions.onApplyGridSize}
+							disabled={preventRoll}
 							className="w-full self-end rounded-lg border border-sky-600 bg-sky-600 px-3 h-9.5 text-xs font-bold text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
 						>
 							격자 적용
 						</button>
 					</div>
-					{gridSizeError && (
-						<p className="text-xs text-rose-300">{gridSizeError}</p>
+					{editorState.gridSizeError && (
+						<p className="text-xs text-rose-300">{editorState.gridSizeError}</p>
 					)}
 					<div className="border-t border-slate-800 pt-3">
 						<div className="flex gap-2">
 							<button
 								type="button"
-								onClick={onToggleAddInnerTile}
+								onClick={editorActions.onToggleAddInnerTile}
 								className={`min-w-0 flex-1 rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${
-									isAddingInnerTile
+									editorState.isAddingInnerTile
 										? 'border-sky-400 bg-sky-500/20 text-sky-200'
 										: 'border-slate-700 bg-slate-900 text-slate-300 hover:border-sky-400'
 								}`}
 							>
-								{isAddingInnerTile ? '내부 칸 추가 취소' : '내부 격자 추가'}
+								{editorState.isAddingInnerTile
+									? '내부 칸 추가 취소'
+									: '내부 격자 추가'}
 							</button>
 							<button
 								type="button"
-								aria-pressed={isGoldCardManagerOpen}
-								onClick={onToggleGoldCardManager}
-								className={`min-w-0 flex-1 rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${isGoldCardManagerOpen ? 'border-amber-400 bg-amber-400/20 text-amber-100' : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-amber-400'}`}
+								aria-pressed={goldCardState.isManagerOpen}
+								onClick={goldCardActions.onToggleManager}
+								className={`min-w-0 flex-1 rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${goldCardState.isManagerOpen ? 'border-amber-400 bg-amber-400/20 text-amber-100' : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-amber-400'}`}
 							>
-								황금 카드 덱 보기 {isGoldCardManagerOpen ? 'ON' : 'OFF'}
+								황금 카드 덱 보기 {goldCardState.isManagerOpen ? 'ON' : 'OFF'}
 							</button>
 						</div>
-						{isAddingInnerTile && (
+						{editorState.isAddingInnerTile && (
 							<p className="mt-2 text-[11px] leading-5 text-sky-200">
 								보드 안쪽의 표시된 칸을 클릭하면 타일이 추가됩니다.
 							</p>
@@ -235,20 +134,19 @@ export default function DiceArenaSidebar(props: DiceArenaSidebarProps) {
 				</section>
 			)}
 
-			{isEditMode && isGoldCardManagerOpen && (
+			{editorState.isEditMode && goldCardState.isManagerOpen && (
 				<GoldCardManager
-					cards={goldCards}
-					availableTiles={[...boardTilesMap.values()].map((tile) => ({
-						id: tile.id,
-						label: tile.label,
-					}))}
-					selectingCardId={selectingGoldCardId}
-					onChange={setGoldCards}
-					onSelectTarget={onSelectGoldCardTarget}
+					cards={goldCardState.cards}
+					availableTiles={[...editorState.boardTilesMap.values()].map(
+						(tile) => ({ id: tile.id, label: tile.label }),
+					)}
+					selectingCardId={goldCardState.selectingTargetCardId}
+					onChange={goldCardActions.setCards}
+					onSelectTarget={goldCardActions.onSelectTargetCard}
 				/>
 			)}
 
-			{!isEditMode ? (
+			{!editorState.isEditMode ? (
 				<>
 					<div className="flex items-center justify-between">
 						<div>
@@ -258,7 +156,7 @@ export default function DiceArenaSidebar(props: DiceArenaSidebarProps) {
 							<h2 className="text-lg font-black text-white">게임 기판</h2>
 						</div>
 						<span className="text-xs text-slate-400">
-							{boardSize.rows} × {boardSize.cols}
+							{editorState.boardSize.rows} × {editorState.boardSize.cols}
 						</span>
 					</div>
 					<div className="flex items-center justify-between rounded-xl border border-slate-700 bg-slate-950/70 px-3 py-2">
@@ -274,30 +172,24 @@ export default function DiceArenaSidebar(props: DiceArenaSidebarProps) {
 							<button
 								type="button"
 								aria-label="주사위 한 개 줄이기"
-								disabled={
-									diceCount <= 1 ||
-									isRolling ||
-									isMovingPawn ||
-									Boolean(pendingTileEvent || eventNotice)
+								disabled={gameState.diceCount <= 1 || preventRoll}
+								onClick={() =>
+									gameActions.onChangeDiceCount(gameState.diceCount - 1)
 								}
-								onClick={() => onChangeDiceCount(diceCount - 1)}
 								className="h-8 w-8 rounded-lg border border-slate-600 text-lg font-bold text-white hover:bg-slate-800 disabled:opacity-40"
 							>
 								−
 							</button>
 							<span className="min-w-5 text-center text-lg font-black text-amber-300">
-								{diceCount}
+								{gameState.diceCount}
 							</span>
 							<button
 								type="button"
 								aria-label="주사위 한 개 늘리기"
-								disabled={
-									diceCount >= 3 ||
-									isRolling ||
-									isMovingPawn ||
-									Boolean(pendingTileEvent || eventNotice)
+								disabled={gameState.diceCount >= 3 || preventRoll}
+								onClick={() =>
+									gameActions.onChangeDiceCount(gameState.diceCount + 1)
 								}
-								onClick={() => onChangeDiceCount(diceCount + 1)}
 								className="h-8 w-8 rounded-lg border border-slate-600 text-lg font-bold text-white hover:bg-slate-800 disabled:opacity-40"
 							>
 								+
@@ -306,17 +198,13 @@ export default function DiceArenaSidebar(props: DiceArenaSidebarProps) {
 					</div>
 					<button
 						type="button"
-						disabled={
-							isRolling ||
-							isMovingPawn ||
-							Boolean(pendingTileEvent || eventNotice)
-						}
-						onClick={onRollDice}
+						disabled={preventRoll}
+						onClick={gameActions.onRollDice}
 						className="w-full rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-500/20 transition-all hover:from-blue-500 hover:to-indigo-500 disabled:pointer-events-none disabled:opacity-50"
 					>
-						{isRolling
+						{gameState.isRolling
 							? '주사위 굴리는 중...'
-							: isMovingPawn
+							: gameState.isMovingPawn
 								? '말 이동 중...'
 								: '주사위 던지기'}
 					</button>
@@ -327,10 +215,12 @@ export default function DiceArenaSidebar(props: DiceArenaSidebarProps) {
 								주사위 결과
 							</p>
 							<p className="mt-1 text-2xl font-black text-amber-400">
-								{isRolling ? '...' : totalScore || '-'}
+								{gameState.isRolling ? '...' : gameState.totalScore || '-'}
 							</p>
 							<p className="mt-1 text-[10px] text-slate-500">
-								{scores.length ? scores.join(' + ') : '대기 중'}
+								{gameState.scores.length
+									? gameState.scores.join(' + ')
+									: '대기 중'}
 							</p>
 						</div>
 						<div className="rounded-xl border border-slate-700 bg-slate-950/70 p-3 col-span-2">
@@ -339,16 +229,22 @@ export default function DiceArenaSidebar(props: DiceArenaSidebarProps) {
 							</p>
 							<p
 								className="mt-1 truncate text-lg font-black"
-								style={{ color: teams[currentTeamIndex].color }}
+								style={{
+									color: gameState.teams[gameState.currentTeamIndex].color,
+								}}
 							>
-								{teams[currentTeamIndex].name}
+								{gameState.teams[gameState.currentTeamIndex].name}
 							</p>
 							<p className="mt-1 text-[10px] text-slate-500">
 								말 위치{' '}
-								{teamTileIds[currentTeamIndex]?.startsWith('inner_')
-									? boardTilesMap.get(teamTileIds[currentTeamIndex])?.label ||
-										teamTileIds[currentTeamIndex]
-									: `${playerTileIndex}번`}
+								{gameState.teamTileIds[gameState.currentTeamIndex]?.startsWith(
+									'inner_',
+								)
+									? editorState.boardTilesMap.get(
+											gameState.teamTileIds[gameState.currentTeamIndex],
+										)?.label ||
+										gameState.teamTileIds[gameState.currentTeamIndex]
+									: `${gameState.playerTileIndex}번`}
 							</p>
 						</div>
 					</div>
@@ -357,78 +253,88 @@ export default function DiceArenaSidebar(props: DiceArenaSidebarProps) {
 						<div className="mb-3 flex items-center justify-between">
 							<h3 className="text-xs font-bold text-white">참가 팀</h3>
 							<span className="text-[10px] text-slate-500">
-								{teams.length}팀
+								{gameState.teams.length}팀
 							</span>
 						</div>
 						<div className="space-y-2">
-							{teams.map((team, index) => (
-								<div
-									key={index}
-									className={`flex items-center justify-between rounded-lg border px-3 py-2 ${
-										index === currentTeamIndex
-											? 'border-sky-400/50 bg-sky-400/10'
-											: 'border-slate-800 bg-slate-900/60'
-									}`}
-								>
-									<div className="flex min-w-0 items-center gap-2">
-										<span
-											className="h-2.5 w-2.5 shrink-0 rounded-full"
-											style={{ backgroundColor: team.color }}
-										/>
-										{hasRolledThisGame ? (
-											<span className="truncate text-xs font-semibold text-slate-200">
-												{team.name}
-											</span>
-										) : (
-											<input
-												aria-label={`${team.name} 팀 이름`}
-												maxLength={24}
-												value={team.name}
-												onChange={(event) =>
-													onChangeTeamName(index, event.target.value)
-												}
-												className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs font-semibold text-slate-100 outline-none focus:border-sky-500"
+							{gameState.teams.map((team, index) => {
+								const teamTileId = gameState.teamTileIds[index];
+								return (
+									<div
+										key={index}
+										className={`flex items-center justify-between rounded-lg border px-3 py-2 ${
+											index === gameState.currentTeamIndex
+												? 'border-sky-400/50 bg-sky-400/10'
+												: 'border-slate-800 bg-slate-900/60'
+										}`}
+									>
+										<div className="flex min-w-0 items-center gap-2">
+											<span
+												className="h-2.5 w-2.5 shrink-0 rounded-full"
+												style={{ backgroundColor: team.color }}
 											/>
-										)}
+											{gameState.hasRolledThisGame ? (
+												<span className="truncate text-xs font-semibold text-slate-200">
+													{team.name}
+												</span>
+											) : (
+												<input
+													aria-label={`${team.name} 팀 이름`}
+													maxLength={24}
+													value={team.name}
+													onChange={(event) =>
+														gameActions.onChangeTeamName(
+															index,
+															event.target.value,
+														)
+													}
+													className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs font-semibold text-slate-100 outline-none focus:border-sky-500"
+												/>
+											)}
+										</div>
+										<span className="text-[11px] font-bold text-slate-400">
+											{teamTileId?.startsWith('inner_')
+												? editorState.boardTilesMap.get(teamTileId)?.label ||
+													teamTileId
+												: `${gameState.teamPositions[index]}번`}
+										</span>
 									</div>
-									<span className="text-[11px] font-bold text-slate-400">
-										{teamTileIds[index]?.startsWith('inner_')
-											? boardTilesMap.get(teamTileIds[index])?.label ||
-												teamTileIds[index]
-											: `${teamPositions[index]}번`}
-									</span>
-								</div>
-							))}
+								);
+							})}
 						</div>
 					</section>
 					<button
 						type="button"
-						disabled={
-							isRolling ||
-							isMovingPawn ||
-							Boolean(pendingTileEvent || eventNotice)
-						}
-						onClick={onRestartGame}
+						disabled={preventRoll}
+						onClick={gameActions.onRestartGame}
 						className="w-full rounded-xl border border-rose-500/40 bg-rose-950/30 px-4 py-2.5 text-xs font-bold text-rose-200 transition-colors hover:bg-rose-900/50 disabled:opacity-40"
 					>
 						게임 처음부터 다시하기
 					</button>
 				</>
-			) : selectedTileId ? (
+			) : editorState.selectedTileId ? (
 				<TileInspector
-					tile={boardTilesMap.get(selectedTileId) || null}
-					availableTiles={[...boardTilesMap.values()]}
-					isMovingPosition={isMovingInnerTile}
-					isSelectingNextTile={tileSelectionMode === 'next'}
-					isSelectingTeleportTile={tileSelectionMode === 'teleport'}
-					isSelectingDirectionTile={tileSelectionMode === 'direction'}
-					onSelectNextTile={() => onBeginTileSelection('next')}
-					onSelectTeleportTile={() => onBeginTileSelection('teleport')}
-					onSelectDirectionTile={() => onBeginTileSelection('direction')}
-					onMovePosition={onMoveTilePosition}
-					onUpdate={onUpdateTile}
-					onDelete={onDeleteTile}
-					onClose={onCloseTileInspector}
+					tile={
+						editorState.boardTilesMap.get(editorState.selectedTileId) || null
+					}
+					availableTiles={[...editorState.boardTilesMap.values()]}
+					isMovingPosition={editorState.isMovingInnerTile}
+					isSelectingNextTile={editorState.tileSelectionMode === 'next'}
+					isSelectingTeleportTile={editorState.tileSelectionMode === 'teleport'}
+					isSelectingDirectionTile={
+						editorState.tileSelectionMode === 'direction'
+					}
+					onSelectNextTile={() => editorActions.onBeginTileSelection('next')}
+					onSelectTeleportTile={() =>
+						editorActions.onBeginTileSelection('teleport')
+					}
+					onSelectDirectionTile={() =>
+						editorActions.onBeginTileSelection('direction')
+					}
+					onMovePosition={editorActions.onMoveTilePosition}
+					onUpdate={editorActions.onUpdateTile}
+					onDelete={editorActions.onDeleteTile}
+					onClose={editorActions.onCloseTileInspector}
 				/>
 			) : (
 				<div>선택된 타일이 없습니다.</div>

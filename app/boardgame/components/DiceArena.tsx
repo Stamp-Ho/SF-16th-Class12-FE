@@ -27,10 +27,7 @@ import {
 	type BoardgameSummary,
 } from '../actions';
 import BoardgameHeader from './BoardgameHeader';
-import DiceArenaSidebar, {
-	type DiceArenaTeamInfo,
-	type TileSelectionMode,
-} from './DiceArenaSidebar';
+import DiceArenaSidebar from './DiceArenaSidebar';
 import GoldCardDrawModal from '../gold-cards/components/GoldCardDrawModal';
 import { GoldCardData } from '../gold-cards/types';
 import { drawCard } from '../gold-cards/utils/deck';
@@ -39,6 +36,7 @@ import {
 	createGoldCardDeckGroup,
 	disposeGoldCardDeckGroup,
 } from '../gold-cards/utils/threeDeck';
+import { DiceArenaTeamInfo, TileSelectionMode } from '../types/DiceArenaProps';
 
 interface DiceItem {
 	body: CANNON.Body;
@@ -872,196 +870,205 @@ export default function DiceArena({
 		switchView('top');
 	};
 
-  // 현재까지의 변경 사항을 저장하는 함수
-  const saveCurrentChanges = async (): Promise<boolean> => {
-    if (!activeBoardgameId || isBoardgameBusy) return false;
+	// 현재까지의 변경 사항을 저장하는 함수
+	const saveCurrentChanges = async (): Promise<boolean> => {
+		if (!activeBoardgameId || isBoardgameBusy) return false;
 
-    setIsBoardgameBusy(true);
-    const tiles = [...boardTilesMap.values()];
-    const shouldSaveGridSize =
-      boardSize.rows !== persistedGridSizeRef.current.rows ||
-      boardSize.cols !== persistedGridSizeRef.current.cols;
-    const shouldSaveGoldCards =
-      JSON.stringify(goldCards) !== persistedGoldCardsRef.current;
+		setIsBoardgameBusy(true);
+		const tiles = [...boardTilesMap.values()];
+		const shouldSaveGridSize =
+			boardSize.rows !== persistedGridSizeRef.current.rows ||
+			boardSize.cols !== persistedGridSizeRef.current.cols;
+		const shouldSaveGoldCards =
+			JSON.stringify(goldCards) !== persistedGoldCardsRef.current;
 
-    const result = await saveBoardgame({
-      id: activeBoardgameId,
-      gridRows: boardSize.rows,
-      gridCols: boardSize.cols,
-      tiles,
-      goldCards,
-      saveGridSize: shouldSaveGridSize,
-      saveGoldCards: shouldSaveGoldCards,
-      tileIdRenames: [...tileIdRenamesRef.current].map(([from, to]) => ({
-        from,
-        to,
-      })),
-    });
+		const result = await saveBoardgame({
+			id: activeBoardgameId,
+			gridRows: boardSize.rows,
+			gridCols: boardSize.cols,
+			tiles,
+			goldCards,
+			saveGridSize: shouldSaveGridSize,
+			saveGoldCards: shouldSaveGoldCards,
+			tileIdRenames: [...tileIdRenamesRef.current].map(([from, to]) => ({
+				from,
+				to,
+			})),
+		});
 
-    if (!result.success) {
-      setBoardgameStatus(result.message);
-      setIsBoardgameBusy(false);
-      return false;
-    }
+		if (!result.success) {
+			setBoardgameStatus(result.message);
+			setIsBoardgameBusy(false);
+			return false;
+		}
 
-    // 동기화 기준값 갱신
-    tileIdRenamesRef.current.clear();
-    persistedGridSizeRef.current = boardSize;
-    persistedGoldCardsRef.current = JSON.stringify(goldCards);
+		// 동기화 기준값 갱신
+		tileIdRenamesRef.current.clear();
+		persistedGridSizeRef.current = boardSize;
+		persistedGoldCardsRef.current = JSON.stringify(goldCards);
 
-    // 서버의 최신 상태 갱신
-    const refreshed = await getBoardgame(activeBoardgameId);
-    if (refreshed.success) {
-      const game = refreshed.data;
-      setBoardTilesMap(new Map(game.tiles.map((tile) => [tile.id, tile])));
-      boardTilesMapRef.current = new Map(game.tiles.map((tile) => [tile.id, tile]));
-      setGoldCards(game.gold_cards);
-      setBoardSize({ rows: game.grid_rows, cols: game.grid_cols });
-      persistedGridSizeRef.current = {
-        rows: game.grid_rows,
-        cols: game.grid_cols,
-      };
-      persistedGoldCardsRef.current = JSON.stringify(game.gold_cards);
-      setGridSizeDraft({
-        rows: String(game.grid_rows),
-        cols: String(game.grid_cols),
-      });
-      setBoardRefreshKey((current) => current + 1);
-    }
+		// 서버의 최신 상태 갱신
+		const refreshed = await getBoardgame(activeBoardgameId);
+		if (refreshed.success) {
+			const game = refreshed.data;
+			setBoardTilesMap(new Map(game.tiles.map((tile) => [tile.id, tile])));
+			boardTilesMapRef.current = new Map(
+				game.tiles.map((tile) => [tile.id, tile]),
+			);
+			setGoldCards(game.gold_cards);
+			setBoardSize({ rows: game.grid_rows, cols: game.grid_cols });
+			persistedGridSizeRef.current = {
+				rows: game.grid_rows,
+				cols: game.grid_cols,
+			};
+			persistedGoldCardsRef.current = JSON.stringify(game.gold_cards);
+			setGridSizeDraft({
+				rows: String(game.grid_rows),
+				cols: String(game.grid_cols),
+			});
+			setBoardRefreshKey((current) => current + 1);
+		}
 
-    await refreshBoardgameList();
-    setIsBoardgameBusy(false);
-    return true;
-  };
+		await refreshBoardgameList();
+		setIsBoardgameBusy(false);
+		return true;
+	};
 
-  /**
-   * 선택한 타일을 편집 가능한 상태로 설정하고 잠금을 요청합니다.
-   * 이때, 기존에 편집 중이던 타일이 있다면 변경 사항을 저장하고 잠금을 해제합니다.
-   * @param tileId 편집할 타일의 ID
-   * @returns 
-   */
+	/**
+	 * 선택한 타일을 편집 가능한 상태로 설정하고 잠금을 요청합니다.
+	 * 이때, 기존에 편집 중이던 타일이 있다면 변경 사항을 저장하고 잠금을 해제합니다.
+	 * @param tileId 편집할 타일의 ID
+	 * @returns
+	 */
 	const selectEditableTile = async (tileId: string) => {
-    // 동일한 타일을 다시 클릭한 경우 불필요한 재요청 방지
-    if (tileId === selectedTileId) return;
+		// 동일한 타일을 다시 클릭한 경우 불필요한 재요청 방지
+		if (tileId === selectedTileId) return;
 
-    if (!isEditMode || !activeBoardgameId || !activeBoardgameCanEdit) {
-      selectTile(tileId);
-      return;
-    }
+		if (!isEditMode || !activeBoardgameId || !activeBoardgameCanEdit) {
+			selectTile(tileId);
+			return;
+		}
 
-    if (isBoardgameBusy) return;
+		if (isBoardgameBusy) return;
 
-    // 1. 기존에 잠금을 보유 중인 타일이 있다면 먼저 저장 및 반환
-    if (selectedTileId) {
-      setBoardgameStatus('이전 타일의 변경 사항을 저장하고 잠금을 해제하는 중...');
-      const saved = await saveCurrentChanges();
-      if (!saved) {
-        // 저장이 실패하면 새 타일 선택을 중단하여 작업 유실 방지
-        return;
-      }
-    }
+		// 1. 기존에 잠금을 보유 중인 타일이 있다면 먼저 저장 및 반환
+		if (selectedTileId) {
+			setBoardgameStatus(
+				'이전 타일의 변경 사항을 저장하고 잠금을 해제하는 중...',
+			);
+			const saved = await saveCurrentChanges();
+			if (!saved) {
+				// 저장이 실패하면 새 타일 선택을 중단하여 작업 유실 방지
+				return;
+			}
+		}
 
-    // 2. 새 타일의 편집 잠금 요청
-    setIsBoardgameBusy(true);
-    const result = await acquireBoardgameTileEditLock(activeBoardgameId, tileId);
-    setIsBoardgameBusy(false);
+		// 2. 새 타일의 편집 잠금 요청
+		setIsBoardgameBusy(true);
+		const result = await acquireBoardgameTileEditLock(
+			activeBoardgameId,
+			tileId,
+		);
+		setIsBoardgameBusy(false);
 
-    if (!result.success) {
-      setBoardgameStatus(result.message);
-      return;
-    }
+		if (!result.success) {
+			setBoardgameStatus(result.message);
+			return;
+		}
 
-    // 3. 상태 업데이트 및 새 타일 선택
-    setBoardTilesMap((current) => {
-      const next = new Map(current);
-      const tile = next.get(tileId);
-      if (tile) next.set(tileId, { ...tile, lockedByUserName: result.data });
-      boardTilesMapRef.current = next;
-      return next;
-    });
+		// 3. 상태 업데이트 및 새 타일 선택
+		setBoardTilesMap((current) => {
+			const next = new Map(current);
+			const tile = next.get(tileId);
+			if (tile) next.set(tileId, { ...tile, lockedByUserName: result.data });
+			boardTilesMapRef.current = next;
+			return next;
+		});
 
-    setBoardgameStatus(`타일 ${tileId} 편집 잠금을 확보했습니다.`);
-    selectTile(tileId);
-  };
+		setBoardgameStatus(`타일 ${tileId} 편집 잠금을 확보했습니다.`);
+		selectTile(tileId);
+	};
 	const selectEditableTileRef = useRef<(tileId: string) => void>(() => {});
 	useEffect(() => {
 		selectEditableTileRef.current = (tileId) => void selectEditableTile(tileId);
 	});
 
+	/**
+	 * 편집 모드를 토글합니다.
+	 * 편집 중이었다면, 변경 사항을 저장하고 타일 잠금을 해제합니다.
+	 * @returns 편집 모드 전환 작업의 성공 여부를 나타내는 Promise<boolean>
+	 */
+	const handleToggleEditMode = async () => {
+		if (!isEditMode) {
+			if (!activeBoardgameId || !activeBoardgameCanEdit || isBoardgameBusy)
+				return;
+			if (selectedTileId) {
+				setIsBoardgameBusy(true);
+				const lockResult = await acquireBoardgameTileEditLock(
+					activeBoardgameId,
+					selectedTileId,
+				);
+				setIsBoardgameBusy(false);
+				if (!lockResult.success) {
+					setBoardgameStatus(lockResult.message);
+					return;
+				}
+				setBoardTilesMap((current) => {
+					const next = new Map(current);
+					const tile = next.get(selectedTileId);
+					if (tile) {
+						next.set(selectedTileId, {
+							...tile,
+							lockedByUserName: lockResult.data,
+						});
+					}
+					boardTilesMapRef.current = next;
+					return next;
+				});
+			}
+			editModeRef.current = true;
+			setIsEditMode(true);
+			setBoardgameStatus(
+				'편집할 타일을 선택하세요. 타일 잠금은 선택 시 설정됩니다.',
+			);
+			return;
+		}
 
-/**
- * 편집 모드를 토글합니다.
- * 편집 중이었다면, 변경 사항을 저장하고 타일 잠금을 해제합니다.
- * @returns 편집 모드 전환 작업의 성공 여부를 나타내는 Promise<boolean>
- */
-  const handleToggleEditMode = async () => {
-    if (!isEditMode) {
-      if (!activeBoardgameId || !activeBoardgameCanEdit || isBoardgameBusy) return;
-      if (selectedTileId) {
-        setIsBoardgameBusy(true);
-        const lockResult = await acquireBoardgameTileEditLock(
-          activeBoardgameId,
-          selectedTileId,
-        );
-        setIsBoardgameBusy(false);
-        if (!lockResult.success) {
-          setBoardgameStatus(lockResult.message);
-          return;
-        }
-        setBoardTilesMap((current) => {
-          const next = new Map(current);
-          const tile = next.get(selectedTileId);
-          if (tile) {
-            next.set(selectedTileId, {
-              ...tile,
-              lockedByUserName: lockResult.data,
-            });
-          }
-          boardTilesMapRef.current = next;
-          return next;
-        });
-      }
-      editModeRef.current = true;
-      setIsEditMode(true);
-      setBoardgameStatus('편집할 타일을 선택하세요. 타일 잠금은 선택 시 설정됩니다.');
-      return;
-    }
+		// 편집 모드 종료: 저장 및 상태 정리
+		const saved = await saveCurrentChanges();
+		if (!saved) return;
 
-    // 편집 모드 종료: 저장 및 상태 정리
-    const saved = await saveCurrentChanges();
-    if (!saved) return;
+		editModeRef.current = false;
+		setIsEditMode(false);
+		setIsAddingInnerTile(false);
+		isAddingInnerTileRef.current = false;
+		setIsMovingInnerTile(false);
+		isMovingInnerTileRef.current = false;
+		tileSelectionModeRef.current = null;
+		setTileSelectionMode(null);
+		selectingGoldCardIdRef.current = null;
+		setSelectingGoldCardId(null);
+		selectTile(null);
+		setBoardgameStatus('변경 사항을 저장하고 타일 잠금을 해제했습니다.');
+	};
 
-    editModeRef.current = false;
-    setIsEditMode(false);
-    setIsAddingInnerTile(false);
-    isAddingInnerTileRef.current = false;
-    setIsMovingInnerTile(false);
-    isMovingInnerTileRef.current = false;
-    tileSelectionModeRef.current = null;
-    setTileSelectionMode(null);
-    selectingGoldCardIdRef.current = null;
-    setSelectingGoldCardId(null);
-    selectTile(null);
-    setBoardgameStatus('변경 사항을 저장하고 타일 잠금을 해제했습니다.');
-  };
+	useEffect(() => {
+		// 잠금을 쥐고 있는 상태인지 확인
+		const hasLock = isEditMode && !!selectedTileId;
 
-  useEffect(() => {
-    // 잠금을 쥐고 있는 상태인지 확인
-    const hasLock = isEditMode && !!selectedTileId;
+		const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+			if (!hasLock) return;
 
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (!hasLock) return;
+			// 표준 브라우저 이탈 방지 트리거
+			e.preventDefault();
+			e.returnValue = ''; // Chrome 등에서 필수 설정
+		};
 
-      // 표준 브라우저 이탈 방지 트리거
-      e.preventDefault();
-      e.returnValue = ''; // Chrome 등에서 필수 설정
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [isEditMode, selectedTileId]);
+		window.addEventListener('beforeunload', handleBeforeUnload);
+		return () => {
+			window.removeEventListener('beforeunload', handleBeforeUnload);
+		};
+	}, [isEditMode, selectedTileId]);
 
 	const handleToggleAddingInnerTile = () => {
 		if (isAddingInnerTile) {
@@ -2578,6 +2585,74 @@ export default function DiceArena({
 	};
 
 	const totalScore = scores.reduce((acc, cur) => acc + cur, 0);
+	const diceArenaProps = {
+		game: {
+			state: {
+				teams,
+				currentTeamIndex,
+				teamPositions,
+				teamTileIds,
+				playerTileIndex,
+				scores,
+				totalScore,
+				diceCount,
+				isRolling,
+				isMovingPawn,
+				hasRolledThisGame,
+				pendingTileEvent,
+				eventNotice,
+			},
+			actions: {
+				onRollDice: rollDice,
+				onChangeDiceCount: handleDiceCountChange,
+				onChangeTeamName: handleChangeTeamName,
+				onRestartGame: () => setIsRestartConfirmOpen(true),
+			},
+		},
+		editor: {
+			state: {
+				canEdit: activeBoardgameCanEdit,
+				isEditMode,
+				isBusy: isBoardgameBusy,
+				isAddingInnerTile,
+				isMovingInnerTile,
+				selectedTileId,
+				tileSelectionMode,
+				boardSize,
+				gridSizeDraft,
+				gridSizeError,
+				boardTilesMap,
+			},
+			actions: {
+				setGridSizeDraft,
+				onToggleEditMode: () => void handleToggleEditMode(),
+				onApplyGridSize: applyGridSize,
+				onToggleAddInnerTile: handleToggleAddingInnerTile,
+				onMoveTilePosition: handleMoveTilePosition,
+				onBeginTileSelection: beginTileSelection,
+				onUpdateTile: handleUpdateTile,
+				onDeleteTile: handleDeleteTile,
+				onCloseTileInspector: handleCloseTileInspector,
+			},
+		},
+		goldCard: {
+			state: {
+				cards: goldCards,
+				isManagerOpen: isGoldCardManagerOpen,
+				selectingTargetCardId: selectingGoldCardId,
+			},
+			actions: {
+				setCards: setGoldCards,
+				onToggleManager: () => setIsGoldCardManagerOpen((open) => !open),
+				onSelectTargetCard: selectGoldCardTarget,
+			},
+		},
+		view: {
+			isFullscreen,
+			onToggleFullscreen: () => setIsFullscreen((current) => !current),
+		},
+	};
+
 	return (
 		<>
 			<BoardgameHeader
@@ -2756,55 +2831,7 @@ export default function DiceArena({
 						</div>
 					</div>
 
-					<DiceArenaSidebar
-						activeBoardgameCanEdit={activeBoardgameCanEdit}
-						isFullscreen={isFullscreen}
-						isEditMode={isEditMode}
-						isBusy={isBoardgameBusy}
-						isAddingInnerTile={isAddingInnerTile}
-						isMovingInnerTile={isMovingInnerTile}
-						isGoldCardManagerOpen={isGoldCardManagerOpen}
-						gridSizeDraft={gridSizeDraft}
-						setGridSizeDraft={setGridSizeDraft}
-						gridSizeError={gridSizeError}
-						boardSize={boardSize}
-						isRolling={isRolling}
-						diceCount={diceCount}
-						isMovingPawn={isMovingPawn}
-						pendingTileEvent={pendingTileEvent}
-						eventNotice={eventNotice}
-						goldCards={goldCards}
-						setGoldCards={setGoldCards}
-						boardTilesMap={boardTilesMap}
-						selectingGoldCardId={selectingGoldCardId}
-						teams={teams}
-						hasRolledThisGame={hasRolledThisGame}
-						currentTeamIndex={currentTeamIndex}
-						teamPositions={teamPositions}
-						teamTileIds={teamTileIds}
-						playerTileIndex={playerTileIndex}
-						totalScore={totalScore}
-						scores={scores}
-						selectedTileId={selectedTileId}
-						tileSelectionMode={tileSelectionMode}
-						onToggleEditMode={() => void handleToggleEditMode()}
-						onToggleFullscreen={() => setIsFullscreen((current) => !current)}
-						onApplyGridSize={applyGridSize}
-						onToggleAddInnerTile={handleToggleAddingInnerTile}
-						onToggleGoldCardManager={() =>
-							setIsGoldCardManagerOpen((open) => !open)
-						}
-						onRollDice={rollDice}
-						onChangeDiceCount={handleDiceCountChange}
-						onChangeTeamName={handleChangeTeamName}
-						onRestartGame={() => setIsRestartConfirmOpen(true)}
-						onSelectGoldCardTarget={selectGoldCardTarget}
-						onBeginTileSelection={beginTileSelection}
-						onMoveTilePosition={handleMoveTilePosition}
-						onUpdateTile={handleUpdateTile}
-						onDeleteTile={handleDeleteTile}
-						onCloseTileInspector={handleCloseTileInspector}
-					/>
+					<DiceArenaSidebar props={diceArenaProps} />
 				</div>
 			)}
 			{isRestartConfirmOpen && (
