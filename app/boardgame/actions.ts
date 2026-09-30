@@ -505,5 +505,13 @@ export async function deleteBoardgame(
   const supabase = await createClient();
   const { error } = await supabase.from("boardgames").delete().eq("id", boardgameId);
   if (error) return failure(error.message);
+  const { error: editorError } = await supabase.from("boardgame_editors").delete().eq("boardgame_id", boardgameId);
+  if (editorError) return failure(editorError.message);
+  const { error: nextTileError } = await supabase.from("boardgame_tile_next").delete().eq("boardgame_id", boardgameId);
+  if (nextTileError) return failure(nextTileError.message);
+  const { error: tileError } = await supabase.from("boardgame_tiles").delete().eq("boardgame_id", boardgameId);
+  if (tileError) return failure(tileError.message);
+  const { error: goldCardError } = await supabase.from("boardgame_gold_cards").delete().eq("boardgame_id", boardgameId);
+  if (goldCardError) return failure(goldCardError.message);
   return { success: true, data: null };
 }

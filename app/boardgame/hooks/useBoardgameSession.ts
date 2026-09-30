@@ -13,6 +13,7 @@ import {
 	revokeBoardgameEditor,
 	type BoardgameSnapshot,
 	type BoardgameSummary,
+	deleteBoardgame,
 } from '../actions';
 import { GoldCardData } from '../gold-cards/types';
 import { ArenaRuntime, OrbitSnapshot } from '../types/arena';
@@ -297,6 +298,20 @@ export function useBoardgameSession({
 		setIsBoardgameBusy(false);
 	};
 
+	const handleDeleteBoardgame = async () => {
+		if (!activeBoardgameId) return;
+		setIsBoardgameBusy(true);
+		const result = await deleteBoardgame(activeBoardgameId);
+		if (!result.success) {
+			setBoardgameStatus(result.message);
+			setIsBoardgameBusy(false);
+			return;
+		}
+		await refreshBoardgameList();
+		setBoardgameStatus('보드게임을 삭제했습니다.');
+		setIsBoardgameBusy(false);
+	};
+
 	return {
 		refreshBoardgameList,
 		activeBoardgameEditors,
@@ -304,5 +319,6 @@ export function useBoardgameSession({
 		handleCreatedBoardgame,
 		handleGrantEditor,
 		handleRevokeEditor,
+		handleDeleteBoardgame,
 	};
 }

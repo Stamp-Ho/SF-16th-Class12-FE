@@ -5,6 +5,7 @@ import { Dices, PlusCircle, UsersRound } from 'lucide-react';
 import type { BoardgameSummary } from '../actions';
 import BoardgameCreateModal from './BoardgameCreateModal';
 import BoardgameEditorAccessModal from './BoardgameEditorAccessModal';
+import ConfirmModal from '@/components/ConfirmModal';
 
 export default function BoardgameHeader({
 	boardgames,
@@ -18,6 +19,7 @@ export default function BoardgameHeader({
 	status,
 	onGrantEditor,
 	onRevokeEditor,
+	onDeleteBoardgame,
 }: {
 	boardgames: BoardgameSummary[];
 	activeBoardgameId: string | null;
@@ -30,10 +32,11 @@ export default function BoardgameHeader({
 	status: string;
 	onGrantEditor: (userName: string) => Promise<boolean>;
 	onRevokeEditor: (userName: string) => Promise<void>;
+	onDeleteBoardgame: () => Promise<void>;
 }) {
 	const [isCreateOpen, setIsCreateOpen] = useState(false);
 	const [isEditorAccessOpen, setIsEditorAccessOpen] = useState(false);
-
+	const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 	return (
 		<>
 			<header className="w-full">
@@ -57,6 +60,14 @@ export default function BoardgameHeader({
 								className="flex items-center gap-2 self-start rounded-xl border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-bold text-slate-200 transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40 sm:px-4 sm:py-2.5"
 							>
 								<UsersRound className="h-4 w-4" /> 편집 권한 부여
+							</button>
+							<button
+								type="button"
+								disabled={isBusy || !activeBoardgameId || !activeBoardgameIsMaker}
+								onClick={() => setIsDeleteConfirmOpen(true)}
+								className="flex items-center gap-2 self-start rounded-xl border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-bold text-slate-200 transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40 sm:px-4 sm:py-2.5"
+							>
+								보드게임 삭제
 							</button>
 						</div>
 					)}
@@ -107,6 +118,14 @@ export default function BoardgameHeader({
 					onClose={() => setIsEditorAccessOpen(false)}
 					onGrant={onGrantEditor}
 					onRevoke={onRevokeEditor}
+				/>
+			)}
+			{isDeleteConfirmOpen && (
+				<ConfirmModal
+					message={`보드게임[ ${boardgames.find(game => game.id === activeBoardgameId)?.name} ]을 삭제하시겠습니까?`}
+					warning="삭제하면 되돌릴 수 없습니다."
+					onConfirm={() => { onDeleteBoardgame(); setIsDeleteConfirmOpen(false); }}
+					onCancel={() => setIsDeleteConfirmOpen(false)}
 				/>
 			)}
 		</>

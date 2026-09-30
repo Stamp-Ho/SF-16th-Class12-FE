@@ -388,6 +388,7 @@ export default function DiceArena({
 		handleCreatedBoardgame,
 		handleGrantEditor,
 		handleRevokeEditor,
+		handleDeleteBoardgame,
 	} = useBoardgameSession({
 		supabase,
 		boardgames,
@@ -525,6 +526,7 @@ export default function DiceArena({
 				status={boardgameStatus}
 				onGrantEditor={handleGrantEditor}
 				onRevokeEditor={handleRevokeEditor}
+				onDeleteBoardgame={handleDeleteBoardgame}
 			/>
 
 			{activeBoardgameId && (
