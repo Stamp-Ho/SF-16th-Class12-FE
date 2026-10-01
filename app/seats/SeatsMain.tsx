@@ -50,6 +50,8 @@ export default function SeatsMain({ profile }: { profile: any }) {
   // 돈 표시 여부
   const [showMoney, setShowMoney] = useState(true);
 
+  // 강제 가격 업데이트 가능 여부
+  const [canUpdatePriceForcefully, setCanUpdatePriceForcefully] = useState<boolean>(false);
   // 모달 상태
   const [isModalOpen, setIsModalOpen] = useState(false);
   const selectedRoundNumberRef = useRef<number | null>(null);
@@ -317,6 +319,8 @@ export default function SeatsMain({ profile }: { profile: any }) {
             setScreenShotMode={setScreenShotMode}
             showMoney={showMoney}
             setShowMoney={setShowMoney}
+            canUpdatePriceForcefully={canUpdatePriceForcefully}
+            setCanUpdatePriceForcefully={setCanUpdatePriceForcefully}
           />
         )}
 
@@ -340,6 +344,7 @@ export default function SeatsMain({ profile }: { profile: any }) {
                 roundTitle={selectedRound.title}
                 isClosed={selectedRound.isClosed}
                 updatedSeatSignal={updatedSeatSignal}
+                canUpdatePriceForcefully={canUpdatePriceForcefully}
               />
             </div>
 

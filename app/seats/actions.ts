@@ -592,3 +592,16 @@ export async function resetAllShields(roundId: number) {
   if (error) return failure(error.message);
   return { success: true as const, data: null };
 }
+
+export async function updatePriceForcefully(roundId: number, seatCode: string, newPrice: number) {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("seat_allocations")
+    .update({ bid_price: newPrice, updated_at: new Date() })
+    .eq("round_id", roundId)
+    .eq("seat_code", seatCode);
+
+  if (error) return failure(error.message);
+  return { success: true as const, data: null };
+}

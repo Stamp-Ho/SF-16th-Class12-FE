@@ -20,7 +20,8 @@ import {
   CameraOff,
   Camera,
   DollarSign,
-  ShieldOff
+  ShieldOff,
+  Pencil
 } from "lucide-react";
 
 export default function AdminControlPanel({
@@ -31,7 +32,9 @@ export default function AdminControlPanel({
   screenShotMode,
   setScreenShotMode,
   showMoney,
-  setShowMoney
+  setShowMoney,
+  canUpdatePriceForcefully,
+  setCanUpdatePriceForcefully
 }: {
   roundId: number;
   isClosed: boolean;
@@ -41,6 +44,8 @@ export default function AdminControlPanel({
   setScreenShotMode: (value: boolean) => void;
   showMoney: boolean;
   setShowMoney: (value: boolean) => void;
+  canUpdatePriceForcefully: boolean;
+  setCanUpdatePriceForcefully: (value: boolean) => void;  
 }) {
   const [isPending, startTransition] = useTransition();
   const [isGamblePending, startGambleTransition] = useTransition();
@@ -113,6 +118,11 @@ export default function AdminControlPanel({
         alert(`모든 방패 초기화 에러: ${err.message}`);
       }
     });
+  };
+
+  // 5. 강제 가격 업데이트 토글
+  const handleTogglePriceForce = () => {
+    setCanUpdatePriceForcefully(!canUpdatePriceForcefully);
   };
 
   return (
@@ -206,6 +216,17 @@ export default function AdminControlPanel({
               <ShieldOff className="w-3.5 h-3.5" /> 모두 초기화
             </>
           )}
+        </button>
+
+        {/* 강제 가격 업데이트 버튼 */}
+        <button
+          onClick={handleTogglePriceForce}
+          className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 text-white rounded-xl text-xs font-bold transition-all
+							${canUpdatePriceForcefully ? "bg-rose-600 hover:bg-rose-500" : "bg-emerald-500 hover:bg-emerald-400"}
+						`}
+        >
+          <Pencil className="w-3.5 h-3.5" />{" "}
+          {!canUpdatePriceForcefully ? "가격 변경" : "그만 하기"}
         </button>
 
         {/* 도박 금지/허용 버튼 */}

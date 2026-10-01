@@ -5,14 +5,14 @@ import {
   assignDetailedSeat,
   deleteAllocation,
   placeBid,
-  toggleLockSeat
+  toggleLockSeat,
+  updatePriceForcefully
 } from "./actions";
-import { ArrowLeftRight, Lock, LockOpen, Sparkles, Trash } from "lucide-react";
+import { ArrowLeftRight, Check, Lock, LockOpen, Pencil, Sparkles, Trash } from "lucide-react";
 import BidRecordModal from "./history/BidRecordModal";
 import { getSeatBidTier } from "./utils/shield";
 import { Shield } from "@/assets/icons";
 import ConfirmModal from "@/components/ConfirmModal";
-import { on } from "events";
 
 interface SeatData {
   id: string;
@@ -42,7 +42,8 @@ export default function ClassroomGrid({
   showMoney,
   roundTitle,
   isClosed,
-  updatedSeatSignal
+  updatedSeatSignal,
+  canUpdatePriceForcefully
 }: {
   roundId: number;
   seatList: SeatData[];
@@ -58,6 +59,7 @@ export default function ClassroomGrid({
   roundTitle: string;
   isClosed: boolean;
   updatedSeatSignal: { seatCode: string; sequence: number } | null;
+  canUpdatePriceForcefully: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -69,6 +71,9 @@ export default function ClassroomGrid({
 
   const [bidingSeatCode, setBidingSeatCode] = useState<string | null>(null);
   const [bidingPrice, setBidingPrice] = useState<number | null>(null);
+
+  const [editConfig, setEditConfig] = useState<{ seatCode: string; price: number } | null>(null);
+
   const seatMap = numberPerGroup === 3 ? SEAT_MAP_FOR_3 : SEAT_MAP;
 
   const [myPrice, setMyPrice] = useState<number>(0);
@@ -485,24 +490,45 @@ export default function ClassroomGrid({
           </div>
 
           {/* 하단 가격 */}
-          <div className="flex justify-between items-end text-[6px] sm:text-[10px] h-2 sm:h-3.75">
-            <span className="font-bold font-mono">
-              {showMoney
-                ? seatInfo.current_bid_price
-                  ? `${seatInfo.current_bid_price.toLocaleString()}원`
-                  : "0원"
-                : ""}
-            </span>
-            <span className="font-bold text-[6px] sm:text-[10px]">
-              {!screenShotMode && !hideDetails && seatInfo.updated_at
-                ? getTime(seatInfo.updated_at)
-                : ""}
-            </span>
-          </div>
+          {editConfig && editConfig.seatCode === tile.code ? (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="bg-black rounded-full flex items-center justify-center w-12"
+            >
+              <input
+                type="text"
+                value={editConfig.price}
+                onChange={(e) => {
+                  if(Number(e.target.value) < 0 || isNaN(Number(e.target.value)) || Number(e.target.value) > 99999) return;
+                  setEditConfig({
+                    ...editConfig,
+                    price: Number(e.target.value),
+                  })
+                }}
+                className="w-14 text-center text-white text-[10px] font-bold focus:outline-none"
+              />
+            </div>
+          ) : (
+            <div className="flex justify-between items-end text-[6px] sm:text-[10px] h-2 sm:h-3.75">
+              <span className="font-bold font-mono">
+                {showMoney
+                  ? seatInfo.current_bid_price
+                    ? `${seatInfo.current_bid_price.toLocaleString()}원`
+                    : "0원"
+                  : ""}
+              </span>
+              <span className="font-bold text-[6px] sm:text-[10px]">
+                {!screenShotMode && !hideDetails && seatInfo.updated_at
+                  ? getTime(seatInfo.updated_at)
+                  : ""}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* 스위치 (<->) 버튼 */}
         {!screenShotMode &&
+          !canUpdatePriceForcefully &&
           canSwap &&
           !seatInfo.is_locked &&
           position !== "left" && (
@@ -527,11 +553,65 @@ export default function ClassroomGrid({
             </button>
           )}
         {!screenShotMode &&
+              isAdmin &&
+          canUpdatePriceForcefully &&
+          position === "middle" &&
+          seatInfo.current_group_id !== null && (
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+
+                if (!editConfig || editConfig.seatCode !== tile.code) {
+                  setEditConfig({
+                    seatCode: tile.code,
+                    price: seatInfo.current_bid_price
+                  });
+                  return;
+                }
+
+                startTransition(async () => {
+                  try {
+                    const result = await updatePriceForcefully(
+                      roundId,
+                      editConfig.seatCode,
+                      editConfig.price
+                    );
+                    if (!result.success) {
+                      alert(`가격 수정 실패: ${result.message}`);
+                      return;
+                    }
+                    setEditConfig(null);
+                    await loadData();
+                  } catch (err: any) {
+                    alert(`가격 수정 실패: ${err.message}`);
+                  }
+                });
+              }}
+              className={`absolute bottom-0 right-0 p-0.5 sm:p-1 rounded-full border sm:border-2 transition-colors cursor-pointer ${colorClass
+                .replace("bg-", "bg-white ")
+                .replace("text-", "text-slate-900 ")
+                .replace("ring-3", "ring-2")}`}
+              title={editConfig?.seatCode === tile.code ? "가격 수정 완료" : "가격 수정"}
+            >
+              {editConfig?.seatCode === tile.code ? (
+                <span className="flex items-center gap-0.5 text-[8px] sm:text-[10px] font-bold">
+                  <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                </span>
+              ) : (
+                <Pencil className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+              )}
+            </button>
+        )}
+        {!screenShotMode &&
           !hideDetails &&
           isAdmin &&
           seatInfo &&
           seatInfo.current_group_id !== null &&
           position === "middle" && (
+            canUpdatePriceForcefully ?null:
             <>
               {
                 <button
