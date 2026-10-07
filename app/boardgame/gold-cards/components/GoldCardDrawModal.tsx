@@ -44,7 +44,7 @@ export default function GoldCardDrawModal({ card, teamNames, actorTeamIndex, sel
 				<div className="mt-5 flex gap-2">
 					{!card && <button type="button" onClick={onApply} className="flex-1 rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-black text-slate-950 hover:bg-amber-300">완료</button>}
 					{card?.event.type === 'MOVE_PAWN_CHOOSE' && <button type="button" onClick={onChooseTarget} className="flex-1 rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-black text-slate-950 hover:bg-amber-300">이동 위치 선택</button>}
-					{card?.event.type === 'SWAP_POSITIONS_CHOOSE' && <div className="flex flex-1 flex-row gap-2 px-2.5">{teamNames.map((name, teamIndex) => teamIndex !== actorTeamIndex && <button key={name} type="button" onClick={() => onChooseSwapTeam(teamIndex)} className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-black text-slate-950 hover:bg-amber-300 flex-1">{name}</button>)}</div>}
+					{card?.event.type === 'SWAP_POSITIONS_CHOOSE' && <div className="flex flex-1 flex-col gap-2 px-2.5">{teamNames.map((name, teamIndex) => teamIndex !== actorTeamIndex && <button key={name} type="button" onClick={() => onChooseSwapTeam(teamIndex)} className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-black text-slate-950 hover:bg-amber-300 flex-1">{name}</button>)}</div>}
 					{card && (card.event.type === 'MOVE_PAWN_SPECIFIED' || card.event.type === 'TEXT') && <button type="button" onClick={onApply} className="flex-1 rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-black text-slate-950 hover:bg-amber-300">카드 적용</button>}
 				</div>
 			</div>

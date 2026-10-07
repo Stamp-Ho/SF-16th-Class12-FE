@@ -8,7 +8,7 @@ const TEAM_PAWN_OFFSETS = [
 	{ x: -0.9, z: 0.9 },
 	{ x: 0.9, z: 0.9 },
 ];
-export const DEFAULT_TEAM_NAMES = ['팀 1', '팀 2', '팀 3', '팀 4'];
+export const DEFAULT_TEAM_NAMES = ['7공주', '이상은이상해', '쉬고오3', '전전승현입니다.'];
 export const TEAM_COLORS = ['#38bdf8', '#fbbf24', '#f472b6', '#a78bfa'];
 export const BOARD_SURFACE_Y = 0.4;
 // 타일 윗면(0.4)에 폰 받침의 반높이(0.15)를 더해 바닥을 맞춘다.
