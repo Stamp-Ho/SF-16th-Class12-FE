@@ -74,8 +74,6 @@ export interface ArenaSceneParams {
 	onEditableTileRenamedRef: RefObject<(tileId: string) => void>;
 	setIsBoardReady: Dispatch<SetStateAction<boolean>>;
 	setBoardTilesMap: Dispatch<SetStateAction<Map<string, BoardTileData>>>;
-	setIsRolling: Dispatch<SetStateAction<boolean>>;
-	setScores: Dispatch<SetStateAction<number[]>>;
 	setTileSelectionMode: Dispatch<SetStateAction<TileSelectionMode>>;
 	setGoldCards: Dispatch<SetStateAction<GoldCardData[]>>;
 	setSelectingGoldCardId: Dispatch<SetStateAction<string | null>>;
@@ -85,7 +83,7 @@ export interface ArenaSceneParams {
 	setIsAddingInnerTile: Dispatch<SetStateAction<boolean>>;
 	setSelectedTileId: Dispatch<SetStateAction<string | null>>;
 	applyDrawnGoldCard: (choice?: { tileId?: string; teamIndex?: number }) => void;
-	movePawnSteps: (steps: number) => void;
+	handleDiceSettled: (scores: number[]) => void;
 	selectTile: (tileId: string | null) => void;
 	syncDiceCount: (count: number) => void;
 }
@@ -128,8 +126,6 @@ export function useArenaScene({
 	onEditableTileRenamedRef,
 	setIsBoardReady,
 	setBoardTilesMap,
-	setIsRolling,
-	setScores,
 	setTileSelectionMode,
 	setGoldCards,
 	setSelectingGoldCardId,
@@ -139,7 +135,7 @@ export function useArenaScene({
 	setIsAddingInnerTile,
 	setSelectedTileId,
 	applyDrawnGoldCard,
-	movePawnSteps,
+	handleDiceSettled,
 	selectTile,
 	syncDiceCount,
 }: ArenaSceneParams) {
@@ -312,7 +308,6 @@ export function useArenaScene({
 
 		// 7. 애니메이션 & 렌더 루프
 		let lastCallTime = performance.now();
-		let hasTriggeredMove = false;
 
 		const animate = () => {
 			const time = performance.now();
@@ -333,18 +328,8 @@ export function useArenaScene({
 			const { allSleeping, currentValues } = syncDiceMeshes(diceList);
 
 			if (allSleeping && isRollingRef.current) {
-				isRollingRef.current = false;
-				setIsRolling(false);
-				setScores(currentValues);
-
-				// 주사위가 멈추었을 때 1회 말 이동 트리거
-				if (!hasTriggeredMove) {
-					hasTriggeredMove = true;
-					const sum = currentValues.reduce((a, b) => a + b, 0);
-					movePawnSteps(sum);
-				}
-			} else {
-				hasTriggeredMove = false;
+				// 일반 턴과 타일 이동 효과의 정지 후 처리를 게임 진행 훅에 맡긴다.
+				handleDiceSettled(currentValues);
 			}
 
 			renderer.render(scene, camera);
@@ -570,9 +555,8 @@ export function useArenaScene({
 		applyDrawnGoldCard,
 		boardRefreshKey,
 		boardSize,
-		movePawnSteps,
+		handleDiceSettled,
 		diceCountRef,
-		setScores,
 		setTeamPositions,
 		setTeamTileIds,
 		teamPositionsRef,

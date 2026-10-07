@@ -16,6 +16,7 @@ import { executeGoldCardEvent } from '../gold-cards/utils/events';
 import { TileSelectionMode } from '../types/DiceArenaProps';
 import { ArenaRuntime } from '../types/arena';
 import { TEAM_COLORS, getPawnPosition } from '../utils/arena';
+import { launchDice } from '../utils/arenaDice';
 import {
 	animatePawnHop,
 	innerTileToBoardTile,
@@ -129,6 +130,7 @@ export function useGamePlay({
 	teamTileIdsRef,
 	tileSelectionModeRef,
 }: GamePlayParams) {
+	const effectDiceMoveRef = useRef<{ direction: 1 | -1; teamIndex: number } | null>(null);
 	const selectTileRef = useRef(selectTile);
 	const warpArrivalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const pendingSkipTurnRef = useRef<{ teamIndex: number; notice: { title: string; message: string } } | null>(null);
@@ -423,6 +425,75 @@ export function useGamePlay({
 		],
 	);
 
+	const syncDiceCount = useCallback((count: number) => {
+		if (!runtimeRef.current) return;
+		const { scene, world, diceList, diceTemplate } = runtimeRef.current;
+
+		while (diceList.length > count) {
+			const removed = diceList.pop();
+			if (removed) {
+				scene.remove(removed.mesh);
+				world.removeBody(removed.body);
+			}
+		}
+
+		const boxShape = new CANNON.Box(new CANNON.Vec3(0.5, 0.5, 0.5));
+		while (diceList.length < count) {
+			const mesh = diceTemplate.group.clone(true);
+			mesh.visible = !editModeRef.current;
+			scene.add(mesh);
+
+			const body = new CANNON.Body({
+				mass: 1.0,
+				shape: boxShape,
+				sleepTimeLimit: 0.1,
+				sleepSpeedLimit: 0.15,
+			});
+
+			body.position.set(
+				(Math.random() - 0.5) * 2,
+				5 + diceList.length * 1.2,
+				(Math.random() - 0.5) * 2,
+			);
+			world.addBody(body);
+
+			diceList.push({
+				body,
+				isSleeping: false,
+				lastValue: 1,
+				mesh,
+			});
+		}
+	}, [editModeRef, runtimeRef]);
+
+	const startDiceRoll = useCallback((count: number) => {
+		if (!runtimeRef.current || isRollingRef.current) return false;
+		syncDiceCount(count);
+		const runtime = runtimeRef.current;
+		if (runtime.diceList.length !== count) return false;
+		hasRolledThisGameRef.current = true;
+		setHasRolledThisGame(true);
+		isRollingRef.current = true;
+		setIsRolling(true);
+		setScores([]);
+		launchDice(runtime);
+		return true;
+	}, [hasRolledThisGameRef, isRollingRef, runtimeRef, setHasRolledThisGame, setIsRolling, setScores, syncDiceCount]);
+
+	const handleDiceSettled = useCallback((scores: number[]) => {
+		if (!isRollingRef.current) return;
+		isRollingRef.current = false;
+		setIsRolling(false);
+		setScores(scores);
+		const effectMove = effectDiceMoveRef.current;
+		effectDiceMoveRef.current = null;
+		if (effectMove) {
+			movePawnSteps(effectMove.direction * scores[0], effectMove.teamIndex, false);
+		} else {
+			movePawnSteps(scores.reduce((sum, value) => sum + value, 0));
+		}
+	}, [isRollingRef, movePawnSteps, setIsRolling, setScores]);
+
 	const executePendingTileEvent = useCallback(() => {
 		if (!pendingTileEvent) return;
 
@@ -442,13 +513,18 @@ export function useGamePlay({
 					message: `도착 턴 이후 자신의 차례 ${turns}번 동안 술 마시기 벌칙을 수행하고 턴을 넘깁니다.`,
 				});
 			},
-			movePawnSteps: (steps) => movePawnSteps(steps, teamIndex, false),
+			movePawnSteps: (steps) => {
+				if (!Number.isInteger(steps) || steps === 0 || isRollingRef.current) return;
+				selectTileRef.current(null);
+				effectDiceMoveRef.current = { direction: steps < 0 ? -1 : 1, teamIndex };
+				if (!startDiceRoll(1)) effectDiceMoveRef.current = null;
+			},
 			teleportPawnToTile: (targetTileId) => warpTeamPawnToTile(teamIndex, targetTileId),
 			openGoldCardModal,
 			openChoiceModal: () => undefined,
 			showToast: (title, message) => {
-				if (tileEvent.action.type === 'TELEPORT') {
-					// 목적지 이벤트 팝업을 워프 안내 팝업이 가리지 않도록 한다.
+				if (tileEvent.action.type === 'TELEPORT' || tileEvent.action.type === 'MOVE_STEPS') {
+					// 안내 모달이 주사위 연출이나 목적지 이벤트 팝업을 가리지 않도록 한다.
 					setBoardgameStatus(`${title}: ${message}`);
 				} else {
 					setEventNotice({ title, message });
@@ -456,7 +532,8 @@ export function useGamePlay({
 			},
 		});
 	}, [
-		movePawnSteps,
+		startDiceRoll,
+		isRollingRef,
 		openGoldCardModal,
 		pendingTileEvent,
 		lastMovedTeamIndexRef,
@@ -541,72 +618,21 @@ export function useGamePlay({
 			setEventNotice(notice);
 			return;
 		}
-		const { diceList, orbit } = runtimeRef.current;
-
-		hasRolledThisGameRef.current = true;
-		setHasRolledThisGame(true);
-		setIsRolling(true);
-		isRollingRef.current = true;
-		setScores([]);
-
-		const forwardX = -Math.sin(orbit.theta);
-		const forwardZ = -Math.cos(orbit.theta);
-
-		diceList.forEach((dice, idx) => {
-			dice.body.wakeUp();
-			dice.isSleeping = false;
-
-			// 중앙 주사위 링 구역으로 드롭
-			dice.body.position.set(
-				(Math.random() - 0.5) * 2,
-				6 + idx * 1.5,
-				(Math.random() - 0.5) * 2,
-			);
-			dice.body.velocity.setZero();
-			dice.body.angularVelocity.setZero();
-
-			dice.body.quaternion.setFromEuler(
-				Math.random() * Math.PI * 2,
-				Math.random() * Math.PI * 2,
-				Math.random() * Math.PI * 2,
-			);
-
-			const force = 5.5 + Math.random() * 4;
-			dice.body.applyImpulse(
-				new CANNON.Vec3(
-					forwardX * force + (Math.random() - 0.5) * 3,
-					-4 - Math.random() * 3,
-					forwardZ * force + (Math.random() - 0.5) * 3,
-				),
-				new CANNON.Vec3(
-					(Math.random() - 0.5) * 0.3,
-					0.4,
-					(Math.random() - 0.5) * 0.3,
-				),
-			);
-
-			dice.body.angularVelocity.set(
-				(Math.random() - 0.5) * 25,
-				(Math.random() - 0.5) * 25,
-				(Math.random() - 0.5) * 25,
-			);
-		});
+		startDiceRoll(diceCountRef.current);
 	}, [
 		eventNotice,
 		isMovingPawn,
 		pendingTileEvent,
-		hasRolledThisGameRef,
-		setHasRolledThisGame,
-		setScores,
 		isRollingRef,
 		runtimeRef,
-		setIsRolling,
 		currentTeamIndexRef,
 		teamSkipTurnsRef,
 		editModeRef,
 		setEventNotice,
 		drawnGoldCardRef,
 		tileSelectionModeRef,
+		startDiceRoll,
+		diceCountRef,
 	]);
 
 	useEffect(() => {
@@ -644,6 +670,9 @@ export function useGamePlay({
 	]);
 
 	const handleRestartGame = () => {
+		effectDiceMoveRef.current = null;
+		isRollingRef.current = false;
+		setIsRolling(false);
 		pendingSkipTurnRef.current = null;
 		if (warpArrivalTimerRef.current !== null) {
 			clearTimeout(warpArrivalTimerRef.current);
@@ -679,46 +708,6 @@ export function useGamePlay({
 	};
 
 	// 주사위 개수 변경
-	const syncDiceCount = (count: number) => {
-		if (!runtimeRef.current) return;
-		const { scene, world, diceList, diceTemplate } = runtimeRef.current;
-
-		while (diceList.length > count) {
-			const removed = diceList.pop();
-			if (removed) {
-				scene.remove(removed.mesh);
-				world.removeBody(removed.body);
-			}
-		}
-
-		const boxShape = new CANNON.Box(new CANNON.Vec3(0.5, 0.5, 0.5));
-		while (diceList.length < count) {
-			const mesh = diceTemplate.group.clone(true);
-			mesh.visible = !editModeRef.current;
-			scene.add(mesh);
-
-			const body = new CANNON.Body({
-				mass: 1.0,
-				shape: boxShape,
-				sleepTimeLimit: 0.1,
-				sleepSpeedLimit: 0.15,
-			});
-
-			body.position.set(
-				(Math.random() - 0.5) * 2,
-				5 + diceList.length * 1.2,
-				(Math.random() - 0.5) * 2,
-			);
-			world.addBody(body);
-
-			diceList.push({
-				body,
-				isSleeping: false,
-				lastValue: 1,
-				mesh,
-			});
-		}
-	};
 
 	const handleDiceCountChange = (nextCount: number) => {
 		if (
@@ -736,6 +725,7 @@ export function useGamePlay({
 
 	return {
 		movePawnSteps,
+		handleDiceSettled,
 		applyDrawnGoldCard,
 		syncDiceCount,
 		rollDice,

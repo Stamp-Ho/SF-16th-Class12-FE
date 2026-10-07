@@ -38,7 +38,7 @@ export default function TileInspector({
 		onUpdate({
 			action: {
 				type,
-				params: type === 'MOVE_STEPS' ? { steps: 2 } : type === 'SKIP_TURNS' ? { turns: 1 } : {},
+				params: type === 'MOVE_STEPS' ? { steps: 1 } : type === 'SKIP_TURNS' ? { turns: 1 } : {},
 			},
 		});
 	};
@@ -201,7 +201,7 @@ export default function TileInspector({
 					className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
 				>
 					<option value="NONE">일반 칸 (액션 없음)</option>
-					<option value="MOVE_STEPS">칸 이동 (앞으로/뒤로)</option>
+					<option value="MOVE_STEPS">주사위 눈만큼 이동 (앞으로/뒤로)</option>
 					<option value="DIRECTION_CHANGE">방향 전환</option>
 					<option value="TELEPORT">특정 타일로 워프</option>
 					<option value="DRAW_GOLD_CARD">황금카드 뽑기</option>
@@ -231,11 +231,10 @@ export default function TileInspector({
 				{tile.action.type === 'MOVE_STEPS' && (
 					<div className="bg-slate-800/60 p-2.5 rounded-lg border border-slate-700/50 flex flex-col gap-1.5 mt-1">
 						<span className="text-[11px] text-slate-400">
-							이동할 칸 수 (음수는 뒤로)
+							이동 방향 (주사위 1개의 눈만큼 이동)
 						</span>
-						<input
-							type="number"
-							value={tile.action.params?.steps ?? 2}
+						<select
+							value={(tile.action.params?.steps ?? 1) < 0 ? -1 : 1}
 							onChange={(e) =>
 								onUpdate({
 									action: {
@@ -248,7 +247,10 @@ export default function TileInspector({
 								})
 							}
 							className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
-						/>
+						>
+							<option value={1}>앞으로 이동</option>
+							<option value={-1}>뒤로 이동</option>
+						</select>
 					</div>
 				)}
 

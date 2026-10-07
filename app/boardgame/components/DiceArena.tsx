@@ -265,7 +265,7 @@ export default function DiceArena({
 		resetTeamsToStart,
 	});
 	const {
-		movePawnSteps,
+		handleDiceSettled,
 		applyDrawnGoldCard,
 		syncDiceCount,
 		rollDice,
@@ -379,8 +379,6 @@ export default function DiceArena({
 		selectEditableTileRef,
 		setIsBoardReady,
 		setBoardTilesMap,
-		setIsRolling,
-		setScores,
 		setTileSelectionMode,
 		setGoldCards,
 		setSelectingGoldCardId,
@@ -390,7 +388,7 @@ export default function DiceArena({
 		setIsAddingInnerTile,
 		setSelectedTileId,
 		applyDrawnGoldCard,
-		movePawnSteps,
+		handleDiceSettled,
 		selectTile,
 		syncDiceCount,
 	});

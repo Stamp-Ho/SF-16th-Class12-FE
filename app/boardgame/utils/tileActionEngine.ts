@@ -24,15 +24,16 @@ export function executeTileAction(
 			}
 			break;
 
-		case 'MOVE_STEPS':
-			if (params?.steps) {
-				ctx.showToast(
-					'이동 효과',
-					`${params.steps > 0 ? '앞으로' : '뒤로'} ${Math.abs(params.steps)}칸 이동합니다!`,
-				);
-				ctx.movePawnSteps(params.steps);
-			}
+		case 'MOVE_STEPS': {
+			// 이전에 저장한 칸 수는 부호만 사용한다. 값이 없으면 앞으로 이동한다.
+			const direction = (params?.steps ?? 1) < 0 ? -1 : 1;
+			ctx.showToast(
+				'이동 효과',
+				`주사위 1개를 굴려 나온 눈만큼 ${direction > 0 ? '앞으로' : '뒤로'} 이동합니다!`,
+			);
+			ctx.movePawnSteps(direction);
 			break;
+		}
 
 		case 'TELEPORT':
 			if (params?.targetTileId) {

@@ -43,7 +43,7 @@ export default function TileEventPopup({
 					{tile.action.type === 'NONE' ? null : (
 						<p className="whitespace-pre-wrap text-sm font-semibold text-slate-200">
 							{tile.action.type === 'MOVE_STEPS'
-								? `${Math.abs(tile.action.params?.steps ?? 0)}칸 이동합니다.`
+								? `주사위 1개를 굴려 나온 눈만큼 ${Number(tile.action.params?.steps ?? 0) < 0 ? '뒤로' : '앞으로'} 이동합니다.`
 								: tile.action.type === 'SKIP_TURNS'
 									? `다음 자신의 차례부터 ${tile.action.params?.turns ?? 1}턴 동안 술 마시기 벌칙 후 턴을 넘깁니다.`
 								: '이 타일의 이벤트를 실행합니다.'}
@@ -52,7 +52,7 @@ export default function TileEventPopup({
 					{tile.action.type === 'MOVE_STEPS' ? (
 						<p className="whitespace-pre-wrap text-sm font-bold text-amber-300">
 							{countdown !== null
-								? `${countdown}초 후 실행`
+								? `${countdown}초 후 주사위를 굴립니다.`
 								: '이동 중'}
 						</p>
 					) : null}
