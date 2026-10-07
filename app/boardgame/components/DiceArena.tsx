@@ -202,6 +202,11 @@ export default function DiceArena({
 
 	const {
 		selectTile,
+		isEditLockBlocked,
+		canEditBoardRef,
+		canEditSelectedTile,
+		canEditSelectedTileRef,
+		onEditableTileRenamedRef,
 		handleUpdateTile,
 		handleDeleteTile,
 		switchView,
@@ -341,6 +346,9 @@ export default function DiceArena({
 	};
 
 	useArenaScene({
+		onEditableTileRenamedRef,
+		canEditBoardRef,
+		canEditSelectedTileRef,
 		activeBoardgameId,
 		boardRefreshKey,
 		boardSize,
@@ -469,6 +477,8 @@ export default function DiceArena({
 				canEdit: activeBoardgameCanEdit,
 				isEditMode,
 				isBusy: isBoardgameBusy,
+				isLockBlocked: isEditLockBlocked,
+				canEditSelectedTile,
 				isAddingInnerTile,
 				isMovingInnerTile,
 				selectedTileId,

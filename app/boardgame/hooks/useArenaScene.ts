@@ -69,6 +69,9 @@ export interface ArenaSceneParams {
 	teamTileIdsRef: RefObject<string[]>;
 	teamPositionsRef: RefObject<number[]>;
 	selectEditableTileRef: RefObject<(tileId: string) => void>;
+	canEditBoardRef: RefObject<() => boolean>;
+	canEditSelectedTileRef: RefObject<() => boolean>;
+	onEditableTileRenamedRef: RefObject<(tileId: string) => void>;
 	setIsBoardReady: Dispatch<SetStateAction<boolean>>;
 	setBoardTilesMap: Dispatch<SetStateAction<Map<string, BoardTileData>>>;
 	setIsRolling: Dispatch<SetStateAction<boolean>>;
@@ -120,6 +123,9 @@ export function useArenaScene({
 	teamTileIdsRef,
 	teamPositionsRef,
 	selectEditableTileRef,
+	canEditBoardRef,
+	canEditSelectedTileRef,
+	onEditableTileRenamedRef,
 	setIsBoardReady,
 	setBoardTilesMap,
 	setIsRolling,
@@ -362,6 +368,7 @@ export function useArenaScene({
 
 		// 캔버스 클릭(드래그 없이 5픽셀 미만 이동) 시 타일·내부 격자 피킹
 		const handleCanvasClick = (clientX: number, clientY: number) => {
+			if (editModeRef.current && !canEditBoardRef.current()) return;
 			if (!containerRef.current) return;
 			//(dist < 5 && editModeRef.current && containerRef.current) {
 			const rect = containerRef.current.getBoundingClientRect();
@@ -411,6 +418,7 @@ export function useArenaScene({
 					tileId !== sourceId
 				) {
 					const sourceTile = boardTilesMapRef.current.get(sourceId);
+					if (!canEditSelectedTileRef.current()) return;
 					if (sourceTile) {
 						const updatedTile = withTileLinkTarget(
 							sourceTile,
@@ -456,6 +464,7 @@ export function useArenaScene({
 					);
 					const movingTileId = selectedTileIdRef.current;
 					if (isMovingInnerTileRef.current && movingTileId) {
+						if (!canEditSelectedTileRef.current()) return;
 						const selectedTile = boardTilesMapRef.current.get(movingTileId);
 						if (selectedTile?.category === 'INNER' && !isOccupied) {
 							const newTileId = id;
@@ -488,6 +497,7 @@ export function useArenaScene({
 								tileMeshMapRef.current.set(newTileId, tileMesh);
 							}
 							setIsMovingInnerTile(false);
+							onEditableTileRenamedRef.current(newTileId);
 							selectTile(newTileId);
 						}
 					} else if (!isMovingInnerTileRef.current && !isOccupied) {
@@ -506,7 +516,7 @@ export function useArenaScene({
 						const cellOutline = innerCellOutlineMapRef.current.get(id);
 						if (cellOutline) cellOutline.visible = false;
 						setIsAddingInnerTile(false);
-						selectTile(id);
+						selectEditableTileRef.current(innerTile.id);
 					}
 				} else {
 					selectTile(null);

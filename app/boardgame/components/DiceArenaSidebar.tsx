@@ -30,7 +30,7 @@ export default function DiceArenaSidebar({
 			<div className="grid grid-cols-2 gap-2">
 				<button
 					type="button"
-					disabled={editorState.isBusy || !editorState.canEdit || gameState.hasPendingGoldCard}
+					disabled={editorState.isBusy || editorState.isLockBlocked || !editorState.canEdit || gameState.hasPendingGoldCard}
 					onClick={editorActions.onToggleEditMode}
 					className={`rounded-lg border px-3 py-2 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
 						editorState.isEditMode
@@ -50,6 +50,12 @@ export default function DiceArenaSidebar({
 				</button>
 			</div>
 
+			{editorState.isLockBlocked && (
+				<p role="alert" className="text-xs leading-5 text-amber-300">
+					편집 잠금을 확인할 수 없어 입력과 저장을 중단했습니다. 작성한 내용은 유지됩니다.
+				</p>
+			)}
+			<fieldset disabled={editorState.isLockBlocked} className="contents">
 			{editorState.isEditMode && (
 				<section className="space-y-3 rounded-xl border border-slate-700 bg-slate-950/50 p-3">
 					<div>
@@ -150,6 +156,7 @@ export default function DiceArenaSidebar({
 				/>
 			)}
 
+			</fieldset>
 			{!editorState.isEditMode ? (
 				<>
 					<div className="flex items-center justify-between">
@@ -322,6 +329,7 @@ export default function DiceArenaSidebar({
 					</button>
 				</>
 			) : editorState.selectedTileId ? (
+				<fieldset disabled={!editorState.canEditSelectedTile} className="contents">
 				<TileInspector
 					tile={
 						editorState.boardTilesMap.get(editorState.selectedTileId) || null
@@ -345,6 +353,7 @@ export default function DiceArenaSidebar({
 					onDelete={editorActions.onDeleteTile}
 					onClose={editorActions.onCloseTileInspector}
 				/>
+				</fieldset>
 			) : (
 				<div>선택된 타일이 없습니다.</div>
 			)}

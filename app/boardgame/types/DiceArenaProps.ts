@@ -48,6 +48,8 @@ export interface BoardEditorDomain {
 		canEdit: boolean;
 		isEditMode: boolean;
 		isBusy: boolean;
+		isLockBlocked: boolean;
+		canEditSelectedTile: boolean;
 		isAddingInnerTile: boolean;
 		isMovingInnerTile: boolean;
 		selectedTileId: string | null;

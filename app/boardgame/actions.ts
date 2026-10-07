@@ -7,7 +7,7 @@ import type { GoldCardData, GoldCardEventType } from "./gold-cards/types";
 
 export type BoardgameResult<T> =
   | { success: true; data: T }
-  | { success: false; message: string };
+  | { success: false; message: string; code?: string };
 
 export interface BoardgameSummary {
   id: string;
@@ -29,9 +29,10 @@ export interface BoardgameSnapshot {
   gold_cards: GoldCardData[];
 }
 
-const failure = <T = never>(message: string): BoardgameResult<T> => ({
+const failure = <T = never>(message: string, code?: string): BoardgameResult<T> => ({
   success: false,
   message,
+  ...(code ? { code } : {}),
 });
 
 async function getActor() {
@@ -244,6 +245,8 @@ export async function saveBoardgame(input: {
   goldCards: GoldCardData[];
   saveGridSize?: boolean;
   saveGoldCards?: boolean;
+  editSessionId: string;
+  lockedTileId: string | null;
   tileIdRenames?: Array<{ from: string; to: string }>;
 }): Promise<BoardgameResult<null>> {
   const actor = await getActor();
@@ -286,181 +289,46 @@ export async function saveBoardgame(input: {
     }
   }
 
-  if (input.saveGridSize) {
-    const { error: gameError } = await supabase
-      .from("boardgames")
-      .update({
-        grid_rows: input.gridRows,
-        grid_cols: input.gridCols,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", input.id);
-    if (gameError) return failure(gameError.message);
-  }
-
-  const { data: storedTiles, error: storedTilesError } = await supabase
-    .from("boardgame_tiles")
-    .select("id, locked_by_user_name")
-    .eq("boardgame_id", input.id);
-  if (storedTilesError) return failure(storedTilesError.message);
-  const storedById = new Map((storedTiles ?? []).map((tile) => [tile.id, tile]));
-  const ownedTileIds = new Set(
-    (storedTiles ?? [])
-      .filter((tile) => tile.locked_by_user_name === actor.userName)
-      .map((tile) => tile.id),
-  );
-  const tilesToSave = input.tiles.filter(
-    (tile) => ownedTileIds.has(tile.id) || !storedById.has(tile.id),
-  );
-  const tileRows = tilesToSave.map((tile) => ({
-    boardgame_id: input.id,
-    id: tile.id,
-    category: tile.category,
-    grid_row: tile.gridR,
-    grid_col: tile.gridC,
-    label: tile.label,
-    sub_label: tile.subLabel ?? "",
-    color: tile.color ?? null,
-    text_color: tile.textColor ?? null,
-    icon: tile.icon ?? null,
-    action_type: tile.action.type,
-    action_params: tile.action.params ?? {},
-    is_locked: tile.isLocked ?? false,
-  }));
-
-  if (tileRows.length) {
-    const { error } = await supabase
-      .from("boardgame_tiles")
-      .upsert(tileRows, { onConflict: "boardgame_id,id" });
-    if (error) return failure(error.message);
-  }
-
-  for (const rename of input.tileIdRenames ?? []) {
-    if (rename.from === rename.to) continue;
-    const { error } = await supabase
-      .from("boardgame_tile_next")
-      .update({ target_tile_id: rename.to })
-      .eq("boardgame_id", input.id)
-      .eq("target_tile_id", rename.from);
-    if (error) return failure(error.message);
-  }
-
-  const removedTileIds = [...ownedTileIds].filter((id) => !tileIds.has(id));
-  const savedSourceIds = new Set(tilesToSave.map((tile) => tile.id));
-  const clearSourceIds = [...savedSourceIds].filter((id) => storedById.has(id));
-  if (clearSourceIds.length) {
-    const { error: clearLinksError } = await supabase
-      .from("boardgame_tile_next")
-      .delete()
-      .eq("boardgame_id", input.id)
-      .in("source_tile_id", clearSourceIds);
-    if (clearLinksError) return failure(clearLinksError.message);
-  }
-
-  const linkRows = tilesToSave.flatMap((tile) =>
-    tile.nextTileIds.map((targetTileId, sortOrder) => ({
-      boardgame_id: input.id,
-      source_tile_id: tile.id,
-      target_tile_id: targetTileId,
-      sort_order: sortOrder,
-    })),
-  );
-  if (linkRows.length) {
-    const { error } = await supabase.from("boardgame_tile_next").insert(linkRows);
-    if (error) return failure(error.message);
-  }
-
-  if (removedTileIds.length) {
-    const { error } = await supabase
-      .from("boardgame_tiles")
-      .delete()
-      .eq("boardgame_id", input.id)
-      .in("id", removedTileIds);
-    if (error) return failure(error.message);
-  }
-
-  if (input.saveGoldCards) {
-    const cardRows = input.goldCards.map((card, sortOrder) => ({
-      boardgame_id: input.id,
-      id: card.id,
-      title: card.title,
-      description: card.description,
-      sort_order: sortOrder,
-      event_type: card.event.type,
-      event_params: Object.fromEntries(
-        Object.entries(card.event).filter(([key]) => key !== "type"),
-      ),
-    }));
-    if (cardRows.length) {
-      const { error } = await supabase
-        .from("boardgame_gold_cards")
-        .upsert(cardRows, { onConflict: "boardgame_id,id" });
-      if (error) return failure(error.message);
-    }
-
-    const { data: currentCards, error: currentCardsError } = await supabase
-      .from("boardgame_gold_cards")
-      .select("id")
-      .eq("boardgame_id", input.id);
-    if (currentCardsError) return failure(currentCardsError.message);
-    const cardIds = new Set(input.goldCards.map((card) => card.id));
-    const removedCardIds = (currentCards ?? [])
-      .map((card) => card.id)
-      .filter((id) => !cardIds.has(id));
-    if (removedCardIds.length) {
-      const { error } = await supabase
-        .from("boardgame_gold_cards")
-        .delete()
-        .eq("boardgame_id", input.id)
-        .in("id", removedCardIds);
-      if (error) return failure(error.message);
-    }
-  }
-
-  const { error: releaseError } = await supabase
-    .from("boardgame_tiles")
-    .update({ locked_by_user_name: null })
-    .eq("boardgame_id", input.id)
-    .eq("locked_by_user_name", actor.userName);
-  if (releaseError) return failure(releaseError.message);
-
+  const { error } = await supabase.rpc("save_boardgame_with_edit_lease", {
+    p_input: input,
+    p_session_id: input.editSessionId,
+    p_locked_tile_id: input.lockedTileId,
+  });
+  if (error) return failure(error.message, error.details === 'EDIT_LEASE_LOST' ? 'EDIT_LEASE_LOST' : undefined);
   return { success: true, data: null };
 }
 
 export async function acquireBoardgameTileEditLock(
   boardgameId: string,
   tileId: string,
-): Promise<BoardgameResult<string>> {
+  sessionId: string,
+): Promise<BoardgameResult<{ userName: string; expiresAt: string }>> {
   const actor = await getActor();
   if (!actor) return failure("로그인이 필요합니다.");
-  const permission = await canEditBoardgame(boardgameId, actor.userName);
-  if (!permission.allowed) {
-    return failure(permission.error ?? "이 보드게임을 편집할 권한이 없습니다.");
-  }
-
   const supabase = await createClient();
-  const { data: current, error: currentError } = await supabase
-    .from("boardgame_tiles")
-    .select("locked_by_user_name")
-    .eq("id", tileId)
-    .eq("boardgame_id", boardgameId)
-    .maybeSingle();
-  if (currentError) return failure(currentError.message);
-  if (!current) return { success: true, data: actor.userName };
-  if (current.locked_by_user_name === actor.userName) return { success: true, data: actor.userName };
-  if (current.locked_by_user_name) return failure(`다른 사용자가 편집 중입니다: ${current.locked_by_user_name}`);
-
-  const { data: claimed, error } = await supabase
-    .from("boardgame_tiles")
-    .update({ locked_by_user_name: actor.userName })
-    .eq("boardgame_id", boardgameId)
-    .eq("id", tileId)
-    .is("locked_by_user_name", null)
-    .select("id")
-    .maybeSingle();
+  const { data, error } = await supabase.rpc("acquire_boardgame_edit_lease", {
+    p_boardgame_id: boardgameId, p_tile_id: tileId, p_session_id: sessionId,
+  });
   if (error) return failure(error.message);
-  if (!claimed) return failure("다른 사용자가 먼저 편집을 시작했습니다.");
-  return { success: true, data: actor.userName };
+  if (!data || typeof data.userName !== 'string' || typeof data.expiresAt !== 'string') {
+    return failure("편집 잠금 응답을 확인할 수 없습니다.");
+  }
+  return { success: true, data: { userName: data.userName, expiresAt: data.expiresAt } };
+}
+
+export async function renewBoardgameTileEditLock(
+  boardgameId: string,
+  tileId: string,
+  sessionId: string,
+): Promise<BoardgameResult<boolean>> {
+  const actor = await getActor();
+  if (!actor) return failure("로그인이 필요합니다.");
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("renew_boardgame_edit_lease", {
+    p_boardgame_id: boardgameId, p_tile_id: tileId, p_session_id: sessionId,
+  });
+  if (error) return failure(error.message);
+  return { success: true, data: data === true };
 }
 
 export async function grantBoardgameEditor(

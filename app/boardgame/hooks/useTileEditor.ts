@@ -9,7 +9,6 @@ import * as THREE from 'three';
 import { BoardTileData } from '../types/board';
 import { createTileTopTexture } from '../utils/board';
 import {
-	acquireBoardgameTileEditLock,
 	getBoardgame,
 	saveBoardgame,
 } from '../actions';
@@ -18,6 +17,7 @@ import { TileSelectionMode } from '../types/DiceArenaProps';
 import { ArenaRuntime, OrbitSnapshot } from '../types/arena';
 import { snapshotOrbit } from '../utils/arenaControls';
 import { getOrbitDefaults, withTileLockOwner } from '../utils/arena';
+import { useBoardgameEditLease } from './useBoardgameEditLease';
 
 export interface TileEditorParams {
 	activeBoardgameId: string | null;
@@ -86,7 +86,6 @@ export function useTileEditor({
 	setGridSizeError,
 	persistedGridSizeRef,
 	setBoardRefreshKey,
-	boardTilesMap,
 	setBoardTilesMap,
 	boardTilesMapRef,
 	tileIdRenamesRef,
@@ -119,6 +118,28 @@ export function useTileEditor({
 	orbitSnapshotRef,
 	resetTeamsToStart,
 }: TileEditorParams) {
+	const editLease = useBoardgameEditLease(activeBoardgameId, isEditMode, setBoardgameStatus);
+	const resolveOwnedTileId = (tileId: string) => {
+		const visited = new Set<string>();
+		while (tileIdRenamesRef.current.has(tileId) && !visited.has(tileId)) {
+			visited.add(tileId);
+			tileId = tileIdRenamesRef.current.get(tileId)!;
+		}
+		return tileId;
+	};
+	const canEditSelectedTile = () => {
+		const tileId = selectedTileIdRef.current;
+		const ownedTileId = editLease.leaseRef.current?.tileId;
+		return editModeRef.current && activeBoardgameCanEdit && !isBoardgameBusy &&
+			!!tileId && !!ownedTileId && resolveOwnedTileId(ownedTileId) === tileId &&
+			editLease.canEditTile(ownedTileId);
+	};
+	const canEditSelectedTileRef = useRef(canEditSelectedTile);
+	useEffect(() => { canEditSelectedTileRef.current = canEditSelectedTile; });
+	const onEditableTileRenamedRef = useRef(editLease.renamed);
+	useEffect(() => { onEditableTileRenamedRef.current = editLease.renamed; });
+	const canEditBoardRef = useRef(editLease.canEdit);
+	useEffect(() => { canEditBoardRef.current = editLease.canEdit; });
 	// 2. 타일 선택 처리 함수
 	const selectTile = (tileId: string | null) => {
 		const runtime = runtimeRef.current;
@@ -166,6 +187,7 @@ export function useTileEditor({
 
 	// 3. 인스펙터에서 타일 속성 수정 시 Three.js에 실시간 반영
 	const handleUpdateTile = (updated: Partial<BoardTileData>) => {
+		if (!canEditSelectedTile()) return;
 		if (!selectedTileId) return;
 
 		setBoardTilesMap((prev) => {
@@ -200,6 +222,7 @@ export function useTileEditor({
 	};
 
 	const handleDeleteTile = (tileId: string) => {
+		if (tileId !== selectedTileIdRef.current || !canEditSelectedTile()) return;
 		const tile = boardTilesMapRef.current.get(tileId);
 		if (!tile || tile.isLocked) return;
 
@@ -246,6 +269,7 @@ export function useTileEditor({
 	};
 
 	const beginTileSelection = (mode: 'next' | 'teleport' | 'direction') => {
+		if (!canEditSelectedTile()) return;
 		tileSelectionModeRef.current = mode;
 		setTileSelectionMode(mode);
 		setIsMovingInnerTile(false);
@@ -264,57 +288,67 @@ export function useTileEditor({
 	// 현재까지의 변경 사항을 저장하는 함수
 	const saveCurrentChanges = async (): Promise<boolean> => {
 		if (!activeBoardgameId || isBoardgameBusy) return false;
+		if (!editLease.canEdit()) return false;
 
 		setIsBoardgameBusy(true);
-		const tiles = [...boardTilesMap.values()];
-		const shouldSaveGridSize =
-			boardSize.rows !== persistedGridSizeRef.current.rows ||
-			boardSize.cols !== persistedGridSizeRef.current.cols;
-		const shouldSaveGoldCards =
-			JSON.stringify(goldCards) !== persistedGoldCardsRef.current;
+		try {
+			const tiles = [...boardTilesMapRef.current.values()];
+			const shouldSaveGridSize =
+				boardSize.rows !== persistedGridSizeRef.current.rows ||
+				boardSize.cols !== persistedGridSizeRef.current.cols;
+			const shouldSaveGoldCards =
+				JSON.stringify(goldCards) !== persistedGoldCardsRef.current;
 
-		const result = await saveBoardgame({
-			id: activeBoardgameId,
-			gridRows: boardSize.rows,
-			gridCols: boardSize.cols,
-			tiles,
-			goldCards,
-			saveGridSize: shouldSaveGridSize,
-			saveGoldCards: shouldSaveGoldCards,
-			tileIdRenames: [...tileIdRenamesRef.current].map(([from, to]) => ({
-				from,
-				to,
-			})),
-		});
+			const result = await saveBoardgame({
+				id: activeBoardgameId,
+				gridRows: boardSize.rows,
+				gridCols: boardSize.cols,
+				tiles,
+				goldCards,
+				editSessionId: editLease.getSessionId(),
+				lockedTileId: editLease.leaseRef.current?.tileId ?? null,
+				saveGridSize: shouldSaveGridSize,
+				saveGoldCards: shouldSaveGoldCards,
+				tileIdRenames: [...tileIdRenamesRef.current].map(([from, to]) => ({
+					from,
+					to,
+				})),
+			});
 
-		if (!result.success) {
-			setBoardgameStatus(result.message);
-			setIsBoardgameBusy(false);
+			if (!result.success) {
+				if (result.code === 'EDIT_LEASE_LOST') editLease.markLost();
+				setBoardgameStatus(result.message);
+				return false;
+			}
+			editLease.saved();
+
+			// 동기화 기준값 갱신
+			tileIdRenamesRef.current.clear();
+			persistedGridSizeRef.current = boardSize;
+			persistedGoldCardsRef.current = JSON.stringify(goldCards);
+
+			// 서버의 최신 상태 갱신
+			const refreshed = await getBoardgame(activeBoardgameId);
+			if (refreshed.success) {
+				const game = refreshed.data;
+				setBoardTilesMap(new Map(game.tiles.map((tile) => [tile.id, tile])));
+				boardTilesMapRef.current = new Map(
+					game.tiles.map((tile) => [tile.id, tile]),
+				);
+				setGoldCards(game.gold_cards);
+				applyServerGridSize(game.grid_rows, game.grid_cols);
+				persistedGoldCardsRef.current = JSON.stringify(game.gold_cards);
+				setBoardRefreshKey((current) => current + 1);
+			}
+
+			await refreshBoardgameList();
+			return true;
+		} catch {
+			setBoardgameStatus('저장 또는 저장 결과 확인에 실패했습니다. 연결을 확인해 주세요.');
 			return false;
+		} finally {
+			setIsBoardgameBusy(false);
 		}
-
-		// 동기화 기준값 갱신
-		tileIdRenamesRef.current.clear();
-		persistedGridSizeRef.current = boardSize;
-		persistedGoldCardsRef.current = JSON.stringify(goldCards);
-
-		// 서버의 최신 상태 갱신
-		const refreshed = await getBoardgame(activeBoardgameId);
-		if (refreshed.success) {
-			const game = refreshed.data;
-			setBoardTilesMap(new Map(game.tiles.map((tile) => [tile.id, tile])));
-			boardTilesMapRef.current = new Map(
-				game.tiles.map((tile) => [tile.id, tile]),
-			);
-			setGoldCards(game.gold_cards);
-			applyServerGridSize(game.grid_rows, game.grid_cols);
-			persistedGoldCardsRef.current = JSON.stringify(game.gold_cards);
-			setBoardRefreshKey((current) => current + 1);
-		}
-
-		await refreshBoardgameList();
-		setIsBoardgameBusy(false);
-		return true;
 	};
 
 	/**
@@ -324,8 +358,9 @@ export function useTileEditor({
 	 * @returns
 	 */
 	const selectEditableTile = async (tileId: string) => {
+		if (!editLease.canEdit()) return;
 		// 동일한 타일을 다시 클릭한 경우 불필요한 재요청 방지
-		if (tileId === selectedTileId) return;
+		if (tileId === selectedTileId && canEditSelectedTile()) return;
 
 		if (!isEditMode || !activeBoardgameId || !activeBoardgameCanEdit) {
 			selectTile(tileId);
@@ -335,7 +370,7 @@ export function useTileEditor({
 		if (isBoardgameBusy) return;
 
 		// 1. 기존에 잠금을 보유 중인 타일이 있다면 먼저 저장 및 반환
-		if (selectedTileId) {
+		if (editLease.leaseRef.current) {
 			setBoardgameStatus(
 				'이전 타일의 변경 사항을 저장하고 잠금을 해제하는 중...',
 			);
@@ -348,20 +383,16 @@ export function useTileEditor({
 
 		// 2. 새 타일의 편집 잠금 요청
 		setIsBoardgameBusy(true);
-		const result = await acquireBoardgameTileEditLock(
-			activeBoardgameId,
-			tileId,
-		);
+		const lockOwner = await editLease.acquire(tileId);
 		setIsBoardgameBusy(false);
 
-		if (!result.success) {
-			setBoardgameStatus(result.message);
+		if (!lockOwner) {
 			return;
 		}
 
 		// 3. 상태 업데이트 및 새 타일 선택
 		setBoardTilesMap((current) => {
-			const next = withTileLockOwner(current, tileId, result.data);
+			const next = withTileLockOwner(current, tileId, lockOwner);
 			boardTilesMapRef.current = next;
 			return next;
 		});
@@ -386,20 +417,16 @@ export function useTileEditor({
 				return;
 			if (selectedTileId) {
 				setIsBoardgameBusy(true);
-				const lockResult = await acquireBoardgameTileEditLock(
-					activeBoardgameId,
-					selectedTileId,
-				);
+				const lockOwner = await editLease.acquire(selectedTileId);
 				setIsBoardgameBusy(false);
-				if (!lockResult.success) {
-					setBoardgameStatus(lockResult.message);
+				if (!lockOwner) {
 					return;
 				}
 				setBoardTilesMap((current) => {
 					const next = withTileLockOwner(
 						current,
 						selectedTileId,
-						lockResult.data,
+						lockOwner,
 					);
 					boardTilesMapRef.current = next;
 					return next;
@@ -432,6 +459,7 @@ export function useTileEditor({
 	};
 
 	const handleToggleAddingInnerTile = () => {
+		if (!editLease.canEdit()) return;
 		if (isAddingInnerTile) {
 			setIsAddingInnerTile(false);
 			isAddingInnerTileRef.current = false;
@@ -448,6 +476,7 @@ export function useTileEditor({
 	};
 
 	const handleMoveTilePosition = () => {
+		if (!canEditSelectedTile()) return;
 		if (isMovingInnerTile) {
 			setIsMovingInnerTile(false);
 			isMovingInnerTileRef.current = false;
@@ -463,6 +492,7 @@ export function useTileEditor({
 	};
 
 	const applyGridSize = () => {
+		if (!editLease.canEdit()) return;
 		const rows = Number(gridSizeDraft.rows);
 		const cols = Number(gridSizeDraft.cols);
 		if (
@@ -488,6 +518,13 @@ export function useTileEditor({
 	};
 
 	return {
+		canEditSelectedTile: isEditMode && activeBoardgameCanEdit && !isBoardgameBusy &&
+			!editLease.isLockBlocked && !!selectedTileId && !!editLease.ownedTileId &&
+			editLease.ownedTileId === selectedTileId,
+		canEditSelectedTileRef,
+		onEditableTileRenamedRef,
+		isEditLockBlocked: editLease.isLockBlocked,
+		canEditBoardRef,
 		selectTile,
 		handleUpdateTile,
 		handleDeleteTile,
