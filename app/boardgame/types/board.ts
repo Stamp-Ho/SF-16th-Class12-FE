@@ -3,17 +3,19 @@ export type TileActionType =
 	| 'MOVE_STEPS'
 	| 'DIRECTION_CHANGE'
 	| 'TELEPORT'
+	| 'SKIP_TURNS'
 	| 'DRAW_GOLD_CARD';
 
 export interface TileAction {
 	type: TileActionType;
 	params?: {
 		steps?: number;
+		turns?: number;
 		targetTileId?: string;
 		deckId?: string;
 		promptTitle?: string;
 		promptMessage?: string;
-		[key: string]: any;
+		[key: string]: unknown;
 	};
 }
 

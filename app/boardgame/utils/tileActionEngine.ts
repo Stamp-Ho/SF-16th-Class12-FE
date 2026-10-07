@@ -4,6 +4,7 @@ import { TileAction, BoardTileData } from '../types/board';
 export interface ActionExecutionContext {
 	currentTile: BoardTileData;
 	movePawnSteps: (steps: number) => void;
+	skipTurns: (turns: number) => void;
 	teleportPawnToTile: (targetTileId: string) => void;
 	openGoldCardModal: (deckId: string) => void;
 	openChoiceModal: (options: { label: string; nextTileId: string }[]) => void;
@@ -17,6 +18,12 @@ export function executeTileAction(
 	const { type, params } = action;
 
 	switch (type) {
+		case 'SKIP_TURNS':
+			if (typeof params?.turns === 'number' && Number.isSafeInteger(params.turns) && params.turns > 0 && params.turns <= 99) {
+				ctx.skipTurns(params.turns);
+			}
+			break;
+
 		case 'MOVE_STEPS':
 			if (params?.steps) {
 				ctx.showToast(

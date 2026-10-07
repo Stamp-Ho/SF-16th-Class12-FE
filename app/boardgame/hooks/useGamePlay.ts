@@ -1,6 +1,7 @@
 import {
 	useCallback,
 	useEffect,
+	useRef,
 	type Dispatch,
 	type RefObject,
 	type SetStateAction,
@@ -24,6 +25,8 @@ import {
 export interface GamePlayParams {
 	boardTilesMapRef: RefObject<Map<string, BoardTileData>>;
 	currentTeamIndexRef: RefObject<number>;
+	teamSkipTurnsRef: RefObject<number[]>;
+	setTeamSkipTurns: Dispatch<SetStateAction<number[]>>;
 	diceCountRef: RefObject<number>;
 	drawnGoldCardRef: RefObject<GoldCardData | null>;
 	editModeRef: RefObject<boolean>;
@@ -78,6 +81,8 @@ export interface GamePlayParams {
 export function useGamePlay({
 	boardTilesMapRef,
 	currentTeamIndexRef,
+	teamSkipTurnsRef,
+	setTeamSkipTurns,
 	diceCountRef,
 	drawnGoldCardRef,
 	editModeRef,
@@ -124,6 +129,18 @@ export function useGamePlay({
 	teamTileIdsRef,
 	tileSelectionModeRef,
 }: GamePlayParams) {
+	const selectTileRef = useRef(selectTile);
+	const warpArrivalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const pendingSkipTurnRef = useRef<{ teamIndex: number; notice: { title: string; message: string } } | null>(null);
+	useEffect(() => {
+		selectTileRef.current = selectTile;
+	}, [selectTile]);
+	useEffect(() => () => {
+		if (warpArrivalTimerRef.current !== null) {
+			clearTimeout(warpArrivalTimerRef.current);
+		}
+	}, []);
+
 	const showTileEvent = useCallback((tileId: string) => {
 		const tile = boardTilesMapRef.current.get(tileId);
 		if (tile) setPendingTileEvent(tile);
@@ -135,11 +152,15 @@ export function useGamePlay({
 
 	// 말(Pawn)의 칸별 이동 애니메이션
 	const movePawnSteps = useCallback(
-		(steps: number) => {
+		(
+			steps: number,
+			teamIndex = currentTeamIndexRef.current,
+			advanceTurn = true,
+		) => {
+			if (!Number.isInteger(steps) || steps === 0) return;
 			if (!runtimeRef.current) return;
 			const { pawnMeshes, boardTiles } = runtimeRef.current;
 			if (!boardTiles.length) return;
-			const teamIndex = currentTeamIndexRef.current;
 			lastMovedTeamIndexRef.current = teamIndex;
 			const pawnMesh = pawnMeshes[teamIndex];
 			if (!pawnMesh) return;
@@ -158,6 +179,7 @@ export function useGamePlay({
 					currentIdx,
 					currentTileId,
 					isFirstStep: currentStep === 1,
+					direction: steps < 0 ? -1 : 1,
 				});
 				teamPositionsRef.current[teamIndex] = targetIdx;
 				teamTileIdsRef.current[teamIndex] = targetTile.id;
@@ -170,22 +192,25 @@ export function useGamePlay({
 				animatePawnHop(pawnMesh, getPawnPosition(targetTile, teamIndex));
 
 				// 타일 이동 완료 되었을 때 로직.
-				if (currentStep >= steps) {
+				if (currentStep >= Math.abs(steps)) {
 					clearInterval(stepInterval);
 					setTimeout(() => {
 						selectTile(targetTile.id);
 						pawnMeshes.forEach((mesh) => mesh.scale.set(0, 0, 0));
 					}, 700);
 					setTimeout(() => {
-						showTileEvent(targetTile.id);
-						const nextTeamIndex =
-							(currentTeamIndexRef.current + 1) % TEAM_COLORS.length;
-						currentTeamIndexRef.current = nextTeamIndex;
-						setCurrentTeamIndex(nextTeamIndex);
+						// 도착 효과로 이어진 이동은 같은 팀에 적용하고 턴을 넘기지 않는다.
+						if (advanceTurn) {
+							const nextTeamIndex = (teamIndex + 1) % TEAM_COLORS.length;
+							currentTeamIndexRef.current = nextTeamIndex;
+							setCurrentTeamIndex(nextTeamIndex);
+						}
 						setTimeout(() => {
 							selectTile(null);
 							pawnMeshes.forEach((mesh) => mesh.scale.set(1, 1, 1));
 							setIsMovingPawn(false);
+							// 복구 타이머가 새 도착 효과의 이동 상태를 덮어쓰지 않도록 마지막에 연다.
+							showTileEvent(targetTile.id);
 						}, 500);
 					}, 2000);
 				}
@@ -244,162 +269,228 @@ export function useGamePlay({
 
 	const beginGoldCardEffectTargetSelection = () => {
 		setIsGoldCardModalOpen(false);
+		// 대상 선택을 위한 탑뷰 전환 전에 기존 카메라 뷰를 보관한다.
+		selectTileRef.current(teamTileIdsRef.current[goldCardActorTeamRef.current]);
 		tileSelectionModeRef.current = 'gold-card-effect-target';
 		setTileSelectionMode('gold-card-effect-target');
 		switchView('top');
 	};
 
-	const moveTeamPawnToTile = (teamIndex: number, tileId: string) => {
+	// 타일 워프와 황금카드 이동에서 공통으로 사용하는 점프·선택·도착 처리.
+	const warpTeamPawnToTile = useCallback((teamIndex: number, tileId: string) => {
 		const runtime = runtimeRef.current;
-		if (!runtime) return;
-		const targetIndex = runtime.boardTiles.findIndex(
+		const targetIndex = runtime?.boardTiles.findIndex(
 			(tile) => tile.id === tileId,
-		);
+		) ?? -1;
 		const innerTarget = boardTilesMapRef.current.get(tileId);
 		const targetTile: BoardTile | undefined =
 			targetIndex >= 0
-				? runtime.boardTiles[targetIndex]
+				? runtime?.boardTiles[targetIndex]
 				: innerTarget?.category === 'INNER'
 					? innerTileToBoardTile(innerTarget)
 					: undefined;
-		if (!targetTile) return;
-
-		teamPositionsRef.current[teamIndex] = targetIndex;
-		teamTileIdsRef.current[teamIndex] = tileId;
-		setTeamTileIds([...teamTileIdsRef.current]);
-		setTeamPositions([...teamPositionsRef.current]);
-		if (teamIndex === goldCardActorTeamRef.current) {
-			playerTileIndexRef.current = targetIndex;
-			setPlayerTileIndex(targetIndex);
+		const pawnMesh = runtime?.pawnMeshes[teamIndex];
+		if (!runtime || !targetTile || !pawnMesh) {
+			setEventNotice({
+				title: '워프 실패',
+				message: '워프 목적지 타일을 찾을 수 없습니다. 워프 설정을 확인해 주세요.',
+			});
+			return false;
 		}
-		runtime.pawnMeshes[teamIndex]?.position.copy(
-			getPawnPosition(targetTile, teamIndex),
-		);
-	};
+
+		lastMovedTeamIndexRef.current = teamIndex;
+		setIsMovingPawn(true);
+		pawnMesh.scale.set(1, 1, 1);
+		animatePawnHop(pawnMesh, getPawnPosition(targetTile, teamIndex), {
+			durationMs: 550,
+			onComplete: () => {
+				if (runtimeRef.current !== runtime) return;
+				teamPositionsRef.current[teamIndex] = targetIndex;
+				teamTileIdsRef.current[teamIndex] = tileId;
+				setTeamTileIds([...teamTileIdsRef.current]);
+				setTeamPositions([...teamPositionsRef.current]);
+				playerTileIndexRef.current = targetIndex;
+				setPlayerTileIndex(targetIndex);
+				selectTileRef.current(tileId);
+				// 선택한 타일을 1초 동안 보여준 뒤 도착 이벤트를 연다.
+				warpArrivalTimerRef.current = setTimeout(() => {
+					warpArrivalTimerRef.current = null;
+					if (runtimeRef.current !== runtime) return;
+					setIsMovingPawn(false);
+					showTileEvent(tileId);
+				}, 1000);
+			},
+		});
+		return true;
+	}, [
+		boardTilesMapRef, lastMovedTeamIndexRef, playerTileIndexRef, runtimeRef,
+		setEventNotice, setIsMovingPawn, setPlayerTileIndex, setTeamPositions,
+		setTeamTileIds, showTileEvent, teamPositionsRef, teamTileIdsRef,
+	]);
 
 	const applyDrawnGoldCard = useCallback(
 		(choice: { tileId?: string; teamIndex?: number } = {}) => {
 			const activeCard = drawnGoldCardRef.current;
-			if (!activeCard) return;
+			if (!activeCard) {
+				setIsGoldCardModalOpen(false);
+				selectTileRef.current(null);
+				return;
+			}
 			const actorTeamIndex = goldCardActorTeamRef.current;
-			executeGoldCardEvent(
+			if (activeCard.event.type === 'MOVE_PAWN_CHOOSE' && !choice.tileId) return;
+			if (activeCard.event.type === 'SWAP_POSITIONS_CHOOSE') {
+				const targetTeamIndex = choice.teamIndex;
+				const pawns = runtimeRef.current?.pawnMeshes;
+				if (targetTeamIndex === undefined || !Number.isInteger(targetTeamIndex) ||
+					targetTeamIndex === actorTeamIndex || !pawns?.[targetTeamIndex] || !pawns[actorTeamIndex]) return;
+			}
+			const applied = executeGoldCardEvent(
 				activeCard,
 				{
 					movePawnToTile: (tileId) =>
-						moveTeamPawnToTile(actorTeamIndex, tileId),
+						warpTeamPawnToTile(actorTeamIndex, tileId),
 					swapPawnPositions: (targetTeamIndex) => {
 						const swapTeamIndex =
 							targetTeamIndex === actorTeamIndex
 								? (actorTeamIndex + 1) % 4
 								: targetTeamIndex;
 						const runtime = runtimeRef.current;
-						if (!runtime) return;
-						[
-							teamPositionsRef.current[actorTeamIndex],
-							teamPositionsRef.current[swapTeamIndex],
-						] = [
-							teamPositionsRef.current[swapTeamIndex],
-							teamPositionsRef.current[actorTeamIndex],
-						];
-						[
-							teamTileIdsRef.current[actorTeamIndex],
-							teamTileIdsRef.current[swapTeamIndex],
-						] = [
-							teamTileIdsRef.current[swapTeamIndex],
-							teamTileIdsRef.current[actorTeamIndex],
-						];
-						setTeamTileIds([...teamTileIdsRef.current]);
+						if (!runtime) return false;
 						const actorPawn = runtime.pawnMeshes[actorTeamIndex];
 						const targetPawn = runtime.pawnMeshes[swapTeamIndex];
-						if (actorPawn && targetPawn) {
-							const actorPosition = actorPawn.position.clone();
-							actorPawn.position.copy(targetPawn.position);
-							targetPawn.position.copy(actorPosition);
-						}
-						setTeamPositions([...teamPositionsRef.current]);
-						playerTileIndexRef.current =
-							teamPositionsRef.current[actorTeamIndex];
-						setPlayerTileIndex(playerTileIndexRef.current);
+						if (!actorPawn || !targetPawn) return false;
+						const resolveTeamTile = (teamIndex: number) => {
+							const tileId = teamTileIdsRef.current[teamIndex];
+							const outerTile = runtime.boardTiles.find((tile) => tile.id === tileId);
+							const innerTile = boardTilesMapRef.current.get(tileId);
+							return outerTile ?? (innerTile?.category === 'INNER'
+								? innerTileToBoardTile(innerTile) : undefined);
+						};
+						const actorTile = resolveTeamTile(actorTeamIndex);
+						const targetTile = resolveTeamTile(swapTeamIndex);
+						if (!actorTile || !targetTile) return false;
+						// 상대의 폰 좌표를 복사하지 않고 도착 타일에 자신의 오프셋을 적용한다.
+						const actorDestination = getPawnPosition(targetTile, actorTeamIndex);
+						const targetDestination = getPawnPosition(actorTile, swapTeamIndex);
+						let landedPawns = 0;
+						const onComplete = () => {
+							if (runtimeRef.current !== runtime || ++landedPawns < 2) return;
+							// 두 폰이 모두 착지한 뒤 위치 상태를 함께 교환한다.
+							[
+								teamPositionsRef.current[actorTeamIndex],
+								teamPositionsRef.current[swapTeamIndex],
+							] = [
+								teamPositionsRef.current[swapTeamIndex],
+								teamPositionsRef.current[actorTeamIndex],
+							];
+							[
+								teamTileIdsRef.current[actorTeamIndex],
+								teamTileIdsRef.current[swapTeamIndex],
+							] = [
+								teamTileIdsRef.current[swapTeamIndex],
+								teamTileIdsRef.current[actorTeamIndex],
+							];
+							setTeamTileIds([...teamTileIdsRef.current]);
+							setTeamPositions([...teamPositionsRef.current]);
+							playerTileIndexRef.current = teamPositionsRef.current[actorTeamIndex];
+							setPlayerTileIndex(playerTileIndexRef.current);
+							setIsMovingPawn(false);
+						};
+						setIsMovingPawn(true);
+						actorPawn.scale.set(1, 1, 1);
+						targetPawn.scale.set(1, 1, 1);
+						animatePawnHop(actorPawn, actorDestination, { durationMs: 550, onComplete });
+						animatePawnHop(targetPawn, targetDestination, { durationMs: 550, onComplete });
+						return true;
 					},
 				},
 				choice,
 			);
+			if (!applied) {
+				setIsGoldCardModalOpen(true);
+				return;
+			}
 			drawnGoldCardRef.current = null;
 			setDrawnGoldCard(null);
 			setIsGoldCardModalOpen(false);
 		},
-		// 원래 코드와 같이 최초 렌더의 함수를 유지한다 (값은 ref로 읽음).
-		// moveTeamPawnToTile을 넣으면 렌더마다 콜백이 바뀌어 3D 씬이 매번 다시 만들어진다.
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[],
+		[
+			boardTilesMapRef, drawnGoldCardRef, goldCardActorTeamRef, playerTileIndexRef, runtimeRef,
+			setDrawnGoldCard, setIsGoldCardModalOpen, setPlayerTileIndex,
+			setIsMovingPawn,
+			setTeamPositions, setTeamTileIds, teamPositionsRef, teamTileIdsRef,
+			warpTeamPawnToTile,
+		],
 	);
 
 	const executePendingTileEvent = useCallback(() => {
 		if (!pendingTileEvent) return;
 
 		const tileEvent = pendingTileEvent;
+		// 현재 턴은 이미 다음 팀이다. 도착 이벤트는 마지막으로 이동한 팀에 적용한다.
+		const teamIndex = lastMovedTeamIndexRef.current;
 		setPendingTileEvent(null);
 		setEventCountdown(null);
 
 		executeTileAction(tileEvent.action, {
 			currentTile: tileEvent,
-			movePawnSteps,
-			teleportPawnToTile: (targetTileId) => {
-				const runtime = runtimeRef.current;
-				const targetIndex =
-					runtime?.boardTiles.findIndex((tile) => tile.id === targetTileId) ??
-					-1;
-				const innerTarget = boardTilesMapRef.current.get(targetTileId);
-				const targetTile: BoardTile | undefined =
-					targetIndex >= 0
-						? runtime?.boardTiles[targetIndex]
-						: innerTarget?.category === 'INNER'
-							? {
-									id: innerTarget.id,
-									index: -1,
-									gridR: innerTarget.gridR,
-									gridC: innerTarget.gridC,
-									x: innerTarget.position.x,
-									z: innerTarget.position.z,
-									rotationY: innerTarget.rotationY,
-									isCorner: false,
-								}
-							: undefined;
-				if (!runtime || !targetTile) return;
-
-				teamPositionsRef.current[currentTeamIndexRef.current] = targetIndex;
-				teamTileIdsRef.current[currentTeamIndexRef.current] = targetTileId;
-				setTeamTileIds([...teamTileIdsRef.current]);
-				setTeamPositions([...teamPositionsRef.current]);
-				playerTileIndexRef.current = targetIndex;
-				setPlayerTileIndex(targetIndex);
-				const teamIndex = currentTeamIndexRef.current;
-				const position = getPawnPosition(targetTile, teamIndex);
-				runtime.pawnMeshes[teamIndex]?.position.copy(position);
+			skipTurns: (turns) => {
+				teamSkipTurnsRef.current[teamIndex] = turns;
+				setTeamSkipTurns([...teamSkipTurnsRef.current]);
+				setEventNotice({
+					title: `탈출로 찾기(${turns}턴 남음)`,
+					message: `도착 턴 이후 자신의 차례 ${turns}번 동안 술 마시기 벌칙을 수행하고 턴을 넘깁니다.`,
+				});
 			},
+			movePawnSteps: (steps) => movePawnSteps(steps, teamIndex, false),
+			teleportPawnToTile: (targetTileId) => warpTeamPawnToTile(teamIndex, targetTileId),
 			openGoldCardModal,
 			openChoiceModal: () => undefined,
 			showToast: (title, message) => {
-				setEventNotice({ title, message });
+				if (tileEvent.action.type === 'TELEPORT') {
+					// 목적지 이벤트 팝업을 워프 안내 팝업이 가리지 않도록 한다.
+					setBoardgameStatus(`${title}: ${message}`);
+				} else {
+					setEventNotice({ title, message });
+				}
 			},
 		});
 	}, [
 		movePawnSteps,
 		openGoldCardModal,
 		pendingTileEvent,
-		currentTeamIndexRef,
-		playerTileIndexRef,
-		setPlayerTileIndex,
-		setTeamPositions,
-		setTeamTileIds,
-		teamPositionsRef,
-		teamTileIdsRef,
-		boardTilesMapRef,
-		runtimeRef,
+		lastMovedTeamIndexRef,
+		setBoardgameStatus,
+		warpTeamPawnToTile,
 		setEventCountdown,
 		setEventNotice,
 		setPendingTileEvent,
+		teamSkipTurnsRef,
+		setTeamSkipTurns,
 	]);
+
+	const handleConfirmTileEvent = () => {
+		selectTileRef.current(null);
+		executePendingTileEvent();
+	};
+
+	const handleCloseEventNotice = () => {
+		const pendingSkip = pendingSkipTurnRef.current;
+		pendingSkipTurnRef.current = null;
+		if (pendingSkip && pendingSkip.notice === eventNotice && pendingSkip.teamIndex === currentTeamIndexRef.current) {
+			const teamIndex = pendingSkip.teamIndex;
+			teamSkipTurnsRef.current[teamIndex] = Math.max(0, teamSkipTurnsRef.current[teamIndex] - 1);
+			setTeamSkipTurns([...teamSkipTurnsRef.current]);
+			const nextTeamIndex = (teamIndex + 1) % TEAM_COLORS.length;
+			currentTeamIndexRef.current = nextTeamIndex;
+			setCurrentTeamIndex(nextTeamIndex);
+			playerTileIndexRef.current = teamPositionsRef.current[nextTeamIndex];
+			setPlayerTileIndex(playerTileIndexRef.current);
+			setScores([]);
+		}
+		setEventNotice(null);
+		selectTileRef.current(null);
+	};
 
 	useEffect(() => {
 		if (!pendingTileEvent || pendingTileEvent.action.type !== 'MOVE_STEPS') {
@@ -430,11 +521,26 @@ export function useGamePlay({
 		if (
 			!runtimeRef.current ||
 			isMovingPawn ||
+			editModeRef.current ||
+			drawnGoldCardRef.current ||
+			tileSelectionModeRef.current === 'gold-card-effect-target' ||
 			isRollingRef.current ||
 			pendingTileEvent ||
 			eventNotice
 		)
 			return;
+		const teamIndex = currentTeamIndexRef.current;
+		const remainingTurns = teamSkipTurnsRef.current[teamIndex] ?? 0;
+		if (remainingTurns > 0) {
+			if (pendingSkipTurnRef.current) return;
+			const notice = {
+				title: `탈출로 찾기(${remainingTurns}턴 남음)`,
+				message: '술 마시기 벌칙을 수행하세요.\n완료를 누르면 이번 턴을 넘깁니다.',
+			};
+			pendingSkipTurnRef.current = { teamIndex, notice };
+			setEventNotice(notice);
+			return;
+		}
 		const { diceList, orbit } = runtimeRef.current;
 
 		hasRolledThisGameRef.current = true;
@@ -495,6 +601,12 @@ export function useGamePlay({
 		isRollingRef,
 		runtimeRef,
 		setIsRolling,
+		currentTeamIndexRef,
+		teamSkipTurnsRef,
+		editModeRef,
+		setEventNotice,
+		drawnGoldCardRef,
+		tileSelectionModeRef,
 	]);
 
 	useEffect(() => {
@@ -532,6 +644,11 @@ export function useGamePlay({
 	]);
 
 	const handleRestartGame = () => {
+		pendingSkipTurnRef.current = null;
+		if (warpArrivalTimerRef.current !== null) {
+			clearTimeout(warpArrivalTimerRef.current);
+			warpArrivalTimerRef.current = null;
+		}
 		const runtime = runtimeRef.current;
 		const startTile = runtime?.boardTiles[0];
 		const startTileId = startTile?.id ?? 'outer_0';
@@ -623,7 +740,8 @@ export function useGamePlay({
 		syncDiceCount,
 		rollDice,
 		handleDiceCountChange,
-		executePendingTileEvent,
+		handleConfirmTileEvent,
+		handleCloseEventNotice,
 		selectGoldCardTarget,
 		beginGoldCardEffectTargetSelection,
 		handleRestartGame,

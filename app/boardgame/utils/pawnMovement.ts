@@ -17,7 +17,8 @@ export const innerTileToBoardTile = (innerTile: BoardTileData): BoardTile => ({
 /**
  * 말이 한 칸 이동할 목표 칸을 정한다.
  * 현재 칸에 설정된 다음 칸(첫 걸음이 방향 전환 칸이면 그 대상)이 있으면 그 칸으로,
- * 없으면 외곽을 따라 다음 칸으로 이동한다. 내부 타일이면 index는 -1이다.
+ * 후진은 현재 칸으로 연결된 이전 칸으로, 연결이 없으면 외곽의 이전 칸으로 이동한다.
+ * 내부 타일이면 index는 -1이다.
  */
 export function resolveNextStep({
 	boardTiles,
@@ -25,18 +26,25 @@ export function resolveNextStep({
 	currentIdx,
 	currentTileId,
 	isFirstStep,
+	direction = 1,
 }: {
 	boardTiles: BoardTile[];
 	tilesMap: Map<string, BoardTileData>;
 	currentIdx: number;
 	currentTileId: string | undefined;
 	isFirstStep: boolean;
+	direction?: 1 | -1;
 }) {
 	const currentTileData = currentTileId
 		? tilesMap.get(currentTileId)
 		: undefined;
-	const configuredNextId =
-		isFirstStep && currentTileData?.action.type === 'DIRECTION_CHANGE'
+	// 후진은 현재 칸으로 연결된 이전 칸을 따라간다. 방향 전환은 전진에만 적용한다.
+	const previousTile = direction === -1 && currentTileId
+		? [...tilesMap.values()].find((tile) => tile.nextTileIds[0] === currentTileId)
+		: undefined;
+	const configuredNextId = direction === -1
+		? previousTile?.id
+		: isFirstStep && currentTileData?.action.type === 'DIRECTION_CHANGE'
 			? currentTileData.action.params?.targetTileId
 			: currentTileData?.nextTileIds[0];
 	const configuredNextIdx = configuredNextId
@@ -51,7 +59,7 @@ export function resolveNextStep({
 	const targetIdx = hasConfiguredTarget
 		? configuredNextIdx
 		: currentIdx >= 0
-			? (currentIdx + 1) % boardTiles.length
+			? (currentIdx + direction + boardTiles.length) % boardTiles.length
 			: 0;
 	const targetTile: BoardTile =
 		targetIdx >= 0
@@ -61,17 +69,22 @@ export function resolveNextStep({
 }
 
 // 말을 현재 위치에서 endPos까지 부드러운 호를 그리며 점프시킨다
-export function animatePawnHop(pawnMesh: THREE.Object3D, endPos: THREE.Vector3) {
+export function animatePawnHop(
+	pawnMesh: THREE.Object3D,
+	endPos: THREE.Vector3,
+	{ durationMs = 200, onComplete }: { durationMs?: number; onComplete?: () => void } = {},
+) {
 	const startPos = pawnMesh.position.clone();
-	let progress = 0;
+	const startTime = performance.now();
 	const jumpAnim = () => {
-		progress += 0.12;
-		if (progress <= 1) {
+		const progress = Math.min((performance.now() - startTime) / durationMs, 1);
+		if (progress < 1) {
 			pawnMesh.position.lerpVectors(startPos, endPos, progress);
-			pawnMesh.position.y = 1.2 + Math.sin(progress * Math.PI) * 1.0;
+			pawnMesh.position.y += Math.sin(progress * Math.PI) * 1.0;
 			requestAnimationFrame(jumpAnim);
 		} else {
 			pawnMesh.position.copy(endPos);
+			onComplete?.();
 		}
 	};
 	jumpAnim();

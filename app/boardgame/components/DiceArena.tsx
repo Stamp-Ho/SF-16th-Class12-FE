@@ -66,6 +66,9 @@ export default function DiceArena({
 		currentTeamIndex,
 		setCurrentTeamIndex,
 		currentTeamIndexRef,
+		teamSkipTurns,
+		setTeamSkipTurns,
+		teamSkipTurnsRef,
 		teamPositions,
 		setTeamPositions,
 		teamPositionsRef,
@@ -262,13 +265,16 @@ export default function DiceArena({
 		syncDiceCount,
 		rollDice,
 		handleDiceCountChange,
-		executePendingTileEvent,
+		handleConfirmTileEvent,
+		handleCloseEventNotice,
 		selectGoldCardTarget,
 		beginGoldCardEffectTargetSelection,
 		handleRestartGame,
 	} = useGamePlay({
 		boardTilesMapRef,
 		currentTeamIndexRef,
+		teamSkipTurnsRef,
+		setTeamSkipTurns,
 		diceCountRef,
 		drawnGoldCardRef,
 		editModeRef,
@@ -421,6 +427,8 @@ export default function DiceArena({
 		setTeamTileIds,
 		currentTeamIndexRef,
 		setCurrentTeamIndex,
+		teamSkipTurnsRef,
+		setTeamSkipTurns,
 		playerTileIndexRef,
 		setPlayerTileIndex,
 		hasRolledThisGameRef,
@@ -429,26 +437,13 @@ export default function DiceArena({
 	});
 
 	const totalScore = scores.reduce((acc, cur) => acc + cur, 0);
-	// 황금카드 효과 대상 선택을 취소하고 카드 모달로 돌아가기
-	const cancelGoldCardEffectTarget = () => {
-		tileSelectionModeRef.current = null;
-		setTileSelectionMode(null);
-		setIsGoldCardModalOpen(true);
-	};
-
-	const closeGoldCardDrawModal = () => {
-		drawnGoldCardRef.current = null;
-		setIsGoldCardModalOpen(false);
-		setDrawnGoldCard(null);
-		tileSelectionModeRef.current = null;
-		setTileSelectionMode(null);
-	};
 
 	const diceArenaProps = {
 		game: {
 			state: {
 				teams,
 				currentTeamIndex,
+				teamSkipTurns,
 				teamPositions,
 				teamTileIds,
 				playerTileIndex,
@@ -459,6 +454,7 @@ export default function DiceArena({
 				isMovingPawn,
 				hasRolledThisGame,
 				pendingTileEvent,
+				hasPendingGoldCard: isGoldCardModalOpen || drawnGoldCard !== null || tileSelectionMode === 'gold-card-effect-target',
 				eventNotice,
 			},
 			actions: {
@@ -518,7 +514,7 @@ export default function DiceArena({
 				boardgames={boardgames}
 				activeBoardgameId={activeBoardgameId}
 				canCreateBoardgame={canCreateBoardgame}
-				isBusy={isBoardgameBusy || isEditMode}
+				isBusy={isBoardgameBusy || isEditMode || isGoldCardModalOpen || drawnGoldCard !== null}
 				onSelect={(id) => void handleLoadBoardgame(id)}
 				onCreated={handleCreatedBoardgame}
 				activeBoardgameIsMaker={activeBoardgameIsMaker}
@@ -543,9 +539,9 @@ export default function DiceArena({
 						isFullscreen={isFullscreen}
 						tileEvent={pendingTileEvent}
 						eventCountdown={eventCountdown}
-						onConfirmTileEvent={executePendingTileEvent}
+						onConfirmTileEvent={handleConfirmTileEvent}
 						eventNotice={eventNotice}
-						onCloseEventNotice={() => setEventNotice(null)}
+						onCloseEventNotice={handleCloseEventNotice}
 						popupConfirmButtonRef={popupConfirmButtonRef}
 						viewMode={viewMode}
 						onSwitchView={switchView}
@@ -565,8 +561,6 @@ export default function DiceArena({
 							onChooseSwapTeam={(teamIndex) =>
 								applyDrawnGoldCard({ teamIndex })
 							}
-							onCancelTarget={cancelGoldCardEffectTarget}
-							onClose={closeGoldCardDrawModal}
 						/>
 					)}
 					</ArenaViewport>

@@ -18,6 +18,8 @@ export function useGameProgress(activeBoardgameId: string | null) {
 	const playerTileIndexRef = useRef(0);
 	const [currentTeamIndex, setCurrentTeamIndex] = useState(0);
 	const currentTeamIndexRef = useRef(0);
+	const [teamSkipTurns, setTeamSkipTurns] = useState<number[]>([0, 0, 0, 0]);
+	const teamSkipTurnsRef = useRef(teamSkipTurns);
 	const [teamPositions, setTeamPositions] = useState<number[]>([0, 0, 0, 0]);
 	const teamPositionsRef = useRef<number[]>([0, 0, 0, 0]);
 	const [teamTileIds, setTeamTileIds] = useState<string[]>([
@@ -45,12 +47,14 @@ export function useGameProgress(activeBoardgameId: string | null) {
 			teamPositions: teamPositionsRef.current,
 			teamTileIds,
 			currentTeamIndex,
+			teamSkipTurns,
 			hasRolled: hasRolledThisGame,
 			scores,
 		});
 	}, [
 		activeBoardgameId,
 		currentTeamIndex,
+		teamSkipTurns,
 		hasRolledThisGame,
 		scores,
 		teamNames,
@@ -66,6 +70,8 @@ export function useGameProgress(activeBoardgameId: string | null) {
 		setTeamPositions([...teamPositionsRef.current]);
 		currentTeamIndexRef.current = 0;
 		setCurrentTeamIndex(0);
+		teamSkipTurnsRef.current = teams.map(() => 0);
+		setTeamSkipTurns([...teamSkipTurnsRef.current]);
 		playerTileIndexRef.current = 0;
 		setPlayerTileIndex(0);
 		setScores([]);
@@ -86,6 +92,9 @@ export function useGameProgress(activeBoardgameId: string | null) {
 		currentTeamIndex,
 		setCurrentTeamIndex,
 		currentTeamIndexRef,
+		teamSkipTurns,
+		setTeamSkipTurns,
+		teamSkipTurnsRef,
 		teamPositions,
 		setTeamPositions,
 		teamPositionsRef,

@@ -54,6 +54,8 @@ export interface BoardgameSessionParams {
 	setTeamTileIds: Dispatch<SetStateAction<string[]>>;
 	currentTeamIndexRef: RefObject<number>;
 	setCurrentTeamIndex: Dispatch<SetStateAction<number>>;
+	teamSkipTurnsRef: RefObject<number[]>;
+	setTeamSkipTurns: Dispatch<SetStateAction<number[]>>;
 	playerTileIndexRef: RefObject<number>;
 	setPlayerTileIndex: Dispatch<SetStateAction<number>>;
 	hasRolledThisGameRef: RefObject<boolean>;
@@ -97,6 +99,8 @@ export function useBoardgameSession({
 	setTeamTileIds,
 	currentTeamIndexRef,
 	setCurrentTeamIndex,
+	teamSkipTurnsRef,
+	setTeamSkipTurns,
 	playerTileIndexRef,
 	setPlayerTileIndex,
 	hasRolledThisGameRef,
@@ -203,6 +207,7 @@ export function useBoardgameSession({
 			restoredCurrentTeam,
 			restoredScores,
 			restoredHasRolled,
+			restoredSkipTurns,
 		} = restoreGameProgress(
 			game.id,
 			game.grid_rows,
@@ -231,6 +236,8 @@ export function useBoardgameSession({
 		setTeamNames(restoredNames);
 		setCurrentTeamIndex(restoredCurrentTeam);
 		currentTeamIndexRef.current = restoredCurrentTeam;
+		teamSkipTurnsRef.current = restoredSkipTurns;
+		setTeamSkipTurns([...restoredSkipTurns]);
 		setPlayerTileIndex(restoredPositions[restoredCurrentTeam] ?? 0);
 		playerTileIndexRef.current = restoredPositions[restoredCurrentTeam] ?? 0;
 		setHasRolledThisGame(restoredHasRolled);

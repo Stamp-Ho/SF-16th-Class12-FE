@@ -17,6 +17,7 @@ export function restoreGameProgress(
 		teamNames?: unknown;
 		teamTileIds?: unknown;
 		currentTeamIndex?: unknown;
+		teamSkipTurns?: unknown;
 		hasRolled?: unknown;
 		scores?: unknown;
 	} = {};
@@ -85,6 +86,12 @@ export function restoreGameProgress(
 				.slice(0, 6)
 		: [];
 	const restoredHasRolled = savedProgress.hasRolled === true;
+	const savedSkipTurns = Array.isArray(savedProgress.teamSkipTurns) ? savedProgress.teamSkipTurns : [];
+	const restoredSkipTurns = DEFAULT_TEAM_NAMES.map((_, index) => {
+		const value = savedSkipTurns[index];
+		return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= 99
+			? value : 0;
+	});
 	return {
 		restoredTileIds,
 		restoredPositions,
@@ -92,6 +99,7 @@ export function restoreGameProgress(
 		restoredCurrentTeam,
 		restoredScores,
 		restoredHasRolled,
+		restoredSkipTurns,
 	};
 }
 
@@ -103,6 +111,7 @@ export function saveGameProgress(
 		teamPositions: number[];
 		teamTileIds: string[];
 		currentTeamIndex: number;
+		teamSkipTurns: number[];
 		hasRolled: boolean;
 		scores: number[];
 	},

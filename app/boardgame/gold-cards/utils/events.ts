@@ -1,8 +1,8 @@
 import { GoldCardData } from '../types';
 
 export interface GoldCardEventContext {
-	movePawnToTile: (tileId: string) => void;
-	swapPawnPositions: (teamIndex: number) => void;
+	movePawnToTile: (tileId: string) => boolean;
+	swapPawnPositions: (teamIndex: number) => boolean;
 }
 
 export interface GoldCardChoice {
@@ -17,16 +17,15 @@ export function executeGoldCardEvent(
 ) {
 	switch (card.event.type) {
 		case 'MOVE_PAWN_SPECIFIED':
-			if (card.event.targetTileId) context.movePawnToTile(card.event.targetTileId);
-			break;
+			return context.movePawnToTile(card.event.targetTileId ?? '');
 		case 'MOVE_PAWN_CHOOSE':
-			if (choice.tileId) context.movePawnToTile(choice.tileId);
-			break;
+			return choice.tileId ? context.movePawnToTile(choice.tileId) : false;
 		case 'SWAP_POSITIONS_CHOOSE':
-			if (choice.teamIndex !== undefined) context.swapPawnPositions(choice.teamIndex);
-			break;
+			return choice.teamIndex !== undefined
+				? context.swapPawnPositions(choice.teamIndex)
+				: false;
 		case 'TEXT':
 		default:
-			break;
+			return true;
 	}
 }

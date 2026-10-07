@@ -11,17 +11,14 @@ interface GoldCardDrawModalProps {
 	onApply: () => void;
 	onChooseTarget: () => void;
 	onChooseSwapTeam: (teamIndex: number) => void;
-	onCancelTarget: () => void;
-	onClose: () => void;
 }
 
-export default function GoldCardDrawModal({ card, teamNames, actorTeamIndex, selectingTarget, onApply, onChooseTarget, onChooseSwapTeam, onCancelTarget, onClose }: GoldCardDrawModalProps) {
+export default function GoldCardDrawModal({ card, teamNames, actorTeamIndex, selectingTarget, onApply, onChooseTarget, onChooseSwapTeam }: GoldCardDrawModalProps) {
 	if (selectingTarget) {
 		return (
 			<div className="pointer-events-none absolute inset-x-0 top-20 z-50 flex justify-center px-4">
 				<div className="pointer-events-auto flex items-center gap-3 rounded-xl border border-amber-300/60 bg-slate-950/95 px-4 py-3 text-sm font-bold text-amber-100 shadow-xl">
 					<span>보드에서 폰을 이동할 칸을 선택하세요.</span>
-					<button type="button" onClick={onCancelTarget} className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800">취소</button>
 				</div>
 			</div>
 		);
@@ -45,9 +42,9 @@ export default function GoldCardDrawModal({ card, teamNames, actorTeamIndex, sel
 					)}
 				</AnimatePresence>
 				<div className="mt-5 flex gap-2">
-					<button type="button" onClick={onClose} className="flex-1 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-bold text-slate-300 hover:bg-slate-800">닫기</button>
+					{!card && <button type="button" onClick={onApply} className="flex-1 rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-black text-slate-950 hover:bg-amber-300">완료</button>}
 					{card?.event.type === 'MOVE_PAWN_CHOOSE' && <button type="button" onClick={onChooseTarget} className="flex-1 rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-black text-slate-950 hover:bg-amber-300">이동 위치 선택</button>}
-					{card?.event.type === 'SWAP_POSITIONS_CHOOSE' && <div className="flex flex-1 flex-col gap-1">{teamNames.map((name, teamIndex) => teamIndex !== actorTeamIndex && <button key={name} type="button" onClick={() => onChooseSwapTeam(teamIndex)} className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-black text-slate-950 hover:bg-amber-300">{name}과 위치 교환</button>)}</div>}
+					{card?.event.type === 'SWAP_POSITIONS_CHOOSE' && <div className="flex flex-1 flex-row gap-2 px-2.5">{teamNames.map((name, teamIndex) => teamIndex !== actorTeamIndex && <button key={name} type="button" onClick={() => onChooseSwapTeam(teamIndex)} className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-black text-slate-950 hover:bg-amber-300 flex-1">{name}</button>)}</div>}
 					{card && (card.event.type === 'MOVE_PAWN_SPECIFIED' || card.event.type === 'TEXT') && <button type="button" onClick={onApply} className="flex-1 rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-black text-slate-950 hover:bg-amber-300">카드 적용</button>}
 				</div>
 			</div>

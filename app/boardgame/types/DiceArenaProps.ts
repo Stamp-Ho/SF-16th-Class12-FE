@@ -20,6 +20,7 @@ export interface GamePlayDomain {
 	state: {
 		teams: DiceArenaTeamInfo[];
 		currentTeamIndex: number;
+		teamSkipTurns: number[];
 		teamPositions: number[];
 		teamTileIds: string[];
 		playerTileIndex: number;
@@ -30,6 +31,7 @@ export interface GamePlayDomain {
 		isMovingPawn: boolean;
 		hasRolledThisGame: boolean;
 		pendingTileEvent: BoardTileData | null;
+		hasPendingGoldCard: boolean;
 		eventNotice: { title: string; message: string } | null;
 	};
 	actions: {

@@ -265,6 +265,12 @@ export async function saveBoardgame(input: {
   const tileIds = new Set(input.tiles.map((tile) => tile.id));
   const occupiedCells = new Set<string>();
   for (const tile of input.tiles) {
+		if (tile.action.type === 'SKIP_TURNS') {
+			const turns = tile.action.params?.turns;
+			if (typeof turns !== 'number' || !Number.isSafeInteger(turns) || turns < 1 || turns > 99) {
+				return failure(`타일 ${tile.id}의 멈춤 턴 수는 1부터 99 사이의 정수여야 합니다.`);
+			}
+		}
     if (
       !Number.isInteger(tile.gridR) || !Number.isInteger(tile.gridC) ||
       tile.gridR < 0 || tile.gridR >= input.gridRows ||

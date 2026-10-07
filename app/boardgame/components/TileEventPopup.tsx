@@ -25,7 +25,7 @@ export default function TileEventPopup({
 					}}
 				>
 					<span className="rounded-full border border-sky-300/50 bg-slate-950/40 px-3 py-1 text-xs font-bold text-sky-100">
-						{tile.category}
+						{tile.category == "OUTER" ? "기본 루트" : "내부 루트"}
 					</span>
 					<h2
 						className="whitespace-pre-wrap text-3xl font-black drop-shadow-md"
@@ -44,6 +44,8 @@ export default function TileEventPopup({
 						<p className="whitespace-pre-wrap text-sm font-semibold text-slate-200">
 							{tile.action.type === 'MOVE_STEPS'
 								? `${Math.abs(tile.action.params?.steps ?? 0)}칸 이동합니다.`
+								: tile.action.type === 'SKIP_TURNS'
+									? `다음 자신의 차례부터 ${tile.action.params?.turns ?? 1}턴 동안 술 마시기 벌칙 후 턴을 넘깁니다.`
 								: '이 타일의 이벤트를 실행합니다.'}
 						</p>
 					)}
@@ -60,7 +62,7 @@ export default function TileEventPopup({
 						onClick={onConfirm}
 						className="w-full rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-bold text-slate-950 transition-colors hover:bg-sky-400"
 					>
-						확인
+						완료
 					</button>
 				</div>
 			</div>

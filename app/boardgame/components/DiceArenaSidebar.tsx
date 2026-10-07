@@ -11,11 +11,15 @@ export default function DiceArenaSidebar({
 	const { state: editorState, actions: editorActions } = editor;
 	const { state: goldCardState, actions: goldCardActions } = goldCard;
 	const { isFullscreen, onToggleFullscreen } = view;
+	const remainingSkipTurns = gameState.teamSkipTurns[gameState.currentTeamIndex] ?? 0;
 
 	const preventRoll =
 		gameState.isRolling ||
 		gameState.isMovingPawn ||
-		Boolean(gameState.pendingTileEvent || gameState.eventNotice);
+		gameState.hasPendingGoldCard ||
+		Boolean(gameState.pendingTileEvent || gameState.eventNotice) ||
+		goldCardState.selectingTargetCardId !== null ||
+		editorState.tileSelectionMode === 'gold-card-effect-target';
 
 	return (
 		<aside
@@ -26,7 +30,7 @@ export default function DiceArenaSidebar({
 			<div className="grid grid-cols-2 gap-2">
 				<button
 					type="button"
-					disabled={editorState.isBusy || !editorState.canEdit}
+					disabled={editorState.isBusy || !editorState.canEdit || gameState.hasPendingGoldCard}
 					onClick={editorActions.onToggleEditMode}
 					className={`rounded-lg border px-3 py-2 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
 						editorState.isEditMode
@@ -206,8 +210,13 @@ export default function DiceArenaSidebar({
 							? '주사위 굴리는 중...'
 							: gameState.isMovingPawn
 								? '말 이동 중...'
-								: '주사위 던지기'}
+								: remainingSkipTurns > 0 ? '턴 넘기기' : '주사위 던지기'}
 					</button>
+					{remainingSkipTurns > 0 && (
+						<p className="text-center text-xs font-semibold text-amber-300">
+							탈출로 찾기({remainingSkipTurns}턴 남음) · 술 마시기 벌칙
+						</p>
+					)}
 
 					<div className="grid grid-cols-3 gap-3">
 						<div className="rounded-xl border border-slate-700 bg-slate-950/70 p-3">

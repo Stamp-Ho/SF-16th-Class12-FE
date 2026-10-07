@@ -38,7 +38,7 @@ export default function TileInspector({
 		onUpdate({
 			action: {
 				type,
-				params: type === 'MOVE_STEPS' ? { steps: 2 } : {},
+				params: type === 'MOVE_STEPS' ? { steps: 2 } : type === 'SKIP_TURNS' ? { turns: 1 } : {},
 			},
 		});
 	};
@@ -205,9 +205,29 @@ export default function TileInspector({
 					<option value="DIRECTION_CHANGE">방향 전환</option>
 					<option value="TELEPORT">특정 타일로 워프</option>
 					<option value="DRAW_GOLD_CARD">황금카드 뽑기</option>
+					<option value="SKIP_TURNS">n턴 간 멈춤 (술 마시기 벌칙)</option>
 				</select>
 
 				{/* 액션별 세부 옵션 UI */}
+				{tile.action.type === 'SKIP_TURNS' && (
+					<label className="flex flex-col gap-1.5 rounded-lg border border-slate-700/50 bg-slate-800/60 p-2.5 text-xs text-slate-300">
+						건너뛸 자신의 차례 수
+						<input
+							type="number"
+							min={1}
+							max={99}
+							step={1}
+							value={tile.action.params?.turns ?? 1}
+							onChange={(event) => {
+								const turns = Number(event.target.value);
+								if (!Number.isSafeInteger(turns) || turns < 1 || turns > 99) return;
+								onUpdate({ action: { ...tile.action, params: { ...tile.action.params, turns } } });
+							}}
+							className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-white"
+						/>
+						<span className="text-[10px] text-slate-500">도착 턴은 포함하지 않습니다. 매 차례 술 마시기 벌칙 후 턴을 넘깁니다.</span>
+					</label>
+				)}
 				{tile.action.type === 'MOVE_STEPS' && (
 					<div className="bg-slate-800/60 p-2.5 rounded-lg border border-slate-700/50 flex flex-col gap-1.5 mt-1">
 						<span className="text-[11px] text-slate-400">
