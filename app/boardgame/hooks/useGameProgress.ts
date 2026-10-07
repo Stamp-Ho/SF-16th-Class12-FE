@@ -12,8 +12,8 @@ export function useGameProgress(activeBoardgameId: string | null) {
 	const [scores, setScores] = useState<number[]>([]);
 	const [hasRolledThisGame, setHasRolledThisGame] = useState(false);
 	const hasRolledThisGameRef = useRef(false);
-	const [diceCount, setDiceCount] = useState(2);
-	const diceCountRef = useRef(2);
+	const [diceCount, setDiceCount] = useState(1);
+	const diceCountRef = useRef(1);
 	const [playerTileIndex, setPlayerTileIndex] = useState<number>(0);
 	const playerTileIndexRef = useRef(0);
 	const [currentTeamIndex, setCurrentTeamIndex] = useState(0);

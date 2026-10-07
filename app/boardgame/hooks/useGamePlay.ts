@@ -700,9 +700,9 @@ export function useGamePlay({
 				pawn.scale.set(1, 1, 1);
 			});
 		}
-		diceCountRef.current = 2;
-		setDiceCount(2);
-		syncDiceCount(2);
+		diceCountRef.current = 1;
+		setDiceCount(1);
+		syncDiceCount(1);
 		setIsRestartConfirmOpen(false);
 		setBoardgameStatus('게임을 처음부터 다시 시작합니다.');
 	};
