@@ -68,20 +68,21 @@ export default function TileInspector({
 			<div className="flex flex-col gap-3 pb-3">
 				<label className="flex flex-col gap-1 text-xs font-semibold text-slate-300">
 					타일 라벨 (텍스트)
-					<input
-						type="text"
+					<textarea
+						rows={3}
 						value={isGoldCardTile ? '황금 카드 뽑기' : tile.label}
 						onChange={(e) => onUpdate({ label: e.target.value })}
 						readOnly={isGoldCardTile}
 						className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
 						placeholder="예: 원샷, 한 칸 앞으로"
 					/>
+					<span className="text-[10px] font-normal text-slate-500">Enter로 줄바꿈할 수 있습니다.</span>
 				</label>
 
 				<label className="flex flex-col gap-1 text-xs font-semibold text-slate-300">
 					서브 설명 (작은 글씨)
-					<input
-						type="text"
+					<textarea
+						rows={3}
 						value={isGoldCardTile ? '' : tile.subLabel || ''}
 						onChange={(e) => onUpdate({ subLabel: e.target.value })}
 						readOnly={isGoldCardTile}

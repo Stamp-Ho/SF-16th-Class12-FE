@@ -28,8 +28,8 @@ export default function BoardgameEditorAccessModal({
 		<div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4">
 			<div className="w-full max-w-md space-y-4 rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
 				<div>
-					<h2 className="text-lg font-bold text-white">편집 권한 부여</h2>
-					<p className="mt-1 text-xs text-slate-400">
+					<h2 className="whitespace-pre-wrap text-lg font-bold text-white">편집 권한 부여</h2>
+					<p className="mt-1 whitespace-pre-wrap text-xs text-slate-400">
 						사용자 이름을 추가하거나, 목록의 이름을 눌러 권한을 회수하세요.
 					</p>
 				</div>
@@ -72,7 +72,7 @@ export default function BoardgameEditorAccessModal({
 					</div>
 				</div>
 
-				{status && <p className="text-xs text-slate-300">{status}</p>}
+				{status && <p className="whitespace-pre-wrap text-xs text-slate-300">{status}</p>}
 				<div className="flex justify-end border-t border-slate-800 pt-3">
 					<button
 						type="button"

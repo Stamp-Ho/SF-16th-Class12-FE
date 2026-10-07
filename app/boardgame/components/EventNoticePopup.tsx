@@ -15,10 +15,10 @@ export default function EventNoticePopup({
 	return (
 		<div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-sm pointer-events-auto">
 			<div className="w-full max-w-sm rounded-2xl border border-amber-400/40 bg-slate-900 p-6 text-center shadow-2xl">
-				<h2 className="text-xl font-black text-amber-300">
+				<h2 className="whitespace-pre-wrap text-xl font-black text-amber-300">
 					{notice.title}
 				</h2>
-				<p className="mt-3 text-sm text-slate-200">
+				<p className="mt-3 whitespace-pre-wrap text-sm text-slate-200">
 					{notice.message}
 				</p>
 				<button
@@ -27,7 +27,7 @@ export default function EventNoticePopup({
 					onClick={onClose}
 					className="mt-5 w-full rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-bold text-slate-950 hover:bg-amber-300"
 				>
-					확인
+					완료
 				</button>
 			</div>
 		</div>

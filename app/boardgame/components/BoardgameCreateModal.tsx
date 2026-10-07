@@ -41,8 +41,8 @@ export default function BoardgameCreateModal({
 				className="w-full max-w-md space-y-4 rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl"
 			>
 				<div>
-					<h2 className="text-lg font-bold text-white">새 보드게임 생성</h2>
-					<p className="mt-1 text-xs text-slate-400">
+					<h2 className="whitespace-pre-wrap text-lg font-bold text-white">새 보드게임 생성</h2>
+					<p className="mt-1 whitespace-pre-wrap text-xs text-slate-400">
 						생성 후 보드 편집 화면으로 이동합니다.
 					</p>
 				</div>
@@ -82,7 +82,7 @@ export default function BoardgameCreateModal({
 						/>
 					</label>
 				</div>
-				{error && <p className="text-xs text-rose-300">{error}</p>}
+				{error && <p className="whitespace-pre-wrap text-xs text-rose-300">{error}</p>}
 				<div className="flex justify-end gap-2 border-t border-slate-800 pt-3">
 					<button
 						type="button"

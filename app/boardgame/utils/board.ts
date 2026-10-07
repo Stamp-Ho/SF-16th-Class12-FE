@@ -1,6 +1,7 @@
 // utils/board.ts
 import * as THREE from 'three';
 import { drawGoldCardArtwork } from '../gold-cards/utils/cardArtwork';
+import type { BoardTileData } from '../types/board';
 
 export interface BoardTile {
 	id: string;
@@ -165,14 +166,42 @@ export function createDynamicTileTexture(
 		} else {
 			// 설명은 도착 팝업에서만 보여주고 타일 표면에는 제목만 표시한다.
 			ctx.fillStyle = textColor;
+			const lines = (label || '타일').split(/\r\n?|\n/);
+			const maxWidth = canvas.width - 64;
+			const maxHeight = canvas.height - 64;
 			ctx.font = 'bold 56px sans-serif';
+			const widestLine = Math.max(...lines.map((line) => ctx.measureText(line).width));
+			const fontSize = Math.min(
+				56,
+				widestLine > 0 ? (56 * maxWidth) / widestLine : 56,
+				maxHeight / (lines.length * 1.25),
+			);
+			const lineHeight = fontSize * 1.25;
+			ctx.font = `bold ${fontSize}px sans-serif`;
 			ctx.textAlign = 'center';
 			ctx.textBaseline = 'middle';
-			ctx.fillText(label || '타일', canvas.width / 2, canvas.height / 2);
+			const firstLineY = canvas.height / 2 - ((lines.length - 1) * lineHeight) / 2;
+			lines.forEach((line, index) => {
+				ctx.fillText(line, canvas.width / 2, firstLineY + index * lineHeight);
+			});
 		}
 	}
 
 	const texture = new THREE.CanvasTexture(canvas);
 	texture.needsUpdate = true;
 	return texture;
+}
+
+// 최초 생성과 편집 모두 실제 메시 윗면의 비율로 같은 텍스처를 만든다.
+export function createTileTopTexture(
+	tile: Pick<BoardTileData, 'label' | 'color' | 'textColor' | 'action'>,
+	geometry: THREE.BoxGeometry,
+) {
+	return createDynamicTileTexture(
+		tile.label,
+		tile.color,
+		tile.textColor,
+		tile.action.type === 'DRAW_GOLD_CARD',
+		geometry.parameters.width / geometry.parameters.depth,
+	);
 }

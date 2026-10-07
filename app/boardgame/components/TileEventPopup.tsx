@@ -28,27 +28,27 @@ export default function TileEventPopup({
 						{tile.category}
 					</span>
 					<h2
-						className="text-3xl font-black drop-shadow-md"
+						className="whitespace-pre-wrap text-3xl font-black drop-shadow-md"
 						style={{ color: tile.textColor || '#ffffff' }}
 					>
 						{tile.label || '타일'}
 					</h2>
 					{tile.subLabel && (
-						<p className="text-sm text-slate-300">
+						<p className="whitespace-pre-wrap text-sm text-slate-300">
 							{tile.subLabel}
 						</p>
 					)}
 				</div>
 				<div className="space-y-4 p-5 text-center">
 					{tile.action.type === 'NONE' ? null : (
-						<p className="text-sm font-semibold text-slate-200">
+						<p className="whitespace-pre-wrap text-sm font-semibold text-slate-200">
 							{tile.action.type === 'MOVE_STEPS'
 								? `${Math.abs(tile.action.params?.steps ?? 0)}칸 이동합니다.`
 								: '이 타일의 이벤트를 실행합니다.'}
 						</p>
 					)}
 					{tile.action.type === 'MOVE_STEPS' ? (
-						<p className="text-sm font-bold text-amber-300">
+						<p className="whitespace-pre-wrap text-sm font-bold text-amber-300">
 							{countdown !== null
 								? `${countdown}초 후 실행`
 								: '이동 중'}

@@ -7,7 +7,7 @@ import {
 } from 'react';
 import * as THREE from 'three';
 import { BoardTileData } from '../types/board';
-import { createDynamicTileTexture } from '../utils/board';
+import { createTileTopTexture } from '../utils/board';
 import {
 	acquireBoardgameTileEditLock,
 	getBoardgame,
@@ -189,12 +189,9 @@ export function useTileEditor({
 				}
 				// 상단 텍스처 교체 (materials[2]가 윗면)
 				const materials = mesh.material as THREE.MeshStandardMaterial[];
-				materials[2].map = createDynamicTileTexture(
-					newTileData.label,
-					newTileData.color,
-					newTileData.textColor,
-					newTileData.action.type === 'DRAW_GOLD_CARD',
-				);
+				const previousTexture = materials[2].map;
+				materials[2].map = createTileTopTexture(newTileData, mesh.geometry as THREE.BoxGeometry);
+				previousTexture?.dispose();
 				materials[2].needsUpdate = true;
 			}
 

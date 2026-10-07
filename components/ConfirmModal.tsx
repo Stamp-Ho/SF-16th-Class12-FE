@@ -27,11 +27,11 @@ export default function ConfirmModal({
             <AlertTriangle className="h-5 w-5" aria-hidden="true" />
           </div>
           <div className="min-w-0 text-left">
-            <p className="text-base font-bold leading-6 text-slate-900">
+            <p className="whitespace-pre-wrap text-base font-bold leading-6 text-slate-900">
               {message}
             </p>
             {warning && (
-              <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm leading-5 text-red-600">
+              <p className="mt-2 whitespace-pre-wrap rounded-lg bg-red-50 px-3 py-2 text-sm leading-5 text-red-600">
                 {warning}
               </p>
             )}

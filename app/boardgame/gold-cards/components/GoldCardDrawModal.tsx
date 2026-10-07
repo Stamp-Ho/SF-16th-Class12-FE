@@ -36,7 +36,7 @@ export default function GoldCardDrawModal({ card, teamNames, actorTeamIndex, sel
 					{card ? (
 						<motion.div key={card.id} initial={{ opacity: 0, rotateY: 90, scale: 0.8 }} animate={{ opacity: 1, rotateY: 0, scale: 1 }} transition={{ duration: 0.55, delay: 0.15 }} className="mx-auto flex min-h-64 max-w-xs flex-col rounded-2xl border-2 border-amber-300 bg-gradient-to-br from-amber-100 via-yellow-200 to-amber-400 p-5 text-slate-900 shadow-xl">
 							<p className="text-[10px] font-black uppercase tracking-[0.25em] text-amber-800">Golden Card</p>
-							<h2 className="mt-3 text-xl font-black">{card.title}</h2>
+							<h2 className="mt-3 whitespace-pre-wrap text-xl font-black">{card.title}</h2>
 							<p className="mt-4 flex-1 whitespace-pre-wrap text-sm font-semibold leading-6">{card.description || '설명이 없는 카드입니다.'}</p>
 							<span className="mt-4 rounded-full bg-amber-900/10 px-3 py-1 text-[10px] font-bold">{card.event.type === 'MOVE_PAWN_SPECIFIED' ? '폰 위치 이동 (지정)' : card.event.type === 'MOVE_PAWN_CHOOSE' ? '폰 위치 이동 (선택)' : card.event.type === 'SWAP_POSITIONS_CHOOSE' ? '상호 위치 교환 (선택)' : '일반 텍스트 (바닐라)'}</span>
 						</motion.div>

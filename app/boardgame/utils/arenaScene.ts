@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { BoardTileData } from '../types/board';
-import { BoardTile, createDynamicTileTexture } from './board';
+import { BoardTile, createTileTopTexture } from './board';
 import { BOARD_SURFACE_Y, TEAM_COLORS, getPawnPosition } from './arena';
 import { disposeGoldCardDeckGroup } from '../gold-cards/utils/threeDeck';
 
@@ -178,13 +178,7 @@ export function addTileMesh(
 					tileHeight * 1.6,
 				)
 			: boxGeo;
-		const topTexture = createDynamicTileTexture(
-			tileData.label,
-			tileData.color,
-			tileData.textColor,
-			tileData.action.type === 'DRAW_GOLD_CARD',
-			isCorner ? 1 : tileWidth / (tileHeight * (isOuter ? 1.6 : 1)),
-		);
+		const topTexture = createTileTopTexture(tileData, tileGeometry);
 		const sideMat = new THREE.MeshStandardMaterial({
 			color: 0x1e293b,
 			roughness: 0.6,
