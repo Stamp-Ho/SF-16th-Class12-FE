@@ -538,7 +538,7 @@ export default function DiceArena({
 					className={`flex w-full flex-col overflow-hidden border border-slate-800 bg-slate-950 shadow-2xl select-none lg:flex-row ${
 						isFullscreen
 							? 'fixed inset-0 z-50 h-screen rounded-none'
-							: 'h-360 rounded-3xl lg:h-180'
+							: 'h-420 rounded-3xl lg:h-180'
 					}`}
 				>
 					<ArenaViewport
