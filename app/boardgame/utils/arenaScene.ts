@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { BoardTileData } from '../types/board';
 import { BoardTile, createDynamicTileTexture } from './board';
-import { TEAM_COLORS, getPawnPosition } from './arena';
+import { BOARD_SURFACE_Y, TEAM_COLORS, getPawnPosition } from './arena';
 import { disposeGoldCardDeckGroup } from '../gold-cards/utils/threeDeck';
 
 export function createArenaRenderer(
@@ -50,11 +50,12 @@ export function createArenaWorld() {
 	world.defaultContactMaterial.friction = 0.4;
 	world.defaultContactMaterial.restitution = 0.3;
 
-	// 물리 바닥
+	// 타일 윗면을 공통 충돌 바닥으로 사용해 주사위가 타일 아래로 들어가지 않도록 한다.
 	const floorBody = new CANNON.Body({
 		type: CANNON.Body.STATIC,
 		shape: new CANNON.Plane(),
 	});
+	floorBody.position.y = BOARD_SURFACE_Y;
 	floorBody.quaternion.setFromAxisAngle(
 		new CANNON.Vec3(-1, 0, 0),
 		Math.PI * 0.5,

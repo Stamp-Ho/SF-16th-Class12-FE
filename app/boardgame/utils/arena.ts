@@ -10,10 +10,13 @@ const TEAM_PAWN_OFFSETS = [
 ];
 export const DEFAULT_TEAM_NAMES = ['팀 1', '팀 2', '팀 3', '팀 4'];
 export const TEAM_COLORS = ['#38bdf8', '#fbbf24', '#f472b6', '#a78bfa'];
+export const BOARD_SURFACE_Y = 0.4;
+// 타일 윗면(0.4)에 폰 받침의 반높이(0.15)를 더해 바닥을 맞춘다.
+const PAWN_BASE_HEIGHT = BOARD_SURFACE_Y + 0.15;
 
 export function getPawnPosition(tile: Pick<BoardTile, 'x' | 'z'>, teamIndex: number) {
 	const offset = TEAM_PAWN_OFFSETS[teamIndex] ?? { x: 0, z: 0 };
-	return new THREE.Vector3(tile.x + offset.x, 1.2, tile.z + offset.z);
+	return new THREE.Vector3(tile.x + offset.x, PAWN_BASE_HEIGHT, tile.z + offset.z);
 }
 
 export function getOrbitDefaults(mode: '2.5d' | 'top', rows: number, cols: number) {
