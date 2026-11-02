@@ -68,6 +68,19 @@ strong {
   scrollbar-width: thin; /* 얇은 스크롤바 */
   scrollbar-color: #cbd5e1 transparent; /* thumb 색상, track 색상 */
 }
+@keyframes borderPulse {
+  0%, 100% {
+    border-color: rgb(239 68 68);
+    box-shadow: inset 0 0 0 2px rgb(239 68 68);
+  }
+  50% {
+    border-color: rgb(239 68 68 / 0.2);
+    box-shadow: inset 0 0 0 2px rgb(239 68 68 / 0.2);
+  }
+}
+.leader-border-pulse {
+  animation: borderPulse 1.5s ease-in-out infinite;
+}
 @keyframes diceBounce {
   0% {
     transform: translateY(0) scale(1, 1);

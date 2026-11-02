@@ -2,7 +2,8 @@
 
 import { requireAuth } from '@/utils/auth';
 import { createAdminClient } from '@/utils/supabase/admin';
-import { applyMove, initialState, joinRoom, leaveRoom, publicView, type Move } from './engine';
+import { createClient } from '@/utils/supabase/server';
+import { applyMove, historyFromState, initialState, joinRoom, leaveRoom, publicView, type Move } from './engine';
 import type { GameState } from './rules';
 
 type Actor = { id: string; name: string };
@@ -61,17 +62,27 @@ export async function createAvalonRoom(): Promise<Result<{ id: string }>> {
   } catch (error) { return { ok: false, error: error instanceof Error ? error.message : '방 생성에 실패했습니다.' }; }
 }
 
-async function mutate(roomId: string, transform: (state: GameState, user: Actor) => GameState): Promise<Result<{ id: string; view: ReturnType<typeof publicView> }>> {
+async function mutate(roomId: string, transform: (state: GameState, user: Actor) => GameState): Promise<Result<{ id: string; view: ReturnType<typeof publicView> | null }>> {
   try {
     const user = await actor();
     for (let attempt = 0; attempt < 6; attempt++) {
       const row = await findRoom(roomId);
       const state = transform(row.state, user);
+      const changedAt = new Date().toISOString();
+      if (state.phase !== row.state.phase && (state.phase === 'vote' || state.phase === 'quest')) state.phaseStartedAt = changedAt;
+      const priorHistory = historyFromState(row.state);
+      state.history = [
+        ...priorHistory,
+        ...state.voteHistory.slice(row.state.voteHistory.length).map((_, offset) => ({ type: 'vote' as const, index: row.state.voteHistory.length + offset })),
+        ...state.results.slice(row.state.results.length).map((_, offset) => ({ type: 'quest' as const, index: row.state.results.length + offset })),
+        ...state.publicEvents.slice(row.state.publicEvents.length).map((_, offset) => ({ type: 'event' as const, index: row.state.publicEvents.length + offset })),
+      ];
+      state.historyApproximate = row.state.historyApproximate ?? (!row.state.history && priorHistory.length > 0);
       const { data, error } = await createAdminClient().from('avalon_rooms')
-        .update({ state, version: row.version + 1, updated_at: new Date().toISOString() })
+        .update({ state, version: row.version + 1, updated_at: changedAt })
         .eq('id', row.id).eq('version', row.version).select('id').maybeSingle();
       if (error) throw new Error(error.message);
-      if (data) return { ok: true, data: { id: row.id, view: publicView(state, user.id) } };
+      if (data) return { ok: true, data: { id: row.id, view: state.players.some((p) => p.id === user.id) ? publicView(state, user.id) : null } };
     }
     throw new Error('동시에 변경된 내용이 있습니다. 다시 시도해 주세요.');
   } catch (error) { return { ok: false, error: error instanceof Error ? error.message : '요청을 처리하지 못했습니다.' }; }
@@ -110,5 +121,27 @@ export async function getAvalonRoom(roomId: string): Promise<Result<{ id: string
     const row = await findRoom(roomId);
     return { ok: true, data: { id: row.id, view: publicView(row.state, user.id) } };
   } catch (error) { return { ok: false, error: error instanceof Error ? error.message : '방을 불러오지 못했습니다.' }; }
+}
+
+export async function getAvalonAvatarUrls(roomId: string): Promise<Result<Record<string, string>>> {
+  try {
+    const user = await actor();
+    const row = await findRoom(roomId);
+    if (!row.state.players.some((player) => player.id === user.id)) throw new Error('방 참가자만 프로필을 볼 수 있습니다.');
+    const { data: profiles, error: profileError } = await createAdminClient().from('users')
+      .select('id, username').in('username', row.state.players.map((player) => player.name));
+    if (profileError) throw new Error(`프로필 ID 조회 실패: ${profileError.message}`);
+    const profileIds = new Map((profiles ?? []).map((profile) => [profile.username, String(profile.id)]));
+    const supabase = await createClient();
+    const signed = await Promise.all(row.state.players.map(async (player) => {
+      const profileId = profileIds.get(player.name);
+      if (!profileId) return { id: player.id, url: null, error: `${player.name}의 프로필 ID를 찾지 못했습니다.` };
+      const { data, error } = await supabase.storage.from('profileImage').createSignedUrl(`${profileId}.jpg`, 3600);
+      return { id: player.id, url: data?.signedUrl ?? null, error: error?.message };
+    }));
+    const urls = Object.fromEntries(signed.filter((entry) => entry.url).map((entry) => [entry.id, entry.url as string]));
+    if (signed.length && !Object.keys(urls).length) throw new Error(`서명 URL 발급 실패: ${signed[0].error ?? '이미지 파일을 확인해 주세요.'}`);
+    return { ok: true, data: urls };
+  } catch (error) { return { ok: false, error: error instanceof Error ? error.message : '프로필 이미지를 불러오지 못했습니다.' }; }
 }
 

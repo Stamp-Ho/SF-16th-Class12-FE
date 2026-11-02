@@ -50,16 +50,17 @@ export type Config = {
   plot: boolean;
   seniorKnowsJunior: boolean;
 };
-export type MissionResult = { number: number; team: string[]; success: boolean; cards: Card[]; failCount: number; vote: Record<string, boolean> };
+export type MissionResult = { number: number; team: string[]; success: boolean; cards: Card[]; failCount: number; vote: Record<string, boolean>; leaderId?: string };
+export type HistoryEntry = { type: 'vote' | 'quest' | 'event'; index: number };
 export type GameState = {
-  phase: Phase; hostId: string; players: Player[]; config: Config;
+  phase: Phase; phaseStartedAt?: string; hostId: string; players: Player[]; config: Config;
   mission: number; lockedMission: number | null; leaderSeat: number; rejected: number; proposal: string[];
   votes: Record<string, boolean>; cards: Record<string, Card>;
-  voteHistory: { mission: number; team: string[]; votes: Record<string, boolean>; approved: boolean }[];
-  results: MissionResult[]; winner: Side | null; winReason: string | null;
+  voteHistory: { mission: number; team: string[]; votes: Record<string, boolean>; approved: boolean; leaderId?: string }[];
+  results: MissionResult[]; winner: Side | null; winReason: string | null; assassinated?: string[];
   ladyHolder: string | null; ladyUsed: string[]; ladyFindings: Record<string, { target: string; side: Side }[]>;
   lancelotCards: boolean[]; lancelotApplied: number[];
-  publicEvents: string[]; recruited: string | null;
+  publicEvents: string[]; history?: HistoryEntry[]; historyApproximate?: boolean; recruited: string | null;
   excaliburHolder: string | null; trapperExcluded: string | null;
   rogueWatchHolder: string | null;
   messengerUses: Record<string, number>; rogueUses: Record<string, number[]>;

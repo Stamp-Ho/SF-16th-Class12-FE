@@ -1,4 +1,4 @@
-import { allowedCards, assignRoles, defaultConfig, knows, normalizeConfig, shuffled, TEAM_COUNTS, validateConfig, type Card, type Config, type GameState, type Player, type PlotCard, type Side } from './rules';
+import { allowedCards, assignRoles, defaultConfig, knows, normalizeConfig, shuffled, TEAM_COUNTS, validateConfig, type Card, type Config, type GameState, type HistoryEntry, type Player, type PlotCard, type Side } from './rules';
 
 export type Move =
   | { type: 'ready'; ready: boolean }
@@ -81,8 +81,8 @@ export function initialState(host: { id: string; name: string }): GameState {
     phase: 'lobby', hostId: host.id,
     players: [{ id: host.id, name: host.name, seat: 0, roles: [], side: 'good', currentSide: 'good', ready: false, seen: false }],
     config: defaultConfig(), mission: 1, lockedMission: null, leaderSeat: 0, rejected: 0, proposal: [], votes: {}, cards: {}, voteHistory: [], results: [],
-    winner: null, winReason: null, ladyHolder: null, ladyUsed: [], ladyFindings: {},
-    lancelotCards: [], lancelotApplied: [], publicEvents: [], recruited: null,
+    winner: null, winReason: null, assassinated: [], ladyHolder: null, ladyUsed: [], ladyFindings: {},
+    lancelotCards: [], lancelotApplied: [], publicEvents: [], history: [], recruited: null,
     excaliburHolder: null, trapperExcluded: null, rogueWatchHolder: null, messengerUses: {}, rogueUses: {}, cardPeeks: {}, pendingCheck: null,
     plotDeck: [], plotHands: {}, plotDrawn: [], plotPending: null, plotOpportunity: [], plotLeadUsed: false, plotPrepared: [],
     forcedPublicCard: null, inspectedCards: [],
@@ -186,7 +186,7 @@ function resolveQuest(s: GameState) {
   const threshold = s.players.length >= 7 && s.mission === 4 ? 2 : 1;
   let success = failCount < threshold;
   if (cards.filter((c) => c === 'magic').length % 2) success = !success;
-  const result = { number: s.mission, team: [...s.proposal], success, cards, failCount, vote: { ...s.votes } };
+  const result = { number: s.mission, team: [...s.proposal], success, cards, failCount, vote: { ...s.votes }, leaderId: s.players[s.leaderSeat].id };
   s.results.push(result);
   s.publicEvents.push(`${s.mission}차 원정 ${success ? '성공' : '실패'} (실패 ${failCount}장)`);
   if (s.results.filter((r) => !r.success).length === 2) for (const p of s.players) if (has(p, 'revealer')) s.publicEvents.push(`폭로자: ${p.name}`);
@@ -332,7 +332,7 @@ export function applyMove(state: GameState, actorId: string, move: Move): GameSt
     s.votes[actorId] = move.approve;
     if (Object.keys(s.votes).length === s.players.length) {
       const approvals = Object.values(s.votes).filter(Boolean).length;
-      s.voteHistory.push({ mission: s.mission, team: [...s.proposal], votes: { ...s.votes }, approved: approvals > s.players.length / 2 });
+      s.voteHistory.push({ mission: s.mission, team: [...s.proposal], votes: { ...s.votes }, approved: approvals > s.players.length / 2, leaderId: s.players[s.leaderSeat].id });
       if (approvals > s.players.length / 2) {
         if (s.config.plot) {
           s.plotOpportunity = s.players.filter((p) => (s.plotHands[p.id] ?? []).includes('king_returns')).map((p) => p.id);
@@ -405,13 +405,32 @@ export function applyMove(state: GameState, actorId: string, move: Move): GameSt
       if (!s.players.some((p) => has(p, 'evil_messenger')) || !move.secondTarget || move.secondTarget === move.target || !playerById(s, move.secondTarget)) throw new Error('서로 다른 전령 후보 두 명을 선택해 주세요.');
       const second = playerById(s, move.secondTarget)!;
       const correct = [target, second].every((p) => has(p, 'good_messenger_senior') || has(p, 'good_messenger_junior'));
+      s.assassinated = [target.id, second.id];
       finish(s, correct ? 'evil' : 'good', correct ? '선 전령 두 명 암살 성공' : '선 전령 암살 실패');
       return s;
     }
+    s.assassinated = [target.id];
     finish(s, has(target, 'merlin') ? 'evil' : 'good', has(target, 'merlin') ? '멀린 암살 성공' : '멀린 암살 실패');
     return s;
   }
   return fail('현재 단계에서 사용할 수 없는 행동입니다.');
+}
+
+export function historyFromState(s: GameState): HistoryEntry[] {
+  if (s.history) return s.history;
+  const history: HistoryEntry[] = [];
+  const usedResults = new Set<number>();
+  s.voteHistory.forEach((vote, index) => {
+    history.push({ type: 'vote', index });
+    const resultIndex = s.results.findIndex((result, candidate) => !usedResults.has(candidate) && result.number === vote.mission);
+    if (vote.approved && resultIndex !== -1) {
+      history.push({ type: 'quest', index: resultIndex });
+      usedResults.add(resultIndex);
+    }
+  });
+  s.results.forEach((_, index) => { if (!usedResults.has(index)) history.push({ type: 'quest', index }); });
+  s.publicEvents.forEach((_, index) => history.push({ type: 'event', index }));
+  return history;
 }
 
 export function publicView(s: GameState, actorId: string) {
@@ -419,7 +438,7 @@ export function publicView(s: GameState, actorId: string) {
   if (!actor) throw new Error('방 참가자가 아닙니다.');
   const finished = s.phase === 'finished';
   return {
-    phase: s.phase, hostId: s.hostId, config: normalizeConfig(s.config), mission: s.mission, lockedMission: s.lockedMission,
+    phase: s.phase, phaseStartedAt: s.phaseStartedAt ?? null, hostId: s.hostId, config: normalizeConfig(s.config), mission: s.mission, lockedMission: s.lockedMission,
     leaderSeat: s.leaderSeat, rejected: s.rejected, proposal: s.proposal,
     players: s.players.map((p) => ({ id: p.id, name: p.name, seat: p.seat, ready: p.ready, seen: p.seen,
       roles: finished || p.id === actorId ? p.roles : [],
@@ -430,16 +449,16 @@ export function publicView(s: GameState, actorId: string) {
     pendingCheck: s.pendingCheck && { target: s.pendingCheck.target, checker: s.pendingCheck.checker },
     myCardPeeks: s.cardPeeks[actorId] ?? [],
     myAllowedCards: s.phase === 'quest' && s.proposal.includes(actorId) ? allowedCards(actor, s) : [],
-    voted: actorId in s.votes, voteCount: Object.keys(s.votes).length,
+    voted: actorId in s.votes, voteCount: Object.keys(s.votes).length, voteSubmitted: Object.keys(s.votes),
     votes: s.phase === 'vote' ? null : s.votes,
     earlyVotes: s.phase === 'vote' && s.players.filter((p) => (s.plotHands[p.id] ?? []).includes('charge')).every((p) => p.id in s.votes)
       ? Object.fromEntries(Object.entries(s.votes).filter(([id]) => (s.plotHands[id] ?? []).includes('charge'))) : {},
-    cardSubmitted: actorId in s.cards, cardCount: Object.keys(s.cards).length,
-    results: s.results.map(({ number, team, success, cards, failCount, vote }) => ({ number, team, success, cards, failCount, vote })),
+    cardSubmitted: actorId in s.cards, cardCount: Object.keys(s.cards).length, cardSubmitters: Object.keys(s.cards),
+    results: s.results.map(({ number, team, success, cards, failCount, vote, leaderId }) => ({ number, team, success, cards, failCount, vote, leaderId })),
     voteHistory: s.voteHistory,
-    winner: s.winner, winReason: s.winReason, ladyHolder: s.ladyHolder,
+    winner: s.winner, winReason: s.winReason, assassinated: finished ? s.assassinated ?? [] : [], ladyHolder: s.ladyHolder,
     ladyUsed: s.ladyUsed, lancelotCards: s.lancelotCards.slice(0, s.lancelotApplied.length),
-    publicEvents: s.publicEvents, recruited: s.recruited, excaliburHolder: s.excaliburHolder, rogueWatchHolder: s.rogueWatchHolder,
+    publicEvents: s.publicEvents, history: historyFromState(s), historyApproximate: s.historyApproximate ?? !s.history, recruited: s.recruited, excaliburHolder: s.excaliburHolder, rogueWatchHolder: s.rogueWatchHolder,
     plotHands: s.plotHands, plotDrawn: s.plotDrawn, plotPending: s.plotPending,
     plotOpportunity: s.plotOpportunity, forcedPublicCard: s.forcedPublicCard,
     publicQuestCard: s.forcedPublicCard ? s.cards[s.forcedPublicCard] ?? null : null,

@@ -1,0 +1,22 @@
+@keyframes attentionBorder {
+  0%, 100% {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 4px rgb(239 68 68 / 0.35);
+  }
+  50% {
+    border-color: transparent;
+    box-shadow: 0 0 0 4px transparent;
+  }
+}
+
+.attention {
+  animation: attentionBorder 1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .attention {
+    animation: none;
+    border-color: #ef4444;
+    box-shadow: 0 0 0 4px rgb(239 68 68 / 0.35);
+  }
+}
