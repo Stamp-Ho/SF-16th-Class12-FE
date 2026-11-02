@@ -32,7 +32,7 @@ export async function bulkRegisterUsers(
       email_confirm: true, // 이메일 인증 완료 상태로 설정 (메일 미발송)
       user_metadata: { name, email: virtualEmail } // Supabase Trigger(handle_new_user)로 users에 name 자동 삽입
     });
-    console.log(data, error);
+    //console.log(data, error);
 
     if (error || !data.user) {
       results.failCount++;

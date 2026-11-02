@@ -36,16 +36,11 @@ export async function loginWithName(formData: FormData) {
 			error: '이름이 정확한지 확인해 주세요.',
 		};
 	}
-	console.log('Found user email:', profile.email);
-
 	// 2. DB에서 조회해온 가상 이메일로 Supabase Auth 로그인 실행
 	const { error: signInError } = await supabase.auth.signInWithPassword({
 		email: profile.email,
 		password: password,
 	});
-	console.log('Sign-in error:', signInError);
-	console.log('email, password:', profile.email, password);
-
 	if (signInError) {
 		return { error: '비밀번호가 올바르지 않습니다.' };
 	}

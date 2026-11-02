@@ -77,7 +77,7 @@ export default function AllocationAddModal({
       setFirstOrder(users.map((p) => p?.name));
 
       setRingOrder(generateRingOrder(users.length));
-      console.log(generateRingOrder(users.length));
+      //console.log(generateRingOrder(users.length));
       setReverseRingOrder(generateReverseRingOrder(users.length));
     };
     getProfiles();
@@ -93,7 +93,7 @@ export default function AllocationAddModal({
   const [drawHistory, setDrawHistory] = useState<any>(null);
 
   useEffect(() => {
-    console.log(drawHistory);
+    //console.log(drawHistory);
     if (drawHistory && drawHistory.result_data.length > 0) {
       setFlatMembers(
         drawHistory.result_data.map((d: { name: string; order: number }) => ({

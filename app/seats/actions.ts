@@ -372,7 +372,6 @@ export async function getSeatsDataByRounds(roundIds: number[]) {
  */
 export async function placeBid(request: BidRequest) {
   const supabase = await createClient();
-  console.log(request.nextGroupId);
 
   const { data, error } = await supabase.rpc("place_bid_with_shield", {
     p_allocation_id: request.allocationId,
@@ -508,7 +507,7 @@ export const sendMattermostNoticeOnSeatBid = async ({
   attacker: string;
 }) => {
   const webhookUrl = process.env.MATTERMOST_CLASS_WEBHOOK;
-  console.log("webhookUrl:", webhookUrl);
+  //console.log("webhookUrl:", webhookUrl);
   if (!webhookUrl) {
     return failure("매터모스트 클래스 웹훅이 정의되지 않았습니다.");
   }

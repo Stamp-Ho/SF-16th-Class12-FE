@@ -77,7 +77,7 @@ function applyRecordToRanking(
     if (existingRanking) {
       existingRanking.bid_count += 1;
       existingRanking.raised_money += record.price_change;
-      if (record.user_name === "조동휘") console.log(record);
+      //if (record.user_name === "조동휘") console.log(record);
     } else {
       next.push({
         user_name: record.user_name,

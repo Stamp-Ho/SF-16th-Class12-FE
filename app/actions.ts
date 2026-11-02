@@ -1,7 +1,7 @@
 "use server";
 
 export const getMenu = async () => {
-  console.log("Fetching menu...");
+  //console.log("Fetching menu...");
 
   try {
     const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");

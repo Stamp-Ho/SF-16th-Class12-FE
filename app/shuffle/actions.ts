@@ -11,7 +11,7 @@ export async function getTargetUsers() {
 		.select('id, username, role')
 		.eq('status', 'ACTIVE')
 		.order('username', { ascending: true });
-	console.log(users);
+	//console.log(users);
 
 	if (error) throw new Error(`유저 목록 조회 실패: ${error.message}`);
 	return users
