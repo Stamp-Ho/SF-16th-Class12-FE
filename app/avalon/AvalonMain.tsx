@@ -58,7 +58,7 @@ const primary = 'rounded-xl bg-violet-700 px-4 py-3 font-semibold text-white dis
 const secondary = 'rounded-xl border border-slate-300 bg-white px-4 py-3 font-medium text-slate-800 disabled:opacity-40';
 const previewPeople: User[] = PREVIEW_NAMES.map((name, index) => ({ id: PREVIEW_FALLBACK_IDS[index], name }));
 const previewPhases: { phase: Phase; label: string }[] = [
-  { phase: 'lobby', label: '대기실' }, { phase: 'reveal', label: '역할 확인' },
+  { phase: 'reveal', label: '역할 확인' },
   { phase: 'propose', label: '팀 제안' }, { phase: 'vote', label: '팀 투표' },
   { phase: 'quest', label: '원정 카드' }, { phase: 'lady', label: '호수의 여인' },
   { phase: 'finished', label: '게임 결과' },
@@ -77,11 +77,7 @@ function previewView(phase: Phase, people: User[]): View {
     { ...seventh, seat: 6, roles: ['mordred'], side: 'evil', currentSide: 'evil', ready: true, seen: true },
     { ...eighth, seat: 7, roles: [], side: 'good', currentSide: 'good', ready: true, seen: true }
   ];
-  state.config = { ...defaultConfig(8), lady: true, lancelot: 'variant1', goodSlots: [['merlin'], ['good_lancelot'], [], ['percival'], []], evilSlots: [['assassin'], ['evil_lancelot'], ['mordred']] };
-  if (phase === 'lobby') {
-    state.players.forEach((player) => { player.roles = []; });
-    return publicView(state, self.id);
-  }
+  state.config = { ...defaultConfig(), lady: true, lancelot: 'variant1', goodSlots: [['merlin'], ['good_lancelot']], evilSlots: [['assassin'], ['evil_lancelot']] };
   state.phase = phase;
   state.mission = 3;
   state.results = [
@@ -112,8 +108,8 @@ function previewView(phase: Phase, people: User[]): View {
 export default function AvalonMain({ user, preview = false, previewParticipants = previewPeople, previewAvatarUrls = {}, previewAvatarError }: { user: User; preview?: boolean; previewParticipants?: User[]; previewAvatarUrls?: Record<string, string>; previewAvatarError?: string }) {
   const [roomId, setRoomId] = useState(preview ? 'preview' : '');
   const [rooms, setRooms] = useState<AvalonRoomSummary[]>([]);
-  const [view, setView] = useState<View | null>(() => preview ? previewView('lobby', previewParticipants) : null);
-  const [config, setConfig] = useState<Config | null>(() => preview ? previewView('lobby', previewParticipants).config : null);
+  const [view, setView] = useState<View | null>(() => preview ? previewView('propose', previewParticipants) : null);
+  const [config, setConfig] = useState<Config | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [team, setTeam] = useState<string[]>([]);
@@ -188,9 +184,6 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
   }
   async function send(move: Move) {
     if (preview) {
-      if (move.type === 'ready') { setView((current) => current && current.phase === 'lobby' ? { ...current, players: current.players.map((player) => player.id === user.id ? { ...player, ready: move.ready } : player) } : current); setError(''); return; }
-      if (move.type === 'config') { setView((current) => current && current.phase === 'lobby' ? { ...current, config: move.config } : current); setError(''); return; }
-      if (move.type === 'start') { setView(previewView('reveal', previewParticipants)); setPreviewTurn((turn) => turn + 1); setError(''); return; }
       if (move.type === 'quest') { setPreviewQuestChoice(move.card); setError(''); return; }
       if (move.type === 'lady') {
         const index = previewParticipants.findIndex((person) => person.id === move.target);
@@ -272,7 +265,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
         <Link href="/" className="inline-flex items-center gap-2 text-sm font-medium text-slate-600"><ArrowLeft size={17} /> 대시보드</Link>
         <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => setRulebookOpen(true)} className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-white px-3 py-1.5 text-sm font-semibold text-violet-800 focus-visible:outline-2 focus-visible:outline-violet-600"><BookOpen size={16} /> 룰북</button><span className="inline-flex items-center gap-2 rounded-full bg-violet-100 px-3 py-1 text-sm font-semibold text-violet-800"><Shield size={15} /> 레지스탕스: 아발론</span></div>
       </header>
-      {preview && <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><p className="font-bold">플레이 화면 미리보기</p><p className="mt-1">예시 게임 결과를 사용합니다. 실제 방에 연결되거나 행동이 저장되지 않습니다. 참가자 이름과 프로필 이미지는 사용자 목록에서 불러옵니다.</p><label className="mt-3 block font-medium">확인할 화면 <select className={`${field} mt-1 w-full`} value={view?.phase ?? 'lobby'} onChange={(e) => { const nextView = previewView(e.target.value as Phase, previewParticipants); setError(''); setPreviewQuestChoice(null); setPreviewLadyResult(null); setPreviewTurn((turn) => turn + 1); setView(nextView); if (nextView.phase === 'lobby') setConfig(nextView.config); }}>{previewPhases.map(({ phase, label }) => <option key={phase} value={phase}>{label}</option>)}</select></label></section>}
+      {preview && <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><p className="font-bold">플레이 화면 미리보기</p><p className="mt-1">예시 게임 결과를 사용합니다. 실제 방에 연결되거나 행동이 저장되지 않습니다. 참가자 이름과 프로필 이미지는 사용자 목록에서 불러옵니다.</p><label className="mt-3 block font-medium">확인할 화면 <select className={`${field} mt-1 w-full`} value={view?.phase ?? 'propose'} onChange={(e) => { setError(''); setPreviewQuestChoice(null); setPreviewLadyResult(null); setPreviewTurn((turn) => turn + 1); setView(previewView(e.target.value as Phase, previewParticipants)); }}>{previewPhases.map(({ phase, label }) => <option key={phase} value={phase}>{label}</option>)}</select></label></section>}
       {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
       {avatarError && <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">프로필 이미지를 불러오지 못했습니다: {avatarError}</div>}
 
@@ -317,7 +310,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
           <section className="rounded-2xl bg-white p-4 shadow-sm sm:p-6">
             <div className="flex items-center justify-between gap-3"><h2 className="font-bold">참가자 {view.players.length}/{view.config.playerCount}</h2><button type="button" onClick={() => setRulebookOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 px-3 py-2 text-sm font-semibold text-violet-800 focus-visible:outline-2 focus-visible:outline-violet-600"><BookOpen size={16} /> 룰북 보기</button></div>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">{view.players.map((p) => <div key={p.id} className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm"><span className="flex min-w-0 items-center gap-2"><PlayerAvatar name={p.name} url={avatarUrls[p.id]} /><span className="truncate">{p.seat + 1}. {p.name} {p.id === view.hostId ? '👑' : ''}</span></span><span className={`shrink-0 ${p.ready ? 'text-emerald-600' : 'text-slate-400'}`}>{p.ready ? '준비됨' : '대기'}</span></div>)}</div>
-            <div className="mt-4 flex flex-wrap gap-2"><button className={secondary} disabled={busy} onClick={() => void send({ type: 'ready', ready: !me?.ready })}>{me?.ready ? '준비 취소' : '준비 완료'}</button>{!preview && <button className={secondary} disabled={busy} onClick={async () => { const result = await leaveAvalonRoom(roomId); if (result.ok) { setRoomId(''); setView(null); const list = await listAvalonRooms(); if (list.ok) setRooms(list.data); } else setError(result.error); }}>방 나가기</button>}{isHost && <button className={primary} disabled={busy || view.players.length !== view.config.playerCount || view.players.some((p) => !p.ready)} onClick={() => void send({ type: 'start' })}>게임 시작</button>}</div>
+            <div className="mt-4 flex flex-wrap gap-2"><button className={secondary} disabled={busy} onClick={() => void send({ type: 'ready', ready: !me?.ready })}>{me?.ready ? '준비 취소' : '준비 완료'}</button><button className={secondary} disabled={busy} onClick={async () => { const result = await leaveAvalonRoom(roomId); if (result.ok) { setRoomId(''); setView(null); const list = await listAvalonRooms(); if (list.ok) setRooms(list.data); } else setError(result.error); }}>방 나가기</button>{isHost && <button className={primary} disabled={busy || view.players.length !== view.config.playerCount || view.players.some((p) => !p.ready)} onClick={() => void send({ type: 'start' })}>게임 시작</button>}</div>
           </section>
           {isHost && config && <ConfigEditor config={config} setConfig={setConfig} busy={busy} save={() => void send({ type: 'config', config })} />}
         </> : <>
