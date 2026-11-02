@@ -4,7 +4,8 @@ import {
   Dices,
   MicVocal,
   Cookie,
-  Shuffle
+  Shuffle,
+  Shield
 } from "lucide-react";
     
 export const MainLinks = [
@@ -47,6 +48,15 @@ export const MainLinks = [
       bgColor:
         "from-amber-400/80 to-amber-600 hover:from-amber-600/80 hover:to-amber-400/70 transition-colors duration-750",
       desColor: "text-amber-100"
+    },
+    {
+      badge: "AVALON",
+      title: "레지스탕스: 아발론",
+      description: "비밀 역할 추리 게임",
+      url: "/avalon",
+      icon: Shield,
+      bgColor: "from-violet-600 to-indigo-900 hover:from-violet-700 hover:to-indigo-950 transition-colors duration-750",
+      desColor: "text-violet-100"
     },
     {
       badge: "BOARD GAME",
