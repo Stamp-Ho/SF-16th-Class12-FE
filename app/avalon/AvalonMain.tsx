@@ -391,6 +391,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
             <div className="mt-3 grid gap-2 sm:grid-cols-2">{view.players.map((p) => <div key={p.id} className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm"><span className="flex min-w-0 items-center gap-2"><PlayerAvatar name={p.name} url={avatarUrls[p.id]} /><span className="truncate">{p.seat + 1}. {p.name}</span>{p.id === view.hostId && <Crown aria-label="방장" className="size-4 shrink-0 text-amber-600" />}</span><span className={`shrink-0 ${p.ready ? 'text-emerald-600' : 'text-slate-400'}`}>{p.ready ? '준비됨' : '대기'}</span></div>)}</div>
             <div className="mt-4 flex flex-wrap gap-2"><button className={secondary} disabled={busy} onClick={() => void send({ type: 'ready', ready: !me?.ready })}>{me?.ready ? '준비 취소' : '준비 완료'}</button><button className={secondary} disabled={busy} onClick={async () => { const result = await leaveAvalonRoom(roomId); if (result.ok) { setRoomId(''); setView(null); const list = await listAvalonRooms(); if (list.ok) setRooms(list.data); } else setError(result.error); }}>방 나가기</button>{isHost && <button className={primary} disabled={busy || view.players.length !== view.config.playerCount || view.players.some((p) => !p.ready)} onClick={() => void send({ type: 'start' })}>게임 시작</button>}</div>
           </section>
+          <RoleComposition config={view.config} />
           {isHost && config && <ConfigEditor config={config} setConfig={setConfig} busy={busy} save={() => void send({ type: 'config', config })} />}
         </> : <>
           <section className="rounded-2xl bg-white p-4 shadow-sm sm:p-6">
@@ -507,6 +508,41 @@ function GameHistory({ view }: { view: View }) {
       {view.historyApproximate && <p className="mt-3 text-xs text-amber-700">이 방의 이전 기록은 저장된 내역을 기준으로 순서를 복원했습니다.</p>}
       <div className="mt-3 space-y-2">{view.history.slice().reverse().filter((entry) => entry.type !== 'event' || visibleEventIndices.has(entry.index)).map((entry, position) => entry.type === 'vote' ? voteCard(entry.index) : entry.type === 'quest' ? questCard(entry.index) : <article key={`event-${position}`} className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">{view.publicEvents[entry.index]}</article>)}</div>
     </>}
+  </section>;
+}
+
+function RoleComposition({ config }: { config: Config }) {
+  const groups = [
+    { side: 'good', label: '선', slots: config.goodSlots, ordinary: '충신' },
+    { side: 'evil', label: '악', slots: config.evilSlots, ordinary: '하수인' },
+  ] as const;
+  const enabledRules = [
+    ...(config.expansion ? ['확장 직업 사용'] : []),
+    ...(config.lady ? ['호수의 여인'] : []),
+    ...(config.lancelot === 'variant1' ? ['랜슬롯 변형 1 · 현재 악은 성공/실패 선택'] : []),
+    ...(config.lancelot === 'variant2' ? ['랜슬롯 변형 2 · 현재 악은 실패만 제출'] : []),
+    ...(config.targeting ? ['목표 원정 선택'] : []),
+    ...(config.trapper ? ['함정꾼'] : []),
+    ...(config.excalibur ? ['엑스칼리버'] : []),
+    ...(config.plot ? ['플롯 카드'] : []),
+    ...(config.seniorKnowsJunior ? ['상급 전령의 정보'] : []),
+  ];
+
+  return <section className="rounded-2xl bg-white p-4 shadow-sm sm:p-6">
+    <h2 className="font-bold">저장된 직업 구성</h2>
+    <p className="mt-1 text-sm text-slate-600">게임 시작 시 아래 직업이 참가자에게 무작위로 배정됩니다.</p>
+    <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4">
+      {groups.map(({ side, label, slots, ordinary }) => <div key={side} className="min-w-0">
+        <h3 className={`rounded-lg text-sm font-bold ${side === 'good' ? 'text-blue-900' : 'text-red-900'}`}>{label} 진영 · {slots.length}명</h3>
+        <ul className="mt-2 space-y-2">{slots.map((slot, index) => <li key={index} className={`min-w-0 rounded-lg border px-3 py-2 text-sm font-medium break-keep ${side === 'good' ? 'border-blue-100 bg-blue-50 text-blue-900' : 'border-red-100 bg-red-50 text-red-900'}`}>
+          {slot.length ? slot.map((role) => ROLES[role].name).join(' + ') : ordinary}
+        </li>)}</ul>
+      </div>)}
+    </div>
+    {enabledRules.length > 0 && <div className="mt-5 border-t border-slate-200 pt-4">
+      <h3 className="text-sm font-bold">적용 규칙</h3>
+      <ul className="mt-2 flex flex-wrap gap-2">{enabledRules.map((rule) => <li key={rule} className="rounded-lg bg-violet-50 px-3 py-2 text-sm font-medium text-violet-900">{rule}</li>)}</ul>
+    </div>}
   </section>;
 }
 

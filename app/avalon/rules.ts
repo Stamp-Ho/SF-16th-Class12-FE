@@ -83,7 +83,7 @@ export function defaultConfig(count = 5): Config {
     playerCount: count, expansion: count === 10,
     goodSlots: [...goodRoles, ...Array.from({ length: good - goodRoles.length }, () => [] as Role[])],
     evilSlots: [...evilRoles, ...Array.from({ length: evil - evilRoles.length }, () => [] as Role[])],
-    lady: false, lancelot: 'off', targeting: false, trapper: false,
+    lady: true, lancelot: 'off', targeting: false, trapper: false,
     excalibur: false, plot: false, seniorKnowsJunior: false,
   };
 }
