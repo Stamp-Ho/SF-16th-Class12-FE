@@ -4,6 +4,7 @@ export const TEAM_COUNTS: Record<number, number[]> = {
   9: [3, 4, 4, 5, 5], 10: [3, 4, 4, 5, 5],
 };
 export const GOOD_COUNTS: Record<number, number> = { 5: 3, 6: 4, 7: 4, 8: 5, 9: 6, 10: 6 };
+export const REJECTED_VOTE_REVEAL_MS = 5000;
 
 export const ROLES = {
   merlin: { name: '멀린', side: 'good', expansion: false },
@@ -54,7 +55,7 @@ export type MissionResult = { number: number; team: string[]; success: boolean; 
 export type HistoryEntry = { type: 'vote' | 'quest' | 'event'; index: number };
 export type GameState = {
   phase: Phase; phaseStartedAt?: string; hostId: string; players: Player[]; config: Config;
-  mission: number; lockedMission: number | null; leaderSeat: number; rejected: number; proposal: string[];
+  mission: number; lockedMission: number | null; leaderSeat: number; rejected: number; rejectedVoteAt?: string | null; proposal: string[];
   votes: Record<string, boolean>; cards: Record<string, Card>;
   voteHistory: { mission: number; team: string[]; votes: Record<string, boolean>; approved: boolean; leaderId?: string }[];
   results: MissionResult[]; winner: Side | null; winReason: string | null; assassinated?: string[];
@@ -74,10 +75,14 @@ export type GameState = {
 
 export function defaultConfig(count = 5): Config {
   const good = GOOD_COUNTS[count], evil = count - good;
+  const goodRoles: Role[][] = [['merlin'], ['percival']];
+  const evilRoles: Role[][] = [['assassin'], ['morgana']];
+  if (count >= 8) evilRoles.push(['mordred']);
+  if (count === 10) goodRoles.push(['cleric']);
   return {
-    playerCount: count, expansion: false,
-    goodSlots: [['merlin'], ...Array.from({ length: good - 1 }, () => [] as Role[])],
-    evilSlots: [['assassin'], ...Array.from({ length: evil - 1 }, () => [] as Role[])],
+    playerCount: count, expansion: count === 10,
+    goodSlots: [...goodRoles, ...Array.from({ length: good - goodRoles.length }, () => [] as Role[])],
+    evilSlots: [...evilRoles, ...Array.from({ length: evil - evilRoles.length }, () => [] as Role[])],
     lady: false, lancelot: 'off', targeting: false, trapper: false,
     excalibur: false, plot: false, seniorKnowsJunior: false,
   };

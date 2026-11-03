@@ -1,4 +1,4 @@
-import { allowedCards, assignRoles, defaultConfig, knows, normalizeConfig, shuffled, TEAM_COUNTS, validateConfig, type Card, type Config, type GameState, type HistoryEntry, type Player, type PlotCard, type Side } from './rules';
+import { allowedCards, assignRoles, defaultConfig, knows, normalizeConfig, REJECTED_VOTE_REVEAL_MS, shuffled, TEAM_COUNTS, validateConfig, type Card, type Config, type GameState, type HistoryEntry, type Player, type PlotCard, type Side } from './rules';
 
 export type Move =
   | { type: 'ready'; ready: boolean }
@@ -80,7 +80,7 @@ export function initialState(host: { id: string; name: string }): GameState {
   return {
     phase: 'lobby', hostId: host.id,
     players: [{ id: host.id, name: host.name, seat: 0, roles: [], side: 'good', currentSide: 'good', ready: false, seen: false }],
-    config: defaultConfig(), mission: 1, lockedMission: null, leaderSeat: 0, rejected: 0, proposal: [], votes: {}, cards: {}, voteHistory: [], results: [],
+    config: defaultConfig(), mission: 1, lockedMission: null, leaderSeat: 0, rejected: 0, rejectedVoteAt: null, proposal: [], votes: {}, cards: {}, voteHistory: [], results: [],
     winner: null, winReason: null, assassinated: [], ladyHolder: null, ladyUsed: [], ladyFindings: {},
     lancelotCards: [], lancelotApplied: [], publicEvents: [], history: [], recruited: null,
     excaliburHolder: null, trapperExcluded: null, rogueWatchHolder: null, messengerUses: {}, rogueUses: {}, cardPeeks: {}, pendingCheck: null,
@@ -251,6 +251,7 @@ export function applyMove(state: GameState, actorId: string, move: Move): GameSt
       removePlot(s, actorId, expected);
       if (phase === 'plot_king') {
         s.rejected++; s.publicEvents.push('The King Returns: 승인된 팀이 부결되었습니다.');
+        s.rejectedVoteAt = new Date().toISOString();
         if (s.voteHistory.length) s.voteHistory[s.voteHistory.length - 1].approved = false;
         if (s.rejected >= 5) finish(s, 'evil', '같은 원정에서 팀 5회 부결로 악 진영 승리');
         else { s.leaderSeat = nextSeat(s); s.phase = 'propose'; s.proposal = []; }
@@ -312,6 +313,7 @@ export function applyMove(state: GameState, actorId: string, move: Move): GameSt
   }
   if (move.type === 'propose') {
     if (s.phase !== 'propose' || actor.seat !== s.leaderSeat) fail('현재 리더만 팀을 제안할 수 있습니다.');
+    if (s.rejectedVoteAt && Date.now() - Date.parse(s.rejectedVoteAt) < REJECTED_VOTE_REVEAL_MS) fail('부결 투표 결과를 5초간 공개한 뒤 팀을 제안할 수 있습니다.');
     const mission = s.config.targeting ? (move.mission ?? s.mission) : s.mission;
     if (!Number.isInteger(mission) || mission < 1 || mission > 5 || s.results.some((r) => r.number === mission)) fail('선택할 수 없는 원정입니다.');
     if (s.lockedMission !== null && mission !== s.lockedMission) fail('이번 원정의 목표는 이미 정해졌습니다.');
@@ -323,7 +325,7 @@ export function applyMove(state: GameState, actorId: string, move: Move): GameSt
     if (watchNeeded && (!move.rogueWatchHolder || !move.team.includes(move.rogueWatchHolder))) fail('감시 대상을 원정 팀에서 선택해 주세요.');
     s.mission = mission; s.lockedMission = mission; s.proposal = [...move.team]; s.excaliburHolder = s.config.excalibur ? move.excaliburHolder! : null;
     s.rogueWatchHolder = watchNeeded ? move.rogueWatchHolder! : null;
-    s.votes = {}; s.phase = 'vote'; return s;
+    s.votes = {}; s.rejectedVoteAt = null; s.phase = 'vote'; return s;
   }
   if (move.type === 'vote') {
     if (s.phase !== 'vote' || actorId in s.votes) fail('투표할 수 없습니다.');
@@ -334,6 +336,7 @@ export function applyMove(state: GameState, actorId: string, move: Move): GameSt
       const approvals = Object.values(s.votes).filter(Boolean).length;
       s.voteHistory.push({ mission: s.mission, team: [...s.proposal], votes: { ...s.votes }, approved: approvals > s.players.length / 2, leaderId: s.players[s.leaderSeat].id });
       if (approvals > s.players.length / 2) {
+        s.rejectedVoteAt = null;
         if (s.config.plot) {
           s.plotOpportunity = s.players.filter((p) => (s.plotHands[p.id] ?? []).includes('king_returns')).map((p) => p.id);
           if (s.plotOpportunity.length) s.phase = 'plot_king'; else beginQuestEffects(s);
@@ -341,6 +344,7 @@ export function applyMove(state: GameState, actorId: string, move: Move): GameSt
       }
       else {
         s.rejected++; s.publicEvents.push(`${s.mission}차 팀 투표 부결 (${s.rejected}/5)`);
+        s.rejectedVoteAt = new Date().toISOString();
         if (s.rejected === 5) finish(s, 'evil', '같은 원정에서 팀 5회 부결로 악 진영 승리');
         else { s.leaderSeat = nextSeat(s); s.phase = 'propose'; s.proposal = []; }
       }
@@ -400,9 +404,9 @@ export function applyMove(state: GameState, actorId: string, move: Move): GameSt
   }
   if (move.type === 'assassinate') {
     if (s.phase !== 'assassinate' || (!has(actor, 'assassin') && actorId !== s.recruited) || (s.recruited && actorId !== s.recruited)) fail('암살 담당자만 선택할 수 있습니다.');
-    const target = playerById(s, move.target); if (!target || target.id === actorId) throw new Error('대상을 선택해 주세요.');
+    const target = playerById(s, move.target); if (!target || target.id === actorId || target.currentSide !== 'good') throw new Error('선 진영 참가자를 선택해 주세요.');
     if (move.targetType === 'messengers') {
-      if (!s.players.some((p) => has(p, 'evil_messenger')) || !move.secondTarget || move.secondTarget === move.target || !playerById(s, move.secondTarget)) throw new Error('서로 다른 전령 후보 두 명을 선택해 주세요.');
+      if (!s.players.some((p) => has(p, 'evil_messenger')) || !move.secondTarget || move.secondTarget === move.target || playerById(s, move.secondTarget)?.currentSide !== 'good') throw new Error('서로 다른 선 진영 전령 후보 두 명을 선택해 주세요.');
       const second = playerById(s, move.secondTarget)!;
       const correct = [target, second].every((p) => has(p, 'good_messenger_senior') || has(p, 'good_messenger_junior'));
       s.assassinated = [target.id, second.id];
@@ -437,12 +441,13 @@ export function publicView(s: GameState, actorId: string) {
   const actor = playerById(s, actorId);
   if (!actor) throw new Error('방 참가자가 아닙니다.');
   const finished = s.phase === 'finished';
+  const revealSides = finished || s.phase === 'assassinate';
   return {
     phase: s.phase, phaseStartedAt: s.phaseStartedAt ?? null, hostId: s.hostId, config: normalizeConfig(s.config), mission: s.mission, lockedMission: s.lockedMission,
-    leaderSeat: s.leaderSeat, rejected: s.rejected, proposal: s.proposal,
+    leaderSeat: s.leaderSeat, rejected: s.rejected, rejectedVoteAt: s.rejectedVoteAt ?? null, proposal: s.proposal,
     players: s.players.map((p) => ({ id: p.id, name: p.name, seat: p.seat, ready: p.ready, seen: p.seen,
       roles: finished || p.id === actorId ? p.roles : [],
-      side: finished || p.id === actorId ? p.currentSide : null })),
+      side: revealSides || p.id === actorId ? p.currentSide : null })),
     myRole: s.phase === 'lobby' ? [] : actor.roles, mySide: s.phase === 'lobby' ? null : actor.currentSide,
     myKnowledge: s.phase === 'lobby' ? [] : knows(s, actor),
     myFindings: s.ladyFindings[actorId] ?? [],

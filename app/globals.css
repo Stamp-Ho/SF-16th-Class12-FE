@@ -81,6 +81,37 @@ strong {
 .leader-border-pulse {
   animation: borderPulse 1.5s ease-in-out infinite;
 }
+@keyframes ladyBorderPulse {
+  0%, 100% {
+    border-color: rgb(6 182 212);
+    box-shadow: inset 0 0 0 2px rgb(6 182 212);
+  }
+  50% {
+    border-color: rgb(6 182 212 / 0.2);
+    box-shadow: inset 0 0 0 2px rgb(6 182 212 / 0.2);
+  }
+}
+.lady-border-pulse {
+  animation: ladyBorderPulse 1.5s ease-in-out infinite;
+}
+@keyframes rejectionWarningPulse {
+  0%, 100% {
+    opacity: 0.25;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.25);
+  }
+}
+.rejection-warning-pulse {
+  animation: rejectionWarningPulse 1.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rejection-warning-pulse {
+    animation: none;
+  }
+}
 @keyframes diceBounce {
   0% {
     transform: translateY(0) scale(1, 1);
