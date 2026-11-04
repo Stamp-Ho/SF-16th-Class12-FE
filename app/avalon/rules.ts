@@ -54,7 +54,7 @@ export type Config = {
 export type MissionResult = { number: number; team: string[]; success: boolean; cards: Card[]; failCount: number; vote: Record<string, boolean>; leaderId?: string };
 export type HistoryEntry = { type: 'vote' | 'quest' | 'event'; index: number };
 export type GameState = {
-  phase: Phase; phaseStartedAt?: string; hostId: string; players: Player[]; config: Config;
+  phase: Phase; phaseStartedAt?: string; gameId?: string; hostId: string; players: Player[]; config: Config;
   mission: number; lockedMission: number | null; leaderSeat: number; rejected: number; rejectedVoteAt?: string | null; proposal: string[];
   votes: Record<string, boolean>; cards: Record<string, Card>;
   voteHistory: { mission: number; team: string[]; votes: Record<string, boolean>; approved: boolean; leaderId?: string }[];

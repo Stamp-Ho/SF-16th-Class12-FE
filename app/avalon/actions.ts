@@ -8,7 +8,8 @@ import type { GameState } from './rules';
 
 type Actor = { id: string; name: string };
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
-export type AvalonRoomSummary = { id: string; hostName: string; players: string[]; capacity: number; phase: string };
+export type AvalonRoomSummary = { id: string; hostName: string; players: { id: string; name: string }[]; capacity: number; phase: string };
+export type AvalonPlayerStats = { playerId: string; playerName: string; games: number; wins: number; goodGames: number; goodWins: number; evilGames: number; evilWins: number };
 
 async function actor(): Promise<Actor> {
   const auth = await requireAuth();
@@ -37,9 +38,26 @@ export async function listAvalonRooms(): Promise<Result<AvalonRoomSummary[]>> {
     if (error) throw new Error(error.message);
     return { ok: true, data: (data ?? []).filter((row) => (row.state as GameState).phase !== 'finished').map((row) => {
       const s = row.state as GameState;
-      return { id: row.id, hostName: s.players.find((p) => p.id === s.hostId)?.name ?? '방장', players: s.players.map((p) => p.name), capacity: s.config.playerCount, phase: s.phase };
+      return { id: row.id, hostName: s.players.find((p) => p.id === s.hostId)?.name ?? '방장', players: s.players.map((p) => ({ id: p.id, name: p.name })), capacity: s.config.playerCount, phase: s.phase };
     }) };
   } catch (error) { return { ok: false, error: error instanceof Error ? error.message : '방 목록을 불러오지 못했습니다.' }; }
+}
+
+export async function getAvalonPlayerStats(): Promise<Result<AvalonPlayerStats[]>> {
+  try {
+    await actor();
+    const db = createAdminClient();
+    const rows: AvalonPlayerStats[] = [];
+    for (let offset = 0; ; offset += 1000) {
+      const { data, error } = await db.from('avalon_player_stats')
+        .select('player_id, player_name, games, wins, good_games, good_wins, evil_games, evil_wins')
+        .order('player_id').range(offset, offset + 999);
+      if (error) throw new Error(error.message);
+      rows.push(...(data ?? []).map((row) => ({ playerId: row.player_id, playerName: row.player_name, games: Number(row.games), wins: Number(row.wins), goodGames: Number(row.good_games), goodWins: Number(row.good_wins), evilGames: Number(row.evil_games), evilWins: Number(row.evil_wins) })));
+      if ((data ?? []).length < 1000) break;
+    }
+    return { ok: true, data: rows };
+  } catch (error) { return { ok: false, error: error instanceof Error ? error.message : '승률을 불러오지 못했습니다.' }; }
 }
 
 export async function getMyAvalonRoom(): Promise<Result<{ id: string; view: ReturnType<typeof publicView> } | null>> {
@@ -71,13 +89,13 @@ async function mutate(roomId: string, transform: (state: GameState, user: Actor)
       const changedAt = new Date().toISOString();
       if (state.phase !== row.state.phase && (state.phase === 'vote' || state.phase === 'quest')) state.phaseStartedAt = changedAt;
       const priorHistory = historyFromState(row.state);
-      state.history = [
+      state.history = state.phase === 'lobby' && row.state.phase !== 'lobby' ? [] : [
         ...priorHistory,
         ...state.voteHistory.slice(row.state.voteHistory.length).map((_, offset) => ({ type: 'vote' as const, index: row.state.voteHistory.length + offset })),
         ...state.results.slice(row.state.results.length).map((_, offset) => ({ type: 'quest' as const, index: row.state.results.length + offset })),
         ...state.publicEvents.slice(row.state.publicEvents.length).map((_, offset) => ({ type: 'event' as const, index: row.state.publicEvents.length + offset })),
       ];
-      state.historyApproximate = row.state.historyApproximate ?? (!row.state.history && priorHistory.length > 0);
+      state.historyApproximate = state.phase === 'lobby' && row.state.phase !== 'lobby' ? false : row.state.historyApproximate ?? (!row.state.history && priorHistory.length > 0);
       const { data, error } = await createAdminClient().from('avalon_rooms')
         .update({ state, version: row.version + 1, updated_at: changedAt })
         .eq('id', row.id).eq('version', row.version).select('id').maybeSingle();

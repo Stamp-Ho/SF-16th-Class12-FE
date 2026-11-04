@@ -4,6 +4,8 @@ export type Move =
   | { type: 'ready'; ready: boolean }
   | { type: 'config'; config: Config }
   | { type: 'start' }
+  | { type: 'kick'; playerId: string }
+  | { type: 'stop' }
   | { type: 'seen' }
   | { type: 'propose'; team: string[]; mission?: number; excaliburHolder?: string; rogueWatchHolder?: string }
   | { type: 'vote'; approve: boolean }
@@ -107,6 +109,14 @@ export function leaveRoom(state: GameState, actorId: string): GameState {
   return s;
 }
 
+function resetToLobby(s: GameState): GameState {
+  const fresh = initialState({ id: s.players[0].id, name: s.players[0].name });
+  fresh.hostId = s.hostId;
+  fresh.players = s.players.map((p, seat) => ({ ...p, seat, roles: [], side: 'good', currentSide: 'good', ready: false, seen: false }));
+  fresh.config = s.config;
+  return fresh;
+}
+
 function finish(s: GameState, winner: Side, reason: string) {
   s.phase = 'finished'; s.winner = winner; s.winReason = reason;
   s.publicEvents.push(reason);
@@ -208,17 +218,28 @@ export function applyMove(state: GameState, actorId: string, move: Move): GameSt
     if (s.phase !== 'lobby') fail('대기 중에만 준비를 바꿀 수 있습니다.');
     actor.ready = move.ready; return s;
   }
+  if (move.type === 'kick') {
+    if (s.phase !== 'lobby' || actorId !== s.hostId) fail('방장만 대기실에서 추방할 수 있습니다.');
+    if (move.playerId === actorId) fail('방장은 자신을 추방할 수 없습니다.');
+    if (!playerById(s, move.playerId)) fail('참가자를 찾을 수 없습니다.');
+    s.players = s.players.filter((p) => p.id !== move.playerId).map((p, seat) => ({ ...p, seat }));
+    return s;
+  }
+  if (move.type === 'stop') {
+    if (actorId !== s.hostId || s.phase === 'lobby' || s.phase === 'finished') fail('진행 중인 게임은 방장만 종료할 수 있습니다.');
+    return resetToLobby(s);
+  }
   if (move.type === 'config') {
     if (s.phase !== 'lobby' || actorId !== s.hostId) fail('방장만 대기 중에 설정할 수 있습니다.');
     const error = validateConfig(move.config); if (error) fail(error);
     if (move.config.playerCount < s.players.length) fail('현재 참가자보다 적은 인원으로 설정할 수 없습니다.');
-    s.config = move.config; s.players.forEach((p) => { p.ready = false; }); return s;
+    s.config = move.config; return s;
   }
   if (move.type === 'start') {
     if (s.phase !== 'lobby' || actorId !== s.hostId) fail('방장만 시작할 수 있습니다.');
     const error = validateConfig(s.config); if (error) fail(error);
     if (s.players.length !== s.config.playerCount) fail('설정한 인원이 모두 입장해야 합니다.');
-    if (s.players.some((p) => !p.ready)) fail('모든 참가자가 준비해야 합니다.');
+    s.gameId = crypto.randomUUID();
     s.players = assignRoles(s.players, s.config); s.leaderSeat = Math.floor(Math.random() * s.players.length);
     s.ladyHolder = s.config.lady ? s.players[(s.leaderSeat + s.players.length - 1) % s.players.length].id : null;
     s.lancelotCards = s.config.lancelot === 'off' ? [] : shuffled([true, true, false, false, false, false, false]);

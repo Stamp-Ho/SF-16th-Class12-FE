@@ -5,8 +5,9 @@ import Image from 'next/image';
 import { startTransition, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowLeft, BookOpen, Check, Crown, Eye, EyeOff, Shield, ShieldAlert, ShieldHalf, ShieldOff, ShieldQuestionMark, Skull, Swords, X } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
-import { createAvalonRoom, getAvalonAvatarUrls, getAvalonRoom, getMyAvalonRoom, joinAvalonRoom, leaveAvalonRoom, listAvalonRooms, moveAvalonRoom } from './actions';
-import type { AvalonRoomSummary } from './actions';
+import { createAvalonRoom, getAvalonAvatarUrls, getAvalonPlayerStats, getAvalonRoom, getMyAvalonRoom, joinAvalonRoom, leaveAvalonRoom, listAvalonRooms, moveAvalonRoom } from './actions';
+import type { AvalonPlayerStats, AvalonRoomSummary } from './actions';
+import PlayerStatsTable from './PlayerStatsTable';
 import { defaultConfig, GOOD_COUNTS, REJECTED_VOTE_REVEAL_MS, ROLES, TEAM_COUNTS, validateConfig, type Card, type Config, type Phase, type PlotCard, type Role, type Side } from './rules';
 import { initialState, publicView, type AvalonView, type Move } from './engine';
 import { useLocalNotes } from './useLocalNotes';
@@ -154,6 +155,11 @@ function previewView(screen: PreviewScreen, people: User[], actorId = people[0].
 export default function AvalonMain({ user, preview = false, previewParticipants = previewPeople, previewAvatarUrls = {}, previewAvatarError }: { user: User; preview?: boolean; previewParticipants?: User[]; previewAvatarUrls?: Record<string, string>; previewAvatarError?: string }) {
   const [roomId, setRoomId] = useState(preview ? 'preview' : '');
   const [rooms, setRooms] = useState<AvalonRoomSummary[]>([]);
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsError, setStatsError] = useState('');
+  const [playerStats, setPlayerStats] = useState<AvalonPlayerStats[]>([]);
+  const configDirty = useRef(false);
   const [previewScreen, setPreviewScreen] = useState<PreviewScreen>('propose');
   const [view, setView] = useState<View | null>(() => preview ? previewView('propose', previewParticipants) : null);
   const [config, setConfig] = useState<Config | null>(null);
@@ -234,16 +240,25 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
       setShowSecret(false);
       setRoomId(result.data.id);
       const room = await getAvalonRoom(result.data.id);
-      if (room.ok) { setView(room.data.view); setConfig(room.data.view.config); }
+      if (room.ok) { configDirty.current = false; setView(room.data.view); setConfig(room.data.view.config); }
     } else setError(result.error);
     setBusy(false);
   }
   async function join(id: string) {
     setBusy(true); setError('');
     const result = await joinAvalonRoom(id);
-    if (result.ok && result.data.view) { setShowSecret(false); setRoomId(result.data.id); setView(result.data.view); setConfig(result.data.view.config); }
+    if (result.ok && result.data.view) { configDirty.current = false; setShowSecret(false); setRoomId(result.data.id); setView(result.data.view); setConfig(result.data.view.config); }
     else if (!result.ok) setError(result.error);
     setBusy(false);
+  }
+  async function openStats() {
+    setStatsOpen(true);
+    setStatsLoading(true);
+    setStatsError('');
+    const result = await getAvalonPlayerStats();
+    if (result.ok) setPlayerStats(result.data);
+    else setStatsError(result.error);
+    setStatsLoading(false);
   }
   async function send(move: Move) {
     if (preview) {
@@ -269,6 +284,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
         const savedConfig = result.data.view.config;
         setConfig((current) => current && JSON.stringify(current) !== JSON.stringify(move.config) ? current : savedConfig);
       }
+      if (move.type === 'stop') { configDirty.current = false; setConfig(result.data.view.config); setShowSecret(false); }
     }
     else if (!result.ok) setError(result.error);
     setBusy(false);
@@ -299,7 +315,11 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
     const refresh = () => {
       startTransition(() => {
         void listAvalonRooms().then((result) => { if (active && result.ok) setRooms(result.data); });
-        if (roomId) void getAvalonRoom(roomId).then((result) => { if (active && result.ok && !busy) setView(result.data.view); });
+        if (roomId) void getAvalonRoom(roomId).then((result) => {
+          if (!active || busy) return;
+          if (result.ok) setView(result.data.view);
+          else if (result.error === '방 참가자가 아닙니다.' || result.error === '방을 찾을 수 없습니다.') { setRoomId(''); setView(null); setConfig(null); }
+        });
       });
     };
     const channel = supabase.channel('avalon-room-signals').on('postgres_changes', { event: '*', schema: 'public', table: 'avalon_room_signals' }, refresh).subscribe();
@@ -323,6 +343,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
   const activeUser = preview && previewScreen === 'assassinate' ? previewParticipants[3] : preview && previewScreen === 'reselect_after_rejection' ? previewParticipants[2] : user;
   const me = view?.players.find((p) => p.id === activeUser.id);
   const isHost = view?.hostId === activeUser.id;
+  const setConfigDraft = (next: Config) => { configDirty.current = true; setConfig(next); };
   const required = view ? TEAM_COUNTS[view.players.length]?.[missionChoice - 1] + Number(view.config.trapper) : 0;
   const selectedRoles = view?.myRole.map((r) => ROLES[r].name).join(' · ');
   const latestVote = view?.voteHistory.at(-1);
@@ -358,9 +379,9 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
 
   // 방장이 대기실에서 바꾼 유효한 설정은 잠시 뒤 자동으로 방에 저장한다.
   useEffect(() => {
-    if (preview || busy || !isHost || view?.phase !== 'lobby' || !config || !roomId) return;
+    if (preview || busy || !isHost || view?.phase !== 'lobby' || !config || !roomId || !configDirty.current) return;
     if (JSON.stringify(config) === JSON.stringify(view.config) || validateConfig(config) || config.playerCount < view.players.length) return;
-    const timer = setTimeout(() => void send({ type: 'config', config }), 500);
+    const timer = setTimeout(() => { configDirty.current = false; void send({ type: 'config', config }); }, 500);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config, view, busy, isHost, roomId, preview]);
@@ -379,8 +400,8 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
         <h1 className="text-2xl font-bold">아발론 게임</h1>
         <p className="mt-2 text-sm text-slate-600">5~10명이 각자 휴대전화로 역할을 확인하고 투표합니다. 토론은 대면 또는 별도 메신저에서 진행하세요.</p>
         <button className={`${primary} mt-6 w-full`} disabled={busy} onClick={create}>새 방 만들기</button>
-        <h2 className="mt-7 font-bold">열려 있는 방</h2>
-        <div className="mt-3 space-y-2">{rooms.length ? rooms.map((room) => <div key={room.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold">{room.hostName}님의 방 · {room.players.length}/{room.capacity}명</p><p className="mt-1 text-sm text-slate-500">{room.players.join(', ')} · {room.phase === 'lobby' ? '대기 중' : '진행 중'}</p></div><button className={secondary} disabled={busy || room.phase !== 'lobby' || room.players.length >= room.capacity} onClick={() => void join(room.id)}>{room.phase === 'lobby' ? '입장' : '진행 중'}</button></div>) : <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">열려 있는 방이 없습니다.</p>}</div>
+        <div className="mt-7 flex items-center justify-between gap-3"><h2 className="font-bold">열려 있는 방</h2><button type="button" className={secondary} onClick={() => void openStats()}>역대 승률 · 랭킹</button></div>
+        <div className="mt-3 space-y-2">{rooms.length ? rooms.map((room) => <div key={room.id} className="rounded-xl border border-slate-200 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-semibold">{room.hostName}님의 방 · {room.players.length}/{room.capacity}명</p><p className="mt-1 text-sm text-slate-500">{room.players.map((player) => player.name).join(', ')} · {room.phase === 'lobby' ? '대기 중' : '진행 중'}</p></div><button className={secondary} disabled={busy || room.phase !== 'lobby' || room.players.length >= room.capacity} onClick={() => void join(room.id)}>{room.phase === 'lobby' ? '입장' : '진행 중'}</button></div></div>) : <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">열려 있는 방이 없습니다.</p>}</div>
       </section> : <>
         <div className={view.phase === 'lobby' ? '' : 'grid items-stretch gap-5 md:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]'}>
         <section className="flex min-w-0 flex-col rounded-2xl bg-white p-4 shadow-sm sm:p-6">
@@ -414,12 +435,12 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
 
         {view.phase === 'lobby' ? <>
           <section className="rounded-2xl bg-white p-4 shadow-sm sm:p-6">
-            <div className="flex items-center justify-between gap-3"><h2 className="font-bold">참가자 {view.players.length}/{view.config.playerCount}</h2></div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">{view.players.map((p) => <div key={p.id} className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm"><span className="flex min-w-0 items-center gap-2"><PlayerAvatar name={p.name} url={avatarUrls[p.id]} /><span className="truncate">{p.seat + 1}. {p.name}</span>{p.id === view.hostId && <Crown aria-label="방장" className="size-4 shrink-0 text-amber-600" />}</span><span className={`shrink-0 ${p.ready ? 'text-emerald-600' : 'text-slate-400'}`}>{p.ready ? '준비됨' : '대기'}</span></div>)}</div>
-            <div className="mt-4 flex flex-wrap gap-2"><button className={secondary} disabled={busy} onClick={() => void send({ type: 'ready', ready: !me?.ready })}>{me?.ready ? '준비 취소' : '준비 완료'}</button><button className={secondary} disabled={busy} onClick={async () => { const result = await leaveAvalonRoom(roomId); if (result.ok) { setRoomId(''); setView(null); const list = await listAvalonRooms(); if (list.ok) setRooms(list.data); } else setError(result.error); }}>방 나가기</button>{isHost && <button className={primary} disabled={busy || view.players.length !== view.config.playerCount || view.players.some((p) => !p.ready)} onClick={() => void send({ type: 'start' })}>게임 시작</button>}</div>
+            <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-bold">참가자 {view.players.length}/{view.config.playerCount}</h2><button type="button" className={secondary} onClick={() => void openStats()}>역대 승률 · 랭킹</button></div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">{view.players.map((p) => <div key={p.id} className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm"><span className="flex min-w-0 items-center gap-2"><PlayerAvatar name={p.name} url={avatarUrls[p.id]} /><span className="truncate">{p.seat + 1}. {p.name}</span>{p.id === view.hostId && <Crown aria-label="방장" className="size-4 shrink-0 text-amber-600" />}</span>{isHost && p.id !== view.hostId && <button type="button" className="shrink-0 rounded-lg border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-700" disabled={busy} onClick={() => void send({ type: 'kick', playerId: p.id })}>추방</button>}</div>)}</div>
+            <div className="mt-4 flex flex-wrap gap-2"><button className={secondary} disabled={busy} onClick={async () => { const result = await leaveAvalonRoom(roomId); if (result.ok) { setRoomId(''); setView(null); setConfig(null); const list = await listAvalonRooms(); if (list.ok) setRooms(list.data); } else setError(result.error); }}>방 나가기</button>{isHost && <button className={primary} disabled={busy || view.players.length !== view.config.playerCount || Boolean(config && JSON.stringify(config) !== JSON.stringify(view.config))} onClick={() => void send({ type: 'start' })}>게임 시작</button>}</div>
           </section>
           <RoleComposition config={view.config} />
-          {isHost && config && <ConfigEditor config={config} setConfig={setConfig} busy={busy} save={() => void send({ type: 'config', config })} />}
+          {isHost && config && <ConfigEditor config={config} setConfig={setConfigDraft} busy={busy} save={() => { configDirty.current = false; void send({ type: 'config', config }); }} />}
         </> : <>
           <section className="rounded-2xl bg-white p-4 shadow-sm sm:p-6">
             <h2 className="font-bold">참가자와 원정 팀</h2>
@@ -489,6 +510,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
             </> : <p className="text-sm text-slate-600">리더가 원정 팀을 고르고 있습니다.</p>}</div>}
           </section>
           {view.phase !== 'propose' && <section className="rounded-2xl bg-white p-4 shadow-sm sm:p-6"><PhaseControls view={view} user={activeUser} busy={busy} send={send} previewQuestChoice={preview ? previewQuestChoice : null} previewLadyResult={preview ? previewLadyResult : null} previewAssassinationTarget={preview ? previewAssassinationTarget : ''} target={target} setTarget={setTarget} secondTarget={secondTarget} setSecondTarget={setSecondTarget} assassinationKind={assassinationKind} setAssassinationKind={setAssassinationKind} plotCardChoice={plotCardChoice} setPlotCardChoice={setPlotCardChoice} /></section>}
+          {isHost && !preview && view.phase !== 'finished' && <button className={`${secondary} w-full border-rose-200 text-rose-700`} disabled={busy} onClick={() => void send({ type: 'stop' })}>게임 중단하고 대기실로</button>}
           {view.phase === 'finished' && !preview && <button className={`${secondary} w-full`} onClick={async () => { setRoomId(''); setView(null); const result = await listAvalonRooms(); if (result.ok) setRooms(result.data); }}>열린 방 목록으로</button>}
           {view.config.plot && <section className="rounded-2xl bg-white p-4 shadow-sm sm:p-6"><h2 className="font-bold">공개 플롯 카드</h2><div className="mt-2 space-y-1 text-sm text-slate-600">{view.players.map((p) => <div key={p.id}>{p.name}: {(view.plotHands[p.id] ?? []).map((card) => plotName[card]).join(', ') || '없음'}</div>)}</div></section>}
           {(view.voteHistory.length > 0 || view.results.length > 0 || view.publicEvents.length > 0) && <GameHistory view={view} />}
@@ -496,6 +518,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
       </>}
     </div>
     {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} turnKey={actionTurnKey} actionLabel={actionLabel} />}
+    {statsOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setStatsOpen(false); }}><div role="dialog" aria-modal="true" aria-labelledby="avalon-stats-title" className="flex max-h-[80vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"><div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><h2 id="avalon-stats-title" className="text-lg font-bold">역대 승률 · 랭킹</h2><p className="mt-1 text-xs text-slate-500">모든 완료된 아발론 게임의 플레이어 기록</p></div><button type="button" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="닫기" onClick={() => setStatsOpen(false)}><X size={20} /></button></div><div className="min-h-0 overflow-y-auto px-4 pb-5">{statsLoading ? <p className="py-12 text-center text-sm text-slate-500">기록을 불러오는 중...</p> : statsError ? <p role="alert" className="py-12 text-center text-sm text-rose-600">{statsError}</p> : playerStats.length ? <PlayerStatsTable people={playerStats.map((row) => ({ id: row.playerId, name: row.playerName }))} stats={Object.fromEntries(playerStats.map((row) => [row.playerId, row]))} /> : <p className="py-12 text-center text-sm text-slate-500">완료된 게임 기록이 없습니다.</p>}</div></div></div>}
   </main>;
 }
 
