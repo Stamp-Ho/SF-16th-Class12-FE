@@ -100,11 +100,14 @@ async function mutate(roomId: string, transform: (state: GameState, user: Actor)
       const changedAt = new Date().toISOString();
       if (state.phase !== row.state.phase && (state.phase === 'vote' || state.phase === 'quest')) state.phaseStartedAt = changedAt;
       const priorHistory = historyFromState(row.state);
+      const explicitHistory = state.phase === 'lobby' && row.state.phase !== 'lobby' ? [] : (state.history ?? []).slice(priorHistory.length);
+      const recorded = (type: 'vote' | 'quest' | 'event', index: number) => explicitHistory.some((entry) => entry.type === type && entry.index === index);
       state.history = state.phase === 'lobby' && row.state.phase !== 'lobby' ? [] : [
         ...priorHistory,
-        ...state.voteHistory.slice(row.state.voteHistory.length).map((_, offset) => ({ type: 'vote' as const, index: row.state.voteHistory.length + offset })),
-        ...state.results.slice(row.state.results.length).map((_, offset) => ({ type: 'quest' as const, index: row.state.results.length + offset })),
-        ...state.publicEvents.slice(row.state.publicEvents.length).map((_, offset) => ({ type: 'event' as const, index: row.state.publicEvents.length + offset })),
+        ...explicitHistory,
+        ...state.voteHistory.slice(row.state.voteHistory.length).map((_, offset) => ({ type: 'vote' as const, index: row.state.voteHistory.length + offset })).filter((entry) => !recorded(entry.type, entry.index)),
+        ...state.results.slice(row.state.results.length).map((_, offset) => ({ type: 'quest' as const, index: row.state.results.length + offset })).filter((entry) => !recorded(entry.type, entry.index)),
+        ...state.publicEvents.slice(row.state.publicEvents.length).map((_, offset) => ({ type: 'event' as const, index: row.state.publicEvents.length + offset })).filter((entry) => !recorded(entry.type, entry.index)),
       ];
       state.historyApproximate = state.phase === 'lobby' && row.state.phase !== 'lobby' ? false : row.state.historyApproximate ?? (!row.state.history && priorHistory.length > 0);
       const { data, error } = await createAdminClient().from('avalon_rooms')

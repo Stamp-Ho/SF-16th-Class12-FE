@@ -22,6 +22,10 @@ export const ROLES = {
   good_sorcerer: { name: '선 마법사', side: 'good', expansion: true },
   good_messenger_senior: { name: '선 상급 전령', side: 'good', expansion: true },
   good_messenger_junior: { name: '선 하급 전령', side: 'good', expansion: true },
+  tristan: { name: '트리스탄', side: 'good', expansion: true },
+  isolde: { name: '이졸데', side: 'good', expansion: true },
+  king_arthur: { name: '아서왕', side: 'good', expansion: true },
+  gawain: { name: '가웨인', side: 'good', expansion: true },
   lunatic: { name: '광인', side: 'evil', expansion: true },
   brute: { name: '폭력배', side: 'evil', expansion: true },
   revealer: { name: '폭로자', side: 'evil', expansion: true },
@@ -36,7 +40,7 @@ export type Side = 'good' | 'evil';
 export type Card = 'success' | 'fail' | 'magic' | 'good_message' | 'evil_message' | 'good_rogue' | 'evil_rogue';
 export const PLOT_CARDS = ['are_you_the_one', 'charge', 'show_your_strength', 'show_your_true_nature', 'king_returns', 'ambush', 'lead_to_victory', 'we_found_you', 'restore_your_honor'] as const;
 export type PlotCard = typeof PLOT_CARDS[number];
-export type Phase = 'lobby' | 'reveal' | 'loyalty_check' | 'plot_lead' | 'plot_distribute' | 'plot_immediate' | 'plot_king' | 'plot_forced' | 'plot_ambush' | 'propose' | 'vote' | 'quest' | 'excalibur' | 'trapper' | 'lady' | 'recruit' | 'assassinate' | 'finished';
+export type Phase = 'lobby' | 'reveal' | 'loyalty_check' | 'plot_lead' | 'plot_distribute' | 'plot_immediate' | 'plot_king' | 'plot_forced' | 'plot_ambush' | 'propose' | 'vote' | 'quest' | 'excalibur' | 'trapper' | 'gawain_check' | 'lady' | 'recruit' | 'assassinate' | 'finished';
 export type Player = { id: string; name: string; seat: number; roles: Role[]; side: Side; currentSide: Side; ready: boolean; seen: boolean };
 export type Config = {
   playerCount: number;
@@ -57,6 +61,7 @@ export type GameState = {
   phase: Phase; phaseStartedAt?: string; gameId?: string; hostId: string; players: Player[]; config: Config;
   mission: number; lockedMission: number | null; leaderSeat: number; rejected: number; rejectedVoteAt?: string | null; proposal: string[];
   votes: Record<string, boolean>; cards: Record<string, Card>;
+  submittedCards?: Record<string, Card>;
   voteHistory: { mission: number; team: string[]; votes: Record<string, boolean>; approved: boolean; leaderId?: string }[];
   results: MissionResult[]; winner: Side | null; winReason: string | null; assassinated?: string[];
   ladyHolder: string | null; ladyUsed: string[]; ladyFindings: Record<string, { target: string; side: Side }[]>;
@@ -71,6 +76,7 @@ export type GameState = {
   plotPending: { card: PlotCard; holder: string } | null;
   plotOpportunity: string[]; plotLeadUsed: boolean; plotPrepared: number[];
   forcedPublicCard: string | null; inspectedCards: string[];
+  gawainExiled?: boolean;
 };
 
 export function defaultConfig(count = 5): Config {
@@ -117,6 +123,8 @@ export function validateConfig(c: Config): string | null {
   if (has('good_lancelot') !== has('evil_lancelot') || has('good_lancelot') !== (c.lancelot !== 'off')) return '랜슬롯 두 명과 변형 규칙을 함께 설정해 주세요.';
   if (has('good_lancelot') && (occurrences('good_lancelot') !== 1 || occurrences('evil_lancelot') !== 1)) return '선/악 랜슬롯은 각각 한 명이어야 합니다.';
   if (has('good_sorcerer') !== has('evil_sorcerer')) return '선/악 마법사는 함께 사용합니다.';
+  if (has('tristan') !== has('isolde')) return '트리스탄과 이졸데는 함께 사용합니다.';
+  if (c.goodSlots.some((slot) => slot.includes('tristan') && slot.includes('isolde'))) return '트리스탄과 이졸데는 서로 다른 자리에 배치해 주세요.';
   const messengers = ['good_messenger_senior', 'good_messenger_junior', 'evil_messenger'] as const;
   if (messengers.some(has) && !messengers.every(has)) return '전령 세 명을 함께 사용해 주세요.';
   if (c.seniorKnowsJunior && !messengers.every(has)) return '전령 규칙을 먼저 켜 주세요.';
@@ -153,6 +161,9 @@ export function knows(state: GameState, actor: Player): { players: string[]; lab
   if (actor.side === 'evil' && !['oberon', 'evil_lancelot', 'evil_rogue'].some((r) => actor.roles.includes(r as Role))) rows.push({ label: '알고 있는 악 동료', players: state.players.filter((p) => p.id !== actor.id && p.side === 'evil' && !has(p, 'oberon') && !has(p, 'evil_rogue')).map((p) => p.name) });
   if (has(actor, 'untrustworthy')) rows.push({ label: '암살자', players: state.players.filter((p) => has(p, 'assassin')).map((p) => p.name) });
   if (has(actor, 'good_messenger_senior') && state.config.seniorKnowsJunior) rows.push({ label: '하급 전령', players: state.players.filter((p) => has(p, 'good_messenger_junior')).map((p) => p.name) });
+  if (has(actor, 'tristan')) rows.push({ label: '이졸데', players: state.players.filter((p) => has(p, 'isolde')).map((p) => p.name) });
+  if (has(actor, 'isolde')) rows.push({ label: '트리스탄', players: state.players.filter((p) => has(p, 'tristan')).map((p) => p.name) });
+  if (has(actor, 'king_arthur')) rows.push({ label: '멀린', players: state.players.filter((p) => has(p, 'merlin')).map((p) => p.name) });
   return rows;
 }
 

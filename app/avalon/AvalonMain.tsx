@@ -60,12 +60,14 @@ const field = 'rounded-xl border border-slate-300 bg-white px-3 py-3 text-slate-
 const primary = 'rounded-xl bg-violet-700 px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40';
 const secondary = 'rounded-xl border border-slate-300 bg-white px-4 py-3 font-medium text-slate-800 disabled:opacity-40';
 const previewPeople: User[] = PREVIEW_NAMES.map((name, index) => ({ id: PREVIEW_FALLBACK_IDS[index], name }));
-type PreviewScreen = 'reveal' | 'propose' | 'vote' | 'reselect_after_rejection' | 'quest' | 'lady' | 'assassinate' | 'finished';
+type PreviewScreen = 'reveal' | 'propose' | 'vote' | 'reselect_after_rejection' | 'quest' | 'gawain_check' | 'lady' | 'assassinate' | 'finished';
+type AssassinationKind = 'merlin' | 'messengers' | 'lovers';
+type PreviewAssassination = { target: string; secondTarget?: string; kind: AssassinationKind };
 const previewPhases: { screen: PreviewScreen; label: string }[] = [
   { screen: 'reveal', label: '역할 확인' },
   { screen: 'propose', label: '팀 제안' }, { screen: 'vote', label: '팀 투표' },
   { screen: 'reselect_after_rejection', label: '부결 투표 후 재선정' },
-  { screen: 'quest', label: '원정 카드' }, { screen: 'lady', label: '호수의 여인' },
+  { screen: 'quest', label: '원정 카드' }, { screen: 'gawain_check', label: '가웨인 판정' }, { screen: 'lady', label: '호수의 여인' },
   { screen: 'assassinate', label: '암살자 암살 턴' },
   { screen: 'finished', label: '게임 결과' },
 ];
@@ -89,16 +91,16 @@ function previewView(screen: PreviewScreen, people: User[], actorId = people[0].
   const [self, second, third, fourth, fifth, sixth, seventh, eighth] = people;
   const state = initialState(self);
   state.players = [
-    { ...self, seat: 0, roles: ['merlin'], side: 'good', currentSide: 'good', ready: true, seen: true },
+    { ...self, seat: 0, roles: ["gawain"], side: 'good', currentSide: 'good', ready: true, seen: true },
     { ...second, seat: 1, roles: ['good_lancelot'], side: 'good', currentSide: 'evil', ready: true, seen: true },
-    { ...third, seat: 2, roles: [], side: 'good', currentSide: 'good', ready: true, seen: true },
+    { ...third, seat: 2, roles: ['isolde'], side: 'good', currentSide: 'good', ready: true, seen: true },
     { ...fourth, seat: 3, roles: ['assassin'], side: 'evil', currentSide: 'evil', ready: true, seen: true },
     { ...fifth, seat: 4, roles: ['evil_lancelot'], side: 'evil', currentSide: 'good', ready: true, seen: true },
-    { ...sixth, seat: 5, roles: ['percival'], side: 'good', currentSide: 'good', ready: true, seen: true },
+    { ...sixth, seat: 5, roles: ['tristan'], side: 'good', currentSide: 'good', ready: true, seen: true },
     { ...seventh, seat: 6, roles: ['mordred'], side: 'evil', currentSide: 'evil', ready: true, seen: true },
-    { ...eighth, seat: 7, roles: [], side: 'good', currentSide: 'good', ready: true, seen: true }
+    { ...eighth, seat: 7, roles: ['merlin'], side: 'good', currentSide: 'good', ready: true, seen: true }
   ];
-  state.config = { ...defaultConfig(8), lady: true, lancelot: 'variant1', goodSlots: [['merlin'], ['good_lancelot'], ['percival'], [], []], evilSlots: [['assassin'], ['evil_lancelot'], ['mordred']] };
+  state.config = { ...defaultConfig(8), expansion: true, lady: true, lancelot: 'variant1', goodSlots: [['gawain'], ['good_lancelot'], ['isolde'], ['tristan'], ['merlin']], evilSlots: [['assassin'], ['evil_lancelot'], ['mordred']] };
   state.phase = phase;
   state.mission = 3;
   const secondVote = { [self.id]: true, [second.id]: false, [third.id]: true, [fourth.id]: false, [fifth.id]: true, [sixth.id]: true, [seventh.id]: false, [eighth.id]: true };
@@ -107,6 +109,7 @@ function previewView(screen: PreviewScreen, people: User[], actorId = people[0].
   const fourthVote = { [self.id]: true, [second.id]: true, [third.id]: true, [fourth.id]: false, [fifth.id]: false, [sixth.id]: true, [seventh.id]: false, [eighth.id]: true };
   const secondTeam = [second.id, fourth.id, fifth.id, seventh.id];
   const thirdTeam = [self.id, third.id, sixth.id, eighth.id];
+  const gawainTeam = [second.id, third.id, fourth.id, sixth.id];
   const fourthTeam = [self.id, second.id, third.id, sixth.id, eighth.id];
   state.results = [
     { number: 1, team: [self.id, third.id], success: true, cards: ['success', 'success'], failCount: 0, vote: {}, leaderId: self.id },
@@ -114,6 +117,13 @@ function previewView(screen: PreviewScreen, people: User[], actorId = people[0].
   ];
   state.voteHistory = [{ mission: 2, team: secondTeam, votes: secondVote, approved: true, leaderId: second.id }];
   if (phase === 'quest' || phase === 'assassinate' || phase === 'finished') state.voteHistory.push({ mission: 3, team: thirdTeam, votes: thirdVote, approved: true, leaderId: self.id });
+  if (phase === 'gawain_check') {
+    state.voteHistory.push({ mission: 3, team: gawainTeam, votes: thirdVote, approved: true, leaderId: third.id });
+    state.results.push({ number: 3, team: gawainTeam, success: false, cards: ['success', 'success', 'fail', 'success'], failCount: 1, vote: thirdVote, leaderId: third.id });
+    state.proposal = gawainTeam;
+    state.cards = { [second.id]: 'success', [third.id]: 'success', [fourth.id]: 'fail', [sixth.id]: 'success' };
+    state.submittedCards = { ...state.cards };
+  }
   if (phase === 'reveal') { state.players[1].seen = false; state.players[3].seen = false; }
   if (phase === 'vote') state.votes = { [self.id]: true, [second.id]: false };
   state.lancelotCards = [true, false, false, false, false, false, true];
@@ -123,11 +133,12 @@ function previewView(screen: PreviewScreen, people: User[], actorId = people[0].
     { type: 'quest', index: 0 }, { type: 'event', index: 0 },
     { type: 'vote', index: 0 }, { type: 'quest', index: 1 },
     { type: 'event', index: 1 }, { type: 'event', index: 2 },
-    ...(phase === 'quest' || phase === 'assassinate' || phase === 'finished' ? [{ type: 'vote' as const, index: 1 }] : []),
+    ...(phase === 'quest' || phase === 'assassinate' || phase === 'finished' || phase === 'gawain_check' ? [{ type: 'vote' as const, index: 1 }] : []),
+    ...(phase === 'gawain_check' ? [{ type: 'quest' as const, index: 2 }] : []),
   ];
   state.ladyHolder = self.id;
   state.ladyUsed = [second.id];
-  state.proposal = thirdTeam;
+  if (phase !== 'gawain_check') state.proposal = thirdTeam;
   if (phase === 'propose') state.proposal = [];
   if (screen === 'reselect_after_rejection') {
     state.leaderSeat = 2;
@@ -174,7 +185,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
   const [proposalPick, setProposalPick] = useState<'team' | 'excalibur' | 'watch'>('team');
   const [target, setTarget] = useState('');
   const [secondTarget, setSecondTarget] = useState('');
-  const [assassinationKind, setAssassinationKind] = useState<'merlin' | 'messengers'>('merlin');
+  const [assassinationKind, setAssassinationKind] = useState<AssassinationKind>('merlin');
   const [plotCardChoice, setPlotCardChoice] = useState<PlotCard | ''>('');
   const { notes, updateNote, ready: notesReady } = useLocalNotes(roomId, view?.phase);
   const [showSecret, setShowSecret] = useState(false);
@@ -184,7 +195,8 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
   const [previewTurn, setPreviewTurn] = useState(0);
   const [previewQuestChoice, setPreviewQuestChoice] = useState<Card | null>(null);
   const [previewLadyResult, setPreviewLadyResult] = useState<{ target: string; side: Side } | null>(null);
-  const [previewAssassinationTarget, setPreviewAssassinationTarget] = useState('');
+  const [previewGawainResult, setPreviewGawainResult] = useState<{ target: string; card: Card } | null>(null);
+  const [previewAssassination, setPreviewAssassination] = useState<PreviewAssassination | null>(null);
   const [previewProposedTeam, setPreviewProposedTeam] = useState<string[]>([]);
   const [completionReadyFor, setCompletionReadyFor] = useState('');
   const [rejectionRevealExpiredFor, setRejectionRevealExpiredFor] = useState('');
@@ -271,7 +283,29 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
         if (side) { setPreviewLadyResult({ target: move.target, side }); setError(''); }
         return;
       }
-      if (move.type === 'assassinate') { setPreviewAssassinationTarget(move.target); setError(''); return; }
+      if (move.type === 'gawain_check' && previewScreen === 'gawain_check') {
+        const cards: Record<string, Card> = {
+          [previewParticipants[1].id]: 'success', [previewParticipants[2].id]: 'success',
+          [previewParticipants[3].id]: 'fail', [previewParticipants[5].id]: 'success',
+        };
+        const card = cards[move.target];
+        if (!card || previewGawainResult) return;
+        const exiled = card === 'success';
+        setPreviewGawainResult({ target: move.target, card });
+        setView((current) => {
+          if (!current || current.phase !== 'gawain_check') return current;
+          const event = `3차 원정 가웨인 검사: ${user.name} → ${view?.players.find((player) => player.id === move.target)?.name} ${exiled ? '[성공 카드] 확인 · 추방' : '[실패 카드] 확인 · 계속 사용 가능'}`;
+          return { ...current, gawainExiled: exiled,
+            players: exiled ? current.players.map((player) => player.id === user.id ? { ...player, publicRoles: [...player.publicRoles, 'gawain' as const] } : player) : current.players,
+            myCardPeeks: [...current.myCardPeeks, { target: move.target, card }],
+            publicEvents: [...current.publicEvents, event],
+            history: [...current.history, { type: 'event', index: current.publicEvents.length }],
+          };
+        });
+        setError('');
+        return;
+      }
+      if (move.type === 'assassinate') { setPreviewAssassination({ target: move.target, secondTarget: move.secondTarget, kind: move.targetType ?? 'merlin' }); setError(''); return; }
       if (move.type === 'propose' && previewScreen === 'reselect_after_rejection') { setPreviewProposedTeam(move.team); setError(''); return; }
       setError('미리보기에서는 행동이 저장되지 않습니다. 위에서 다른 화면을 선택해 보세요.');
       return;
@@ -296,7 +330,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
     const actor = screen === 'assassinate' ? previewParticipants[3] : screen === 'reselect_after_rejection' ? previewParticipants[2] : user;
     setError(''); setTeam([]); setTarget(''); setSecondTarget('');
     setMissionChoice(screen === 'assassinate' || screen === 'finished' ? 4 : 3);
-    setPreviewQuestChoice(null); setPreviewLadyResult(null); setPreviewAssassinationTarget(''); setPreviewProposedTeam([]);
+    setPreviewQuestChoice(null); setPreviewLadyResult(null); setPreviewGawainResult(null); setPreviewAssassination(null); setPreviewProposedTeam([]);
     setPreviewTurn((turn) => turn + 1);
     setPreviewScreen(screen);
     setView(previewView(screen, previewParticipants, actor.id, screen === 'reselect_after_rejection' ? new Date().toISOString() : null));
@@ -332,6 +366,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
   useEffect(() => {
     const timer = setTimeout(() => {
       if (view?.phase === 'propose') { setTeam([]); setSwordHolder(''); setWatchHolder(''); setProposalPick('team'); setMissionChoice(view.mission); }
+      if (view?.phase === 'assassinate') setAssassinationKind('merlin');
       setTarget(''); setSecondTarget('');
     }, 0);
     return () => clearTimeout(timer);
@@ -371,9 +406,10 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
     if (view.phase === 'excalibur') return view.excaliburHolder === activeUser.id && view.proposal.includes(id) && id !== activeUser.id;
     if (view.phase === 'trapper') return me?.seat === view.leaderSeat && view.proposal.includes(id);
     if (view.phase === 'recruit') return view.myRole.includes('assassin') && id !== activeUser.id;
+    if (view.phase === 'gawain_check') return !previewGawainResult && view.myRole.includes('gawain') && view.proposal.includes(id);
     return false;
   };
-  const actionLabel = view ? getPendingAvalonAction(view, activeUser.id) : null;
+  const actionLabel = view && !(preview && previewGawainResult) ? getPendingAvalonAction(view, activeUser.id) : null;
   const actionTurnKey = actionLabel && view ? [roomId, view.phase, view.phaseStartedAt, view.mission, view.rejected,
     view.leaderSeat, view.voteHistory.length, view.results.length, view.plotOpportunity[0],
     view.plotDrawn.length, view.plotPending?.card, view.plotPending?.holder, view.pendingCheck?.target,
@@ -394,7 +430,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
         <Link href="/" className="inline-flex items-center gap-2 text-sm font-medium text-slate-600"><ArrowLeft size={17} /> 대시보드</Link>
         <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => setRulebookOpen(true)} className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-white px-3 py-1.5 text-sm font-semibold text-violet-800 focus-visible:outline-2 focus-visible:outline-violet-600"><BookOpen size={16} /> 룰북</button><span className="inline-flex items-center gap-2 rounded-full bg-violet-100 px-3 py-1 text-sm font-semibold text-violet-800"><Shield size={15} /> 레지스탕스: 아발론</span></div>
       </header>
-      {preview && <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><p className="font-bold">플레이 화면 미리보기</p><p className="mt-1">예시 게임 결과를 사용합니다. 실제 방에 연결되거나 행동이 저장되지 않습니다. 참가자 이름과 프로필 이미지는 사용자 목록에서 불러옵니다.</p><label className="mt-3 block font-medium">확인할 화면 <select className={`${field} mt-1 w-full`} value={previewScreen} onChange={(e) => showPreviewScreen(e.target.value as PreviewScreen)}>{previewPhases.map(({ screen, label }) => <option key={screen} value={screen}>{label}</option>)}</select></label>{previewScreen === 'reselect_after_rejection' && <button type="button" className={`${secondary} mt-3`} onClick={() => showPreviewScreen('reselect_after_rejection')}>5초 다시 보기</button>}</section>}
+      {preview && <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><p className="font-bold">플레이 화면 미리보기</p><p className="mt-1">예시 게임 결과를 사용합니다. 실제 방에 연결되거나 행동이 저장되지 않습니다. 참가자 이름과 프로필 이미지는 사용자 목록에서 불러옵니다.</p><label className="mt-3 block font-medium">확인할 화면 <select className={`${field} mt-1 w-full`} value={previewScreen} onChange={(e) => showPreviewScreen(e.target.value as PreviewScreen)}>{previewPhases.map(({ screen, label }) => <option key={screen} value={screen}>{label}</option>)}</select></label>{previewScreen === 'reselect_after_rejection' && <button type="button" className={`${secondary} mt-3`} onClick={() => showPreviewScreen('reselect_after_rejection')}>5초 다시 보기</button>}{previewScreen === 'gawain_check' && <button type="button" className={`${secondary} mt-3`} onClick={() => showPreviewScreen('gawain_check')}>가웨인 판정 다시 보기</button>}</section>}
       {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
       {avatarError && <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">프로필 이미지를 불러오지 못했습니다: {avatarError}</div>}
 
@@ -456,7 +492,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
               const ladyCandidate = canPickLady && p.id !== activeUser.id && !view.ladyUsed.includes(p.id);
               const assassinationCandidate = canAssassinate && p.id !== activeUser.id && p.side === 'good';
               const assassinationSelected = assassinationCandidate && (target === p.id || secondTarget === p.id);
-              const proposalCandidate = canPickTeam && (proposalPick === 'team' || (team.includes(p.id) && (proposalPick !== 'excalibur' || p.id !== activeUser.id)));
+              const proposalCandidate = canPickTeam && !(view.gawainExiled && p.publicRoles.includes('gawain')) && (proposalPick === 'team' || (team.includes(p.id) && (proposalPick !== 'excalibur' || p.id !== activeUser.id)));
               const actionCandidate = canPickActionTarget(p.id, p.seat);
               const excaliburSelected = (canPickTeam && swordHolder === p.id || view.phase === 'excalibur' && target === p.id) && (view.phase === 'excalibur' || view.config.excalibur);
               const otherSelected = (canPickTeam && watchHolder === p.id && rogueWatchEnabled) || (actionCandidate && target === p.id);
@@ -474,13 +510,13 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
                 <button type="button" disabled={busy || (!proposalCandidate && !ladyCandidate && !assassinationCandidate && !actionCandidate)} aria-pressed={canPickTeam ? proposalPick === 'team' ? selected : proposalPick === 'excalibur' ? swordHolder === p.id : watchHolder === p.id : ladyCandidate ? target === p.id : assassinationCandidate ? assassinationSelected : actionCandidate ? target === p.id : undefined} onClick={() => {
                   if (ladyCandidate) { setTarget(target === p.id ? '' : p.id); if (preview) setPreviewLadyResult(null); }
                   else if (assassinationCandidate) {
-                    if (assassinationKind === 'messengers') {
+                    if (assassinationKind !== 'merlin') {
                       if (target === p.id) { setTarget(secondTarget); setSecondTarget(''); }
                       else if (secondTarget === p.id) setSecondTarget('');
                       else if (!target) setTarget(p.id);
                       else setSecondTarget(p.id);
                     } else setTarget(target === p.id ? '' : p.id);
-                    if (preview) setPreviewAssassinationTarget('');
+                    if (preview) setPreviewAssassination(null);
                   }
                   else if (canPickTeam && proposalPick === 'team') { setTeam(selected ? team.filter((id) => id !== p.id) : team.length < required ? [...team, p.id] : team); if (selected && swordHolder === p.id) setSwordHolder(''); if (selected && watchHolder === p.id) setWatchHolder(''); if (preview) setPreviewProposedTeam([]); }
                   else if (canPickTeam && proposalPick === 'excalibur') setSwordHolder(swordHolder === p.id ? '' : p.id);
@@ -499,7 +535,9 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
                       </>}
                     {vote === undefined && complete && <Check aria-label={view.phase === 'reveal' ? '역할 확인 완료' : view.phase === 'vote' ? '투표 완료' : '원정 카드 제출 완료'} className="absolute right-0 top-1/2 size-7 -translate-y-1/2 rounded-full bg-emerald-100 p-1 text-emerald-700" />}
                   </span>
-                  <span className="block h-5 text-xs text-slate-500">{assassinationSelected ? target === p.id ? '암살 대상' : '두 번째 대상' : excaliburSelected ? '엑스칼리버' : otherSelected ? view.phase === 'propose' ? '감시 대상' : '선택 대상' : p.seat === view.leaderSeat ? '리더' : selected ? '원정 팀' : '\u00a0'}</span>
+                  {p.publicRoles.includes('king_arthur') && <span className="absolute mt-1.5 block rounded-md bg-amber-100 px-0.75 py-0.25 text-[10px] font-bold text-amber-900">아서왕</span>}
+                  {view.gawainExiled && p.publicRoles.includes('gawain') && <span className="absolute mt-1.5 left-2.5 block rounded-md bg-rose-100 px-0.75 py-0.25 text-[10px] font-bold text-rose-800">원정 추방</span>}
+                  <span className="block h-5 text-xs text-slate-500">{assassinationSelected ? target === p.id ? assassinationKind === 'merlin' ? '암살 대상' : '첫 번째 대상' : '두 번째 대상' : excaliburSelected ? '엑스칼리버' : otherSelected ? view.phase === 'propose' ? '감시 대상' : '선택 대상' : p.seat === view.leaderSeat ? '리더' : selected ? '원정 팀' : '\u00a0'}</span>
                 </button>
                 <PlayerNote name={p.name} value={notes[p.name] ?? ''} disabled={!notesReady} onChange={updateNote} />
               </div>;
@@ -511,7 +549,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
               {preview && previewScreen === 'reselect_after_rejection' && previewProposedTeam.length > 0 && <p role="status" className="mt-2 text-sm text-violet-700">미리보기 제안: {previewProposedTeam.map((id) => view.players.find((player) => player.id === id)?.name).join(', ')} · 실제 방에는 저장되지 않습니다.</p>}
             </> : <p className="text-sm text-slate-600">리더가 원정 팀을 고르고 있습니다.</p>}</div>}
           </section>
-          {view.phase !== 'propose' && <section className="rounded-2xl bg-white p-4 shadow-sm sm:p-6"><PhaseControls view={view} user={activeUser} busy={busy} send={send} previewQuestChoice={preview ? previewQuestChoice : null} previewLadyResult={preview ? previewLadyResult : null} previewAssassinationTarget={preview ? previewAssassinationTarget : ''} target={target} setTarget={setTarget} secondTarget={secondTarget} setSecondTarget={setSecondTarget} assassinationKind={assassinationKind} setAssassinationKind={setAssassinationKind} plotCardChoice={plotCardChoice} setPlotCardChoice={setPlotCardChoice} /></section>}
+          {view.phase !== 'propose' && <section className="rounded-2xl bg-white p-4 shadow-sm sm:p-6"><PhaseControls view={view} user={activeUser} busy={busy} send={send} previewQuestChoice={preview ? previewQuestChoice : null} previewLadyResult={preview ? previewLadyResult : null} previewGawainResult={preview ? previewGawainResult : null} previewAssassination={preview ? previewAssassination : null} clearPreviewAssassination={() => setPreviewAssassination(null)} target={target} setTarget={setTarget} secondTarget={secondTarget} setSecondTarget={setSecondTarget} assassinationKind={assassinationKind} setAssassinationKind={setAssassinationKind} plotCardChoice={plotCardChoice} setPlotCardChoice={setPlotCardChoice} /></section>}
           {isHost && !preview && view.phase !== 'finished' && <button className={`${secondary} w-full border-rose-200 text-rose-700`} disabled={busy} onClick={() => void send({ type: 'stop' })}>게임 중단하고 대기실로</button>}
           {view.phase === 'finished' && !preview && <button className={`${secondary} w-full`} onClick={async () => { setRoomId(''); setView(null); const result = await listAvalonRooms(); if (result.ok) setRooms(result.data); }}>열린 방 목록으로</button>}
           {view.config.plot && <section className="rounded-2xl bg-white p-4 shadow-sm sm:p-6"><h2 className="font-bold">공개 플롯 카드</h2><div className="mt-2 space-y-1 text-sm text-slate-600">{view.players.map((p) => <div key={p.id}>{p.name}: {(view.plotHands[p.id] ?? []).map((card) => plotName[card]).join(', ') || '없음'}</div>)}</div></section>}
@@ -552,6 +590,7 @@ function GameHistory({ view }: { view: View }) {
     return <article key={`quest-${index}`} className={`rounded-xl border p-3 text-sm ${result.success ? 'border-blue-200 bg-blue-50' : 'border-red-200 bg-red-50'}`}>
       <p className="font-semibold">{result.number}차 원정 · <span className={result.success ? 'text-blue-700' : 'text-red-700'}>{result.success ? '성공' : '실패'}</span></p>
       <div aria-label="원정대 멤버와 리더" className="mt-2 flex flex-wrap gap-1.5">{result.team.map((id) => <span key={id} className="inline-flex items-center gap-1 rounded-lg bg-white px-2 py-1 text-slate-700">{nameOf(id)}{result.leaderId === id && <Crown aria-label="리더" className="size-4 text-red-600" />}</span>)}{result.leaderId && !result.team.includes(result.leaderId) && <span className="inline-flex items-center gap-1 rounded-lg bg-white px-2 py-1 text-slate-700">{nameOf(result.leaderId)}<Crown aria-label="리더" className="size-4 text-red-600" /></span>}</div>
+      <p className="mt-2 text-slate-600">공개된 원정 카드: {result.cards.map((card) => cardName[card]).join(' · ') || '없음'}</p>
       <p className="mt-1 text-slate-600">실패 {result.failCount}개</p>
     </article>;
   };
@@ -563,7 +602,7 @@ function GameHistory({ view }: { view: View }) {
     {mode === 'category' ? <>
       {view.voteHistory.length > 0 && <div className="mt-4"><h3 className="text-sm font-semibold">투표 내역</h3><div className="mt-2 space-y-2">{view.voteHistory.map((_, index) => index).reverse().map(voteCard)}</div></div>}
       {view.results.length > 0 && <div className="mt-4"><h3 className="text-sm font-semibold">원정 내역</h3><div className="mt-2 space-y-2">{view.results.map((_, index) => index).reverse().map(questCard)}</div></div>}
-      {visibleEventIndices.size > 0 && <div className="mt-4"><h3 className="text-sm font-semibold">기타 기록</h3><ol className="mt-2 space-y-1 text-sm text-slate-600">{[...visibleEventIndices].slice(-12).reverse().map((index) => <li key={index}>• {view.publicEvents[index]}</li>)}</ol></div>}
+      {visibleEventIndices.size > 0 && <div className="mt-4"><h3 className="text-sm font-semibold">기타 기록</h3><ol className="mt-2 space-y-1 text-sm text-slate-600">{[...visibleEventIndices].reverse().map((index) => <li key={index}>• {view.publicEvents[index]}</li>)}</ol></div>}
     </> : <>
       {view.historyApproximate && <p className="mt-3 text-xs text-amber-700">이 방의 이전 기록은 저장된 내역을 기준으로 순서를 복원했습니다.</p>}
       <div className="mt-3 space-y-2">{view.history.slice().reverse().filter((entry) => entry.type !== 'event' || visibleEventIndices.has(entry.index)).map((entry, position) => entry.type === 'vote' ? voteCard(entry.index) : entry.type === 'quest' ? questCard(entry.index) : <article key={`event-${position}`} className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">{view.publicEvents[entry.index]}</article>)}</div>
@@ -646,13 +685,15 @@ function ConfigEditor({ config, setConfig, save, busy }: { config: Config; setCo
   </section>;
 }
 
-function PhaseControls({ view, user, busy, send, previewQuestChoice, previewLadyResult, previewAssassinationTarget, target, setTarget, secondTarget, setSecondTarget, assassinationKind, setAssassinationKind, plotCardChoice, setPlotCardChoice }: {
+function PhaseControls({ view, user, busy, send, previewQuestChoice, previewLadyResult, previewGawainResult, previewAssassination, clearPreviewAssassination, target, setTarget, secondTarget, setSecondTarget, assassinationKind, setAssassinationKind, plotCardChoice, setPlotCardChoice }: {
   view: View; user: User; busy: boolean; send: (move: Move) => Promise<void>;
   previewQuestChoice: Card | null;
   previewLadyResult: { target: string; side: Side } | null;
-  previewAssassinationTarget: string;
+  previewGawainResult: { target: string; card: Card } | null;
+  previewAssassination: PreviewAssassination | null;
+  clearPreviewAssassination: () => void;
   target: string; setTarget: (id: string) => void; secondTarget: string; setSecondTarget: (id: string) => void;
-  assassinationKind: 'merlin' | 'messengers'; setAssassinationKind: (kind: 'merlin' | 'messengers') => void;
+  assassinationKind: AssassinationKind; setAssassinationKind: (kind: AssassinationKind) => void;
   plotCardChoice: PlotCard | ''; setPlotCardChoice: (card: PlotCard | '') => void;
 }) {
   const me = view.players.find((p) => p.id === user.id);
@@ -668,11 +709,11 @@ function PhaseControls({ view, user, busy, send, previewQuestChoice, previewLady
     if (!pending) return null;
     const acting = pending.card === 'show_your_strength' ? isLeader : pending.holder === user.id;
     const otherHands = target ? view.plotHands[target] ?? [] : [];
-    return <><h2 className="font-bold">{plotName[pending.card]}</h2>{acting ? <><p className="mt-2 text-sm text-slate-600">{pending.card === 'restore_your_honor' ? '다른 사람의 플롯 카드를 가져옵니다.' : '진영을 확인하거나 보여줄 대상을 선택합니다.'}</p><p className="mt-3 text-sm text-violet-700">대상: {selectedName ?? '위에서 선택'}</p>{pending.card === 'restore_your_honor' && <select className={`${field} mt-2 w-full`} value={plotCardChoice} onChange={(e) => setPlotCardChoice(e.target.value as PlotCard)}><option value="">가져올 카드</option>{otherHands.map((card, i) => <option key={`${card}-${i}`} value={card}>{plotName[card]}</option>)}</select>}<button className={`${primary} mt-3 w-full`} disabled={busy || !target || (pending.card === 'restore_your_honor' && !plotCardChoice)} onClick={() => void send({ type: 'plot_apply', target, card: plotCardChoice || undefined })}>효과 적용</button></> : <p className="mt-2 text-sm text-slate-600">카드 효과 처리를 기다립니다.</p>}</>;
+    return <><h2 className="font-bold">{plotName[pending.card]}</h2>{acting ? <><p className="mt-2 text-sm text-slate-600">{pending.card === 'restore_your_honor' ? '다른 사람의 플롯 카드를 가져옵니다.' : '진영을 확인하거나 보여줄 대상을 선택합니다.'}</p><p className="mt-3 text-sm text-violet-700"></p>{pending.card === 'restore_your_honor' && <select className={`${field} mt-2 w-full`} value={plotCardChoice} onChange={(e) => setPlotCardChoice(e.target.value as PlotCard)}><option value="">가져올 카드</option>{otherHands.map((card, i) => <option key={`${card}-${i}`} value={card}>{plotName[card]}</option>)}</select>}<button className={`${primary} mt-3 w-full`} disabled={busy || !target || (pending.card === 'restore_your_honor' && !plotCardChoice)} onClick={() => void send({ type: 'plot_apply', target, card: plotCardChoice || undefined })}>효과 적용</button></> : <p className="mt-2 text-sm text-slate-600">카드 효과 처리를 기다립니다.</p>}</>;
   }
   if (['plot_king', 'plot_forced', 'plot_ambush'].includes(view.phase)) {
     const card: PlotCard = view.phase === 'plot_king' ? 'king_returns' : view.phase === 'plot_forced' ? 'we_found_you' : 'ambush';
-    return <><h2 className="font-bold">{plotName[card]}</h2>{view.plotOpportunity[0] === user.id ? <><p className="mt-2 text-sm text-slate-600">카드를 사용하거나 넘길 수 있습니다.</p>{card !== 'king_returns' && <p className="mt-3 text-sm text-violet-700">원정 팀원: {selectedName ?? '위에서 선택'}</p>}<div className="mt-3 flex gap-2"><button className={primary} disabled={busy || (card !== 'king_returns' && !target)} onClick={() => void send({ type: 'plot_use', card, target: card === 'king_returns' ? 'use' : target })}>사용</button><button className={secondary} disabled={busy} onClick={() => void send({ type: 'plot_use', card })}>넘기기</button></div></> : <p className="mt-2 text-sm text-slate-600">카드 보유자의 결정을 기다립니다.</p>}</>;
+    return <><h2 className="font-bold">{plotName[card]}</h2>{view.plotOpportunity[0] === user.id ? <><p className="mt-2 text-sm text-slate-600">카드를 사용하거나 넘길 수 있습니다.</p><div className="mt-3 flex gap-2"><button className={primary} disabled={busy || (card !== 'king_returns' && !target)} onClick={() => void send({ type: 'plot_use', card, target: card === 'king_returns' ? 'use' : target })}>사용</button><button className={secondary} disabled={busy} onClick={() => void send({ type: 'plot_use', card })}>넘기기</button></div></> : <p className="mt-2 text-sm text-slate-600">카드 보유자의 결정을 기다립니다.</p>}</>;
   }
   if (view.phase === 'vote') return <><h2 className="font-bold">팀 승인 투표</h2><p className="mt-2 text-sm text-slate-600">{view.voteCount}/{view.players.length}명 제출 · 모두 제출하면 투표 내용이 공개됩니다.</p>{!view.voted ? <div className="mt-4 grid grid-cols-2 gap-2"><button className={primary} disabled={busy} onClick={() => void send({ type: 'vote', approve: true })}>찬성</button><button className={secondary} disabled={busy} onClick={() => void send({ type: 'vote', approve: false })}>반대</button></div> : <p className="mt-4 text-sm text-violet-700">투표 완료. 다른 참가자를 기다립니다.</p>}</>;
   if (view.phase === 'quest') return <>
@@ -687,19 +728,32 @@ function PhaseControls({ view, user, busy, send, previewQuestChoice, previewLady
       {previewQuestChoice && <p className="mt-3 text-sm text-violet-700">미리보기 선택: {cardName[previewQuestChoice]} · 다시 선택할 수 있습니다.</p>}
     </> : <p className="mt-4 text-sm text-slate-600">원정 팀의 카드 제출을 기다립니다.</p>}
   </>;
-  if (view.phase === 'excalibur') return <><h2 className="font-bold">엑스칼리버</h2>{view.excaliburHolder === user.id ? <><p className="mt-2 text-sm text-slate-600">다른 팀원의 카드를 바꾸거나 사용하지 않을 수 있습니다.</p><p className="mt-3 text-sm text-yellow-800">대상: {selectedName ?? '위에서 선택'}</p><div className="mt-3 flex gap-2"><button className={primary} disabled={busy || !target} onClick={() => void send({ type: 'excalibur', target })}>카드 바꾸기</button><button className={secondary} disabled={busy} onClick={() => void send({ type: 'excalibur' })}>사용 안 함</button></div></> : <p className="mt-2 text-sm text-slate-600">엑스칼리버 소유자의 선택을 기다립니다.</p>}</>;
+  if (view.phase === 'excalibur') return <><h2 className="font-bold">엑스칼리버</h2>{view.excaliburHolder === user.id ? <><p className="mt-2 text-sm text-slate-600">다른 팀원의 카드를 바꾸거나 사용하지 않을 수 있습니다.</p><div className="mt-3 flex gap-2"><button className={primary} disabled={busy || !target} onClick={() => void send({ type: 'excalibur', target })}>카드 바꾸기</button><button className={secondary} disabled={busy} onClick={() => void send({ type: 'excalibur' })}>사용 안 함</button></div></> : <p className="mt-2 text-sm text-slate-600">엑스칼리버 소유자의 선택을 기다립니다.</p>}</>;
   if (view.phase === 'trapper') return <><h2 className="font-bold">함정꾼</h2>{isLeader ? <><p className="mt-2 text-sm text-slate-600">원정 카드 한 장을 확인하고 판정에서 제외합니다.</p><p className="mt-3 text-sm text-violet-700">제외할 팀원: {selectedName ?? '위에서 선택'}</p><button className={`${primary} mt-3 w-full`} disabled={busy || !target} onClick={() => void send({ type: 'trapper', target })}>카드 제외</button></> : <p className="mt-2 text-sm text-slate-600">리더의 선택을 기다립니다.</p>}</>;
+  if (view.phase === 'gawain_check') return <><h2 className="font-bold">가웨인의 원정 카드 확인</h2><p className="mt-2 text-sm text-slate-600">{view.mission}차 원정 {view.results.at(-1)?.success ? '성공' : '실패'} · 제출 카드가 공개되었습니다.</p>{view.myRole.includes('gawain') ? <><p className="mt-3 text-sm text-slate-600">이번 원정에 참가하지 않았으므로 팀원 한 명이 제출한 카드를 비밀리에 확인할 수 있습니다. 성공 카드를 확인하면 추방됩니다.</p><button className={`${primary} mt-3 w-full`} disabled={busy || !target || !view.proposal.includes(target) || Boolean(previewGawainResult)} onClick={() => void send({ type: 'gawain_check', target })}>{previewGawainResult ? '확인 완료' : `[ ${selectedName} ] 카드 확인`}</button>{previewGawainResult && <p role="status" className={`mt-3 rounded-lg p-3 text-sm font-semibold ${view.gawainExiled ? 'bg-rose-50 text-rose-800' : 'bg-blue-50 text-blue-800'}`}>{view.players.find((player) => player.id === previewGawainResult.target)?.name}님의 카드: {cardName[previewGawainResult.card]} · {view.gawainExiled ? '가웨인 추방' : '다음 원정에서도 능력 사용 가능'}</p>}<p className="mt-2 text-xs text-slate-500">확인한 카드는 내 정보에서 볼 수 있습니다.</p></> : <p className="mt-3 text-sm text-slate-600">가웨인의 확인을 기다립니다.</p>}</>;
   if (view.phase === 'lady') return <><h2 className="font-bold">호수의 여인</h2>{view.ladyHolder === user.id ? <><p className="mt-2 text-sm text-slate-600">한 사람을 선택해 현재 진영을 비밀리에 확인합니다.</p><button className={`${primary} mt-3 w-full`} disabled={busy || !target || target === user.id || view.ladyUsed.includes(target)} onClick={() => void send({ type: 'lady', target })}>{target && `[ ${view.players.find((player) => player.id === target)?.name} ] `}진영 확인</button>{previewLadyResult && <p role="status" className={`mt-3 rounded-lg p-3 text-sm font-semibold ${previewLadyResult.side === 'good' ? 'bg-blue-50 text-blue-800' : 'bg-red-50 text-red-800'}`}>{view.players.find((player) => player.id === previewLadyResult.target)?.name}의 진영: {previewLadyResult.side === 'good' ? '선' : '악'}</p>}</> : <p className="mt-2 text-sm text-slate-600">호수의 여인 보유자가 조사 중입니다.</p>}</>;
-  if (view.phase === 'recruit') return <><h2 className="font-bold">불신의 충신 모집</h2>{view.myRole.includes('assassin') ? <><p className="mt-2 text-sm text-slate-600">암살자가 불신의 충신을 한 번 추측합니다.</p><p className="mt-3 text-sm text-violet-700">대상: {selectedName ?? '위에서 선택'}</p><button className={`${primary} mt-3 w-full`} disabled={busy || !target} onClick={() => void send({ type: 'recruit', target })}>모집 시도</button></> : <p className="mt-2 text-sm text-slate-600">암살자의 선택을 기다립니다.</p>}</>;
-  if (view.phase === 'assassinate') return <>
-    <h2 className="font-bold">마지막 암살</h2>
-    {(view.recruited ? view.recruited === user.id : view.myRole.includes('assassin')) ? <>
-      <p className="mt-2 text-sm text-slate-600">위 참가자 카드에서 선 진영의 암살 대상을 선택하세요. 직업은 공개되지 않습니다.</p>
-      {view.config.evilSlots.some((s) => s.includes('evil_messenger')) && <select className={`${field} mt-3 w-full`} value={assassinationKind} onChange={(e) => { setAssassinationKind(e.target.value as 'merlin' | 'messengers'); setTarget(''); setSecondTarget(''); }}><option value="merlin">멀린 1명</option><option value="messengers">선 전령 2명</option></select>}
-      <button className={`${primary} mt-3 w-full`} disabled={busy || !target || view.players.find((player) => player.id === target)?.side !== 'good' || (assassinationKind === 'messengers' && (!secondTarget || view.players.find((player) => player.id === secondTarget)?.side !== 'good'))} onClick={() => void send({ type: 'assassinate', target, targetType: assassinationKind, secondTarget })}>암살 확정</button>
-      {previewAssassinationTarget && <p role="status" className="mt-3 text-sm text-violet-700">미리보기 선택: {view.players.find((player) => player.id === previewAssassinationTarget)?.name} · 실제 방에는 저장되지 않습니다.</p>}
-    </> : <p className="mt-2 text-sm text-slate-600">악 진영의 마지막 선택을 기다립니다.</p>}
-  </>;
+  if (view.phase === 'recruit') return <><h2 className="font-bold">불신의 충신 모집</h2>{view.myRole.includes('assassin') ? <><p className="mt-2 text-sm text-slate-600">암살자가 불신의 충신을 한 번 추측합니다.</p><button className={`${primary} mt-3 w-full`} disabled={busy || !target} onClick={() => void send({ type: 'recruit', target })}>모집 시도</button></> : <p className="mt-2 text-sm text-slate-600">암살자의 선택을 기다립니다.</p>}</>;
+  if (view.phase === 'assassinate') {
+    const modes: { kind: AssassinationKind; label: string; confirm: string }[] = [
+      { kind: 'merlin', label: '멀린 1명', confirm: '멀린 암살 확정' },
+      ...(view.config.evilSlots.some((slot) => slot.includes('evil_messenger')) ? [{ kind: 'messengers' as const, label: '선 전령 2명', confirm: '전령 암살 확정' }] : []),
+      ...(view.config.goodSlots.some((slot) => slot.includes('tristan')) ? [{ kind: 'lovers' as const, label: '연인 2명', confirm: '연인 암살 확정' }] : []),
+    ];
+    const twoTargets = assassinationKind !== 'merlin';
+    const first = view.players.find((player) => player.id === target);
+    const second = view.players.find((player) => player.id === secondTarget);
+    const readyToAssassinate = first?.side === 'good' && (!twoTargets || (second?.side === 'good' && second.id !== first.id));
+    return <>
+      <h2 className="font-bold">마지막 암살</h2>
+      {(view.recruited ? view.recruited === user.id : view.myRole.includes('assassin')) ? <>
+        <p className="mt-2 text-sm text-slate-600">암살 방식을 고른 뒤 위 참가자 카드에서 선 진영 대상 {twoTargets ? '두 명' : '한 명'}을 선택하세요. 직업은 공개되지 않습니다.</p>
+        <div role="group" aria-label="암살 방식" className="mt-3 flex flex-wrap gap-2">{modes.map((mode) => <button key={mode.kind} type="button" aria-pressed={assassinationKind === mode.kind} className={`rounded-full border px-3 py-1.5 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-violet-600 ${assassinationKind === mode.kind ? 'border-violet-700 bg-violet-700 text-white' : 'border-violet-200 bg-violet-50 text-violet-800'}`} onClick={() => { setAssassinationKind(mode.kind); setTarget(''); setSecondTarget(''); clearPreviewAssassination(); }}>{mode.label}</button>)}</div>
+        <p className="mt-3 text-sm text-violet-800">선택한 대상 {Number(Boolean(first)) + Number(twoTargets && Boolean(second))}/{twoTargets ? 2 : 1}: {first?.name ?? '미선택'}{twoTargets && ` · ${second?.name ?? '미선택'}`}</p>
+        <button className={`${primary} mt-3 w-full`} disabled={busy || !readyToAssassinate} onClick={() => void send({ type: 'assassinate', target, targetType: assassinationKind, secondTarget: twoTargets ? secondTarget : undefined })}>{modes.find((mode) => mode.kind === assassinationKind)?.confirm ?? '암살 확정'}</button>
+        {previewAssassination && <p role="status" className="mt-3 text-sm text-violet-700">미리보기 {modes.find((mode) => mode.kind === previewAssassination.kind)?.label ?? '암살'} 선택: {view.players.find((player) => player.id === previewAssassination.target)?.name}{previewAssassination.secondTarget && ` · ${view.players.find((player) => player.id === previewAssassination.secondTarget)?.name}`} · 실제 방에는 저장되지 않습니다.</p>}
+      </> : <p className="mt-2 text-sm text-slate-600">악 진영의 마지막 선택을 기다립니다.</p>}
+    </>;
+  }
   if (view.phase === 'finished') return <><h2 className="text-xl font-bold">{view.winner === 'good' ? '선 진영 승리' : '악 진영 승리'}</h2><p className="mt-2 text-sm text-slate-600">{view.winReason}</p></>;
   return null;
 }
