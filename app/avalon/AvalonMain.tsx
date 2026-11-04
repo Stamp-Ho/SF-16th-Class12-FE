@@ -190,6 +190,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
   const { notes, updateNote, ready: notesReady } = useLocalNotes(roomId, view?.phase);
   const [showSecret, setShowSecret] = useState(false);
   const [rulebookOpen, setRulebookOpen] = useState(false);
+  const [compositionOpen, setCompositionOpen] = useState(false);
   const [avatarUrls, setAvatarUrls] = useState<Record<string, string>>(previewAvatarUrls);
   const [avatarError, setAvatarError] = useState(previewAvatarError ?? '');
   const [previewTurn, setPreviewTurn] = useState(0);
@@ -367,6 +368,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
     const timer = setTimeout(() => {
       if (view?.phase === 'propose') { setTeam([]); setSwordHolder(''); setWatchHolder(''); setProposalPick('team'); setMissionChoice(view.mission); }
       if (view?.phase === 'assassinate') setAssassinationKind('merlin');
+      if (view?.phase === 'lobby') setCompositionOpen(false);
       setTarget(''); setSecondTarget('');
     }, 0);
     return () => clearTimeout(timer);
@@ -428,7 +430,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
     <div className="mx-auto max-w-4xl space-y-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <Link href="/" className="inline-flex items-center gap-2 text-sm font-medium text-slate-600"><ArrowLeft size={17} /> 대시보드</Link>
-        <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => setRulebookOpen(true)} className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-white px-3 py-1.5 text-sm font-semibold text-violet-800 focus-visible:outline-2 focus-visible:outline-violet-600"><BookOpen size={16} /> 룰북</button><span className="inline-flex items-center gap-2 rounded-full bg-violet-100 px-3 py-1 text-sm font-semibold text-violet-800"><Shield size={15} /> 레지스탕스: 아발론</span></div>
+        <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => setRulebookOpen(true)} className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-white px-3 py-1.5 text-sm font-semibold text-violet-800 focus-visible:outline-2 focus-visible:outline-violet-600"><BookOpen size={16} /> 룰북</button>{view && view.phase !== 'lobby' && <button type="button" aria-haspopup="dialog" aria-expanded={compositionOpen} onClick={() => setCompositionOpen(true)} className="rounded-full border border-violet-200 bg-white px-3 py-1.5 text-sm font-semibold text-violet-800 focus-visible:outline-2 focus-visible:outline-violet-600">직업 구성</button>}<span className="inline-flex items-center gap-2 rounded-full bg-violet-100 px-3 py-1 text-sm font-semibold text-violet-800"><Shield size={15} /> 레지스탕스: 아발론</span></div>
       </header>
       {preview && <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><p className="font-bold">플레이 화면 미리보기</p><p className="mt-1">예시 게임 결과를 사용합니다. 실제 방에 연결되거나 행동이 저장되지 않습니다. 참가자 이름과 프로필 이미지는 사용자 목록에서 불러옵니다.</p><label className="mt-3 block font-medium">확인할 화면 <select className={`${field} mt-1 w-full`} value={previewScreen} onChange={(e) => showPreviewScreen(e.target.value as PreviewScreen)}>{previewPhases.map(({ screen, label }) => <option key={screen} value={screen}>{label}</option>)}</select></label>{previewScreen === 'reselect_after_rejection' && <button type="button" className={`${secondary} mt-3`} onClick={() => showPreviewScreen('reselect_after_rejection')}>5초 다시 보기</button>}{previewScreen === 'gawain_check' && <button type="button" className={`${secondary} mt-3`} onClick={() => showPreviewScreen('gawain_check')}>가웨인 판정 다시 보기</button>}</section>}
       {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
@@ -558,6 +560,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
       </>}
     </div>
     {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} turnKey={actionTurnKey} actionLabel={actionLabel} />}
+    {compositionOpen && view && view.phase !== 'lobby' && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setCompositionOpen(false); }}><div role="dialog" aria-modal="true" aria-labelledby="avalon-composition-title" onKeyDown={(event) => { if (event.key === 'Escape') setCompositionOpen(false); }} className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"><div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4"><div><h2 id="avalon-composition-title" className="text-lg font-bold">직업 구성</h2><p className="mt-1 text-sm text-slate-500">이 게임에 포함된 직업과 적용 규칙입니다. 참가자별 직업은 공개되지 않습니다.</p></div><button type="button" autoFocus className="shrink-0 rounded-lg p-2 text-slate-500 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-violet-600" aria-label="직업 구성 닫기" onClick={() => setCompositionOpen(false)}><X size={20} /></button></div><div className="min-h-0 overflow-y-auto p-5"><RoleComposition config={view.config} embedded /></div></div></div>}
     {statsOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setStatsOpen(false); }}><div role="dialog" aria-modal="true" aria-labelledby="avalon-stats-title" className="flex max-h-[80vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"><div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><h2 id="avalon-stats-title" className="text-lg font-bold">역대 승률 · 랭킹</h2><p className="mt-1 text-xs text-slate-500">모든 완료된 아발론 게임의 기록</p></div><button type="button" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="닫기" onClick={() => setStatsOpen(false)}><X size={20} /></button></div><div className="min-h-0 overflow-y-auto px-4 pb-5">{statsLoading ? <p className="py-12 text-center text-sm text-slate-500">기록을 불러오는 중...</p> : statsError ? <p role="alert" className="py-12 text-center text-sm text-rose-600">{statsError}</p> : <>{sideStats && <SideStatsSummary stats={sideStats} />}{playerStats.length ? <PlayerStatsTable people={playerStats.map((row) => ({ id: row.playerId, name: row.playerName }))} stats={Object.fromEntries(playerStats.map((row) => [row.playerId, row]))} /> : <p className="py-12 text-center text-sm text-slate-500">완료된 게임 기록이 없습니다.</p>}</>}</div></div></div>}
   </main>;
 }
@@ -610,7 +613,7 @@ function GameHistory({ view }: { view: View }) {
   </section>;
 }
 
-function RoleComposition({ config }: { config: Config }) {
+function RoleComposition({ config, embedded = false }: { config: Config; embedded?: boolean }) {
   const groups = [
     { side: 'good', label: '선', slots: config.goodSlots, ordinary: '충신' },
     { side: 'evil', label: '악', slots: config.evilSlots, ordinary: '하수인' },
@@ -627,9 +630,8 @@ function RoleComposition({ config }: { config: Config }) {
     ...(config.seniorKnowsJunior ? ['상급 전령의 정보'] : []),
   ];
 
-  return <section className="rounded-2xl bg-white p-4 shadow-sm sm:p-6">
-    <h2 className="font-bold">저장된 직업 구성</h2>
-    <p className="mt-1 text-sm text-slate-600">게임 시작 시 아래 직업이 참가자에게 무작위로 배정됩니다.</p>
+  return <section className={embedded ? '' : 'rounded-2xl bg-white p-4 shadow-sm sm:p-6'}>
+    {!embedded && <><h2 className="font-bold">저장된 직업 구성</h2><p className="mt-1 text-sm text-slate-600">게임 시작 시 아래 직업이 참가자에게 무작위로 배정됩니다.</p></>}
     <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4">
       {groups.map(({ side, label, slots, ordinary }) => <div key={side} className="min-w-0">
         <h3 className={`rounded-lg text-sm font-bold ${side === 'good' ? 'text-blue-900' : 'text-red-900'}`}>{label} 진영 · {slots.length}명</h3>
