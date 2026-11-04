@@ -5,9 +5,10 @@ import Image from 'next/image';
 import { startTransition, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowLeft, BookOpen, Check, Crown, Eye, EyeOff, Shield, ShieldAlert, ShieldHalf, ShieldOff, ShieldQuestionMark, Skull, Swords, X } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
-import { createAvalonRoom, getAvalonAvatarUrls, getAvalonPlayerStats, getAvalonRoom, getMyAvalonRoom, joinAvalonRoom, leaveAvalonRoom, listAvalonRooms, moveAvalonRoom } from './actions';
-import type { AvalonPlayerStats, AvalonRoomSummary } from './actions';
+import { createAvalonRoom, getAvalonAvatarUrls, getAvalonPlayerStats, getAvalonRoom, getAvalonSideStats, getMyAvalonRoom, joinAvalonRoom, leaveAvalonRoom, listAvalonRooms, moveAvalonRoom } from './actions';
+import type { AvalonPlayerStats, AvalonRoomSummary, AvalonSideStats } from './actions';
 import PlayerStatsTable from './PlayerStatsTable';
+import SideStatsSummary from './SideStatsSummary';
 import { defaultConfig, GOOD_COUNTS, REJECTED_VOTE_REVEAL_MS, ROLES, TEAM_COUNTS, validateConfig, type Card, type Config, type Phase, type PlotCard, type Role, type Side } from './rules';
 import { initialState, publicView, type AvalonView, type Move } from './engine';
 import { useLocalNotes } from './useLocalNotes';
@@ -159,6 +160,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
   const [statsLoading, setStatsLoading] = useState(false);
   const [statsError, setStatsError] = useState('');
   const [playerStats, setPlayerStats] = useState<AvalonPlayerStats[]>([]);
+  const [sideStats, setSideStats] = useState<AvalonSideStats | null>(null);
   const configDirty = useRef(false);
   const [previewScreen, setPreviewScreen] = useState<PreviewScreen>('propose');
   const [view, setView] = useState<View | null>(() => preview ? previewView('propose', previewParticipants) : null);
@@ -255,9 +257,9 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
     setStatsOpen(true);
     setStatsLoading(true);
     setStatsError('');
-    const result = await getAvalonPlayerStats();
-    if (result.ok) setPlayerStats(result.data);
-    else setStatsError(result.error);
+    const [players, sides] = await Promise.all([getAvalonPlayerStats(), getAvalonSideStats()]);
+    if (players.ok && sides.ok) { setPlayerStats(players.data); setSideStats(sides.data); }
+    else setStatsError(!players.ok ? players.error : !sides.ok ? sides.error : '승률을 불러오지 못했습니다.');
     setStatsLoading(false);
   }
   async function send(move: Move) {
@@ -518,7 +520,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
       </>}
     </div>
     {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} turnKey={actionTurnKey} actionLabel={actionLabel} />}
-    {statsOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setStatsOpen(false); }}><div role="dialog" aria-modal="true" aria-labelledby="avalon-stats-title" className="flex max-h-[80vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"><div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><h2 id="avalon-stats-title" className="text-lg font-bold">역대 승률 · 랭킹</h2><p className="mt-1 text-xs text-slate-500">모든 완료된 아발론 게임의 플레이어 기록</p></div><button type="button" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="닫기" onClick={() => setStatsOpen(false)}><X size={20} /></button></div><div className="min-h-0 overflow-y-auto px-4 pb-5">{statsLoading ? <p className="py-12 text-center text-sm text-slate-500">기록을 불러오는 중...</p> : statsError ? <p role="alert" className="py-12 text-center text-sm text-rose-600">{statsError}</p> : playerStats.length ? <PlayerStatsTable people={playerStats.map((row) => ({ id: row.playerId, name: row.playerName }))} stats={Object.fromEntries(playerStats.map((row) => [row.playerId, row]))} /> : <p className="py-12 text-center text-sm text-slate-500">완료된 게임 기록이 없습니다.</p>}</div></div></div>}
+    {statsOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setStatsOpen(false); }}><div role="dialog" aria-modal="true" aria-labelledby="avalon-stats-title" className="flex max-h-[80vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"><div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><h2 id="avalon-stats-title" className="text-lg font-bold">역대 승률 · 랭킹</h2><p className="mt-1 text-xs text-slate-500">모든 완료된 아발론 게임의 기록</p></div><button type="button" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="닫기" onClick={() => setStatsOpen(false)}><X size={20} /></button></div><div className="min-h-0 overflow-y-auto px-4 pb-5">{statsLoading ? <p className="py-12 text-center text-sm text-slate-500">기록을 불러오는 중...</p> : statsError ? <p role="alert" className="py-12 text-center text-sm text-rose-600">{statsError}</p> : <>{sideStats && <SideStatsSummary stats={sideStats} />}{playerStats.length ? <PlayerStatsTable people={playerStats.map((row) => ({ id: row.playerId, name: row.playerName }))} stats={Object.fromEntries(playerStats.map((row) => [row.playerId, row]))} /> : <p className="py-12 text-center text-sm text-slate-500">완료된 게임 기록이 없습니다.</p>}</>}</div></div></div>}
   </main>;
 }
 

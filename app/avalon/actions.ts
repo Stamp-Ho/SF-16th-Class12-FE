@@ -10,6 +10,7 @@ type Actor = { id: string; name: string };
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 export type AvalonRoomSummary = { id: string; hostName: string; players: { id: string; name: string }[]; capacity: number; phase: string };
 export type AvalonPlayerStats = { playerId: string; playerName: string; games: number; wins: number; goodGames: number; goodWins: number; evilGames: number; evilWins: number };
+export type AvalonSideStats = { games: number; goodWins: number; evilWins: number };
 
 async function actor(): Promise<Actor> {
   const auth = await requireAuth();
@@ -58,6 +59,16 @@ export async function getAvalonPlayerStats(): Promise<Result<AvalonPlayerStats[]
     }
     return { ok: true, data: rows };
   } catch (error) { return { ok: false, error: error instanceof Error ? error.message : '승률을 불러오지 못했습니다.' }; }
+}
+
+export async function getAvalonSideStats(): Promise<Result<AvalonSideStats>> {
+  try {
+    await actor();
+    const { data, error } = await createAdminClient().from('avalon_side_stats')
+      .select('games, good_wins, evil_wins').single();
+    if (error) throw new Error(error.message);
+    return { ok: true, data: { games: Number(data.games), goodWins: Number(data.good_wins), evilWins: Number(data.evil_wins) } };
+  } catch (error) { return { ok: false, error: error instanceof Error ? error.message : '진영별 승률을 불러오지 못했습니다.' }; }
 }
 
 export async function getMyAvalonRoom(): Promise<Result<{ id: string; view: ReturnType<typeof publicView> } | null>> {
