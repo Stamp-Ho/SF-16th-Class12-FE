@@ -24,7 +24,12 @@ export type Move =
 const fail = (message: string): never => { throw new Error(message); };
 const has = (p: Player, role: string) => p.roles.includes(role as Player['roles'][number]);
 const isFailureCard = (card: Card | undefined) => card === 'fail' || card === 'evil_message' || card === 'evil_rogue';
+const isSuccessCard = (card: Card) => card === 'success' || card === 'good_message' || card === 'good_rogue';
 const cardLabel: Record<Card, string> = { success: '성공', fail: '실패', magic: '마법', good_message: '선 전령', evil_message: '악 전령', good_rogue: '선 도적', evil_rogue: '악 도적' };
+export function gawainCheckEvent(mission: number, checkerName: string, targetName: string, card: Card): string {
+  const result = isSuccessCard(card) ? '성공' : isFailureCard(card) ? '실패' : cardLabel[card];
+  return `${mission}차 원정 가웨인 검사: ${checkerName} → ${targetName} [${result}] 카드 확인 · ${isSuccessCard(card) ? '추방' : '계속 사용 가능'}`;
+}
 const plotLabel: Record<PlotCard, string> = { are_you_the_one: 'Are You the One?', charge: 'Charge!', show_your_strength: 'Show Your Strength', show_your_true_nature: 'Show Your True Nature', king_returns: 'The King Returns', ambush: 'Ambush', lead_to_victory: 'Lead to Victory', we_found_you: 'We Found You!', restore_your_honor: 'Restore Your Honor' };
 const score = (s: GameState) => ({ good: s.results.filter((r) => r.success).length, evil: s.results.filter((r) => !r.success).length });
 const nextSeat = (s: GameState) => (s.leaderSeat + 1) % s.players.length;
@@ -417,12 +422,11 @@ export function applyMove(state: GameState, actorId: string, move: Move): GameSt
     if (!s.proposal.includes(move.target) || !(move.target in s.cards)) fail('이번 원정의 팀원을 선택해 주세요.');
     const inspectedCard = s.submittedCards?.[move.target] ?? s.cards[move.target];
     (s.cardPeeks[actorId] ??= []).push({ target: move.target, card: inspectedCard });
-    const foundSuccess = inspectedCard === 'success' || inspectedCard === 'good_message' || inspectedCard === 'good_rogue';
-    const foundFailure = isFailureCard(inspectedCard);
+    const foundSuccess = isSuccessCard(inspectedCard);
     if (foundSuccess) {
       s.gawainExiled = true;
     }
-    publicEvent(s, `${s.mission}차 원정 가웨인 검사: ${foundSuccess ? '성공 카드 확인 · 추방' : foundFailure ? '실패 카드 확인 · 계속 사용 가능' : '성공·실패 외 카드 확인 · 계속 사용 가능'} (${actor.name})`);
+    publicEvent(s, gawainCheckEvent(s.mission, actor.name, playerById(s, move.target)!.name, inspectedCard));
     finishAfterQuest(s);
     return s;
   }

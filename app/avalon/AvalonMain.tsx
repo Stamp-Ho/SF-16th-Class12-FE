@@ -10,7 +10,7 @@ import type { AvalonPlayerStats, AvalonRoomSummary, AvalonSideStats } from './ac
 import PlayerStatsTable from './PlayerStatsTable';
 import SideStatsSummary from './SideStatsSummary';
 import { defaultConfig, GOOD_COUNTS, REJECTED_VOTE_REVEAL_MS, ROLES, TEAM_COUNTS, validateConfig, type Card, type Config, type Phase, type PlotCard, type Role, type Side } from './rules';
-import { initialState, publicView, type AvalonView, type Move } from './engine';
+import { gawainCheckEvent, initialState, publicView, type AvalonView, type Move } from './engine';
 import { useLocalNotes } from './useLocalNotes';
 import { PREVIEW_FALLBACK_IDS, PREVIEW_NAMES } from './previewData';
 import RulebookModal, { getPendingAvalonAction } from './RulebookModal';
@@ -294,7 +294,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
         setPreviewGawainResult({ target: move.target, card });
         setView((current) => {
           if (!current || current.phase !== 'gawain_check') return current;
-          const event = `3차 원정 가웨인 검사: ${user.name} → ${view?.players.find((player) => player.id === move.target)?.name} ${exiled ? '[성공 카드] 확인 · 추방' : '[실패 카드] 확인 · 계속 사용 가능'}`;
+          const event = gawainCheckEvent(current.mission, user.name, current.players.find((player) => player.id === move.target)?.name ?? '알 수 없음', card);
           return { ...current, gawainExiled: exiled,
             players: exiled ? current.players.map((player) => player.id === user.id ? { ...player, publicRoles: [...player.publicRoles, 'gawain' as const] } : player) : current.players,
             myCardPeeks: [...current.myCardPeeks, { target: move.target, card }],
