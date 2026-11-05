@@ -168,10 +168,11 @@ export function knows(state: GameState, actor: Player): { players: string[]; lab
 }
 
 export function allowedCards(player: Player, state: GameState): Card[] {
+  const isSorcerer = player.roles.includes('good_sorcerer') || player.roles.includes('evil_sorcerer');
   if (player.currentSide === 'good') {
-    if (player.roles.includes('good_lancelot') && state.config.lancelot === 'variant2') return ['success'];
+    if ((player.roles.includes('good_lancelot') || player.roles.includes('evil_lancelot')) && state.config.lancelot === 'variant2') return ['success'];
     const cards: Card[] = ['success'];
-    if (player.roles.includes('good_sorcerer')) cards.push('magic');
+    if (isSorcerer) cards.push('magic');
     if (player.roles.includes('good_messenger_senior') || player.roles.includes('good_messenger_junior')) cards.push('good_message');
     if (player.roles.includes('good_rogue') && state.rogueWatchHolder !== player.id) cards.push('good_rogue');
     return cards;
@@ -180,6 +181,7 @@ export function allowedCards(player: Player, state: GameState): Card[] {
   if (player.roles.includes('evil_sorcerer')) return ['success', 'magic'];
   const cards: Card[] = ['success'];
   if (!(player.roles.includes('brute') && state.mission > 3)) cards.push('fail');
+  if (isSorcerer) cards.push('magic');
   if (player.roles.includes('evil_messenger')) cards.push('evil_message');
   if (player.roles.includes('evil_rogue') && state.rogueWatchHolder !== player.id) cards.push('evil_rogue');
   return cards;

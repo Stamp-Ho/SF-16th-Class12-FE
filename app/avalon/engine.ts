@@ -27,6 +27,12 @@ const has = (p: Player, role: string) => p.roles.includes(role as Player['roles'
 const isFailureCard = (card: Card | undefined) => card === 'fail' || card === 'evil_message' || card === 'evil_rogue';
 const isSuccessCard = (card: Card) => card === 'success' || card === 'good_message' || card === 'good_rogue';
 const cardLabel: Record<Card, string> = { success: '성공', fail: '실패', magic: '마법', good_message: '선 전령', evil_message: '악 전령', good_rogue: '선 도적', evil_rogue: '악 도적' };
+export function excaliburReplacementCard(target: Player, original: Card): Card {
+  if ((has(target, 'good_sorcerer') || has(target, 'evil_sorcerer')) && (original === 'success' || original === 'magic')) {
+    return original === 'success' ? 'magic' : 'success';
+  }
+  return original === 'success' ? 'fail' : 'success';
+}
 export function gawainCheckEvent(mission: number, checkerName: string, targetName: string, card: Card): string {
   const result = isSuccessCard(card) ? '성공' : isFailureCard(card) ? '실패' : cardLabel[card];
   return `${mission}차 원정 가웨인 검사: ${checkerName} → ${targetName} [${result}] 카드 확인 · ${isSuccessCard(card) ? '추방' : '계속 사용 가능'}`;
@@ -452,7 +458,7 @@ export function applyMove(state: GameState, actorId: string, move: Move): GameSt
     if (move.target) {
       if (!s.proposal.includes(move.target) || move.target === actorId) fail('다른 팀원을 선택해 주세요.');
       const previous = s.cards[move.target];
-      s.cards[move.target] = previous === 'success' ? 'fail' : 'success';
+      s.cards[move.target] = excaliburReplacementCard(playerById(s, move.target)!, previous);
       s.excaliburTarget = move.target;
       (s.cardPeeks[actorId] ??= []).push({ target: move.target, card: previous });
       publicEvent(s, `${s.mission}차 원정 엑스칼리버: ${actor.name}님이 ${playerById(s, move.target)?.name}님의 카드를 교체했습니다.`);

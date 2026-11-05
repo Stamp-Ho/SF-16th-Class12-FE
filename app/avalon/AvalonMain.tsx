@@ -10,7 +10,7 @@ import type { AvalonPlayerStats, AvalonRoomSummary, AvalonSideStats } from './ac
 import PlayerStatsTable from './PlayerStatsTable';
 import SideStatsSummary from './SideStatsSummary';
 import { defaultConfig, GOOD_COUNTS, REJECTED_VOTE_REVEAL_MS, ROLES, TEAM_COUNTS, validateConfig, type Card, type Config, type GameState, type Phase, type PlotCard, type Role, type Side } from './rules';
-import { applyMove, gawainCheckEvent, initialState, publicView, type AvalonView, type Move } from './engine';
+import { applyMove, excaliburReplacementCard, gawainCheckEvent, initialState, publicView, type AvalonView, type Move } from './engine';
 import { useLocalNotes } from './useLocalNotes';
 import { PREVIEW_FALLBACK_IDS, PREVIEW_NAMES } from './previewData';
 import RulebookModal, { getPendingAvalonAction } from './RulebookModal';
@@ -327,7 +327,8 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
           if (!result) throw new Error('원정 결과를 확인할 수 없습니다.');
           const original = move.target ? fixture.cards[move.target] : undefined;
           setPreviewExcaliburResult({ target: move.target, original,
-            changed: original ? original === 'success' ? 'fail' : 'success' : undefined, success: result.success, failCount: result.failCount });
+            changed: original && move.target ? excaliburReplacementCard(fixture.players.find((player) => player.id === move.target)!, original) : undefined,
+            success: result.success, failCount: result.failCount });
           setError('');
         } catch (cause) { setError(cause instanceof Error ? cause.message : '엑스칼리버 처리에 실패했습니다.'); }
         return;
