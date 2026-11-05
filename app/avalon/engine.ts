@@ -33,9 +33,12 @@ export function excaliburReplacementCard(target: Player, original: Card): Card {
   }
   return original === 'success' ? 'fail' : 'success';
 }
-export function gawainCheckEvent(mission: number, checkerName: string, targetName: string, card: Card): string {
-  const submittedSuccess = isSuccessCard(card);
-  return `${mission}차 원정 가웨인 검사: ${checkerName} → ${targetName} [${submittedSuccess ? '성공 제출' : '성공 미제출'}] · ${submittedSuccess ? '추방' : '계속 사용 가능'}`;
+export function gawainUnplayedCard(target: Player, submittedCard: Card): Card {
+  if (!isSuccessCard(submittedCard)) return 'success';
+  return has(target, 'good_sorcerer') || has(target, 'evil_sorcerer') ? 'magic' : 'fail';
+}
+export function gawainCheckEvent(mission: number, checkerName: string, targetName: string, unplayedCard: Card): string {
+  return `${mission}차 원정 가웨인 검사: ${checkerName} → ${targetName} [내지 않은 카드: ${cardLabel[unplayedCard]}] · ${unplayedCard === 'success' ? '계속 사용 가능' : '추방'}`;
 }
 const plotLabel: Record<PlotCard, string> = { are_you_the_one: 'Are You the One?', charge: 'Charge!', show_your_strength: 'Show Your Strength', show_your_true_nature: 'Show Your True Nature', king_returns: 'The King Returns', ambush: 'Ambush', lead_to_victory: 'Lead to Victory', we_found_you: 'We Found You!', restore_your_honor: 'Restore Your Honor' };
 const score = (s: GameState) => ({ good: s.results.filter((r) => r.success).length, evil: s.results.filter((r) => !r.success).length });
@@ -447,12 +450,13 @@ export function applyMove(state: GameState, actorId: string, move: Move): GameSt
     if (s.phase !== 'gawain_check' || !has(actor, 'gawain') || s.gawainExiled || s.proposal.includes(actorId)) fail('이번 원정에 참가하지 않은 가웨인만 카드를 확인할 수 있습니다.');
     if (!s.proposal.includes(move.target) || !(move.target in s.cards)) fail('이번 원정의 팀원을 선택해 주세요.');
     const inspectedCard = s.submittedCards?.[move.target] ?? s.cards[move.target];
-    const foundSuccess = isSuccessCard(inspectedCard);
-    (s.cardPeeks[actorId] ??= []).push({ target: move.target, submittedSuccess: foundSuccess });
-    if (foundSuccess) {
+    const target = playerById(s, move.target)!;
+    const unplayedCard = gawainUnplayedCard(target, inspectedCard);
+    (s.cardPeeks[actorId] ??= []).push({ target: move.target, unplayedCard });
+    if (unplayedCard !== 'success') {
       s.gawainExiled = true;
     }
-    publicEvent(s, gawainCheckEvent(s.mission, actor.name, playerById(s, move.target)!.name, inspectedCard));
+    publicEvent(s, gawainCheckEvent(s.mission, actor.name, target.name, unplayedCard));
     finishAfterQuest(s);
     return s;
   }
@@ -463,7 +467,7 @@ export function applyMove(state: GameState, actorId: string, move: Move): GameSt
       const previous = s.cards[move.target];
       s.cards[move.target] = excaliburReplacementCard(playerById(s, move.target)!, previous);
       s.excaliburTarget = move.target;
-      (s.cardPeeks[actorId] ??= []).push({ target: move.target, card: previous });
+      (s.cardPeeks[actorId] ??= []).push({ target: move.target, card: previous, source: 'excalibur', mission: s.mission });
       publicEvent(s, `${s.mission}차 원정 엑스칼리버: ${actor.name}님이 ${playerById(s, move.target)?.name}님의 카드를 교체했습니다.`);
     } else {
       publicEvent(s, `${s.mission}차 원정 엑스칼리버: ${actor.name}님이 사용하지 않았습니다.`);

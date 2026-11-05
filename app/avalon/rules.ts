@@ -70,7 +70,7 @@ export type GameState = {
   excaliburHolder: string | null; excaliburTarget?: string | null; trapperExcluded: string | null;
   rogueWatchHolder: string | null;
   messengerUses: Record<string, number>; rogueUses: Record<string, number[]>;
-  cardPeeks: Record<string, ({ target: string; card: Card } | { target: string; submittedSuccess: boolean })[]>;
+  cardPeeks: Record<string, ({ target: string; card: Card; source?: 'excalibur'; mission?: number } | { target: string; unplayedCard: Card } | { target: string; submittedSuccess: boolean; unplayedMagic?: boolean })[]>;
   pendingCheck: { checker: string; target: string; resume: 'start' | 'lady' | 'plot' } | null;
   plotDeck: PlotCard[]; plotHands: Record<string, PlotCard[]>; plotDrawn: PlotCard[];
   plotPending: { card: PlotCard; holder: string } | null;
@@ -180,7 +180,7 @@ export function allowedCards(player: Player, state: GameState): Card[] {
   if (player.roles.includes('lunatic') || ((player.roles.includes('good_lancelot') || player.roles.includes('evil_lancelot')) && state.config.lancelot === 'variant2')) return ['fail'];
   if (player.roles.includes('evil_sorcerer')) return ['success', 'magic'];
   const cards: Card[] = ['success'];
-  if (!(player.roles.includes('brute') && state.mission > 3)) cards.push('fail');
+  if (!isSorcerer && !(player.roles.includes('brute') && state.mission > 3)) cards.push('fail');
   if (isSorcerer) cards.push('magic');
   if (player.roles.includes('evil_messenger')) cards.push('evil_message');
   if (player.roles.includes('evil_rogue') && state.rogueWatchHolder !== player.id) cards.push('evil_rogue');

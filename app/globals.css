@@ -107,8 +107,15 @@ strong {
 .rejection-warning-pulse {
   animation: rejectionWarningPulse 1.2s ease-in-out infinite;
 }
+@keyframes avalonTurnReminderBlink {
+  0%, 45%, 100% { opacity: 1; }
+  50%, 95% { opacity: 0.35; }
+}
+.avalon-turn-reminder-blink {
+  animation: avalonTurnReminderBlink 1.4s ease-in-out infinite;
+}
 @media (prefers-reduced-motion: reduce) {
-  .rejection-warning-pulse {
+  .rejection-warning-pulse, .avalon-turn-reminder-blink {
     animation: none;
   }
 }
