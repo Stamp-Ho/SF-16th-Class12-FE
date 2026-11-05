@@ -70,7 +70,7 @@ export type GameState = {
   excaliburHolder: string | null; excaliburTarget?: string | null; trapperExcluded: string | null;
   rogueWatchHolder: string | null;
   messengerUses: Record<string, number>; rogueUses: Record<string, number[]>;
-  cardPeeks: Record<string, { target: string; card: Card }[]>;
+  cardPeeks: Record<string, ({ target: string; card: Card } | { target: string; submittedSuccess: boolean })[]>;
   pendingCheck: { checker: string; target: string; resume: 'start' | 'lady' | 'plot' } | null;
   plotDeck: PlotCard[]; plotHands: Record<string, PlotCard[]>; plotDrawn: PlotCard[];
   plotPending: { card: PlotCard; holder: string } | null;

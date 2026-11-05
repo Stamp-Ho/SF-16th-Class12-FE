@@ -134,10 +134,14 @@ function previewState(screen: PreviewScreen, people: User[], rejectedAt: string 
   if (phase === 'quest' || phase === 'assassinate' || phase === 'finished') state.voteHistory.push({ mission: 3, team: thirdTeam, votes: thirdVote, approved: true, leaderId: self.id,
     excaliburHolder: phase === 'assassinate' || phase === 'finished' ? sixth.id : null });
   if (phase === 'gawain_check') {
+    state.players[1].roles.push('good_sorcerer');
+    state.players[3].roles.push('evil_sorcerer');
+    state.config.goodSlots[1].push('good_sorcerer');
+    state.config.evilSlots[0].push('evil_sorcerer');
     state.voteHistory.push({ mission: 3, team: gawainTeam, votes: thirdVote, approved: true, leaderId: third.id });
-    state.results.push({ number: 3, team: gawainTeam, success: false, cards: ['success', 'success', 'fail', 'success'], failCount: 1, vote: thirdVote, leaderId: third.id });
+    state.results.push({ number: 3, team: gawainTeam, success: false, cards: ['success', 'success', 'magic', 'success'], failCount: 0, vote: thirdVote, leaderId: third.id });
     state.proposal = gawainTeam;
-    state.cards = { [second.id]: 'success', [third.id]: 'success', [fourth.id]: 'fail', [sixth.id]: 'success' };
+    state.cards = { [second.id]: 'success', [third.id]: 'success', [fourth.id]: 'magic', [sixth.id]: 'success' };
     state.submittedCards = { ...state.cards };
   }
   if (phase === 'excalibur') {
@@ -235,7 +239,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
   const [previewTurn, setPreviewTurn] = useState(0);
   const [previewQuestChoice, setPreviewQuestChoice] = useState<Card | null>(null);
   const [previewLadyResult, setPreviewLadyResult] = useState<{ target: string; side: Side } | null>(null);
-  const [previewGawainResult, setPreviewGawainResult] = useState<{ target: string; card: Card } | null>(null);
+  const [previewGawainResult, setPreviewGawainResult] = useState<{ target: string; submittedSuccess: boolean } | null>(null);
   const [previewExcaliburResult, setPreviewExcaliburResult] = useState<PreviewExcaliburResult | null>(null);
   const [previewAssassination, setPreviewAssassination] = useState<PreviewAssassination | null>(null);
   const [previewProposedTeam, setPreviewProposedTeam] = useState<string[]>([]);
@@ -341,20 +345,17 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
         return;
       }
       if (move.type === 'gawain_check' && previewScreen === 'gawain_check') {
-        const cards: Record<string, Card> = {
-          [previewParticipants[1].id]: 'success', [previewParticipants[2].id]: 'success',
-          [previewParticipants[3].id]: 'fail', [previewParticipants[5].id]: 'success',
-        };
-        const card = cards[move.target];
+        const card = previewState('gawain_check', previewParticipants).submittedCards?.[move.target];
         if (!card || previewGawainResult) return;
-        const exiled = card === 'success';
-        setPreviewGawainResult({ target: move.target, card });
+        const submittedSuccess = card === 'success' || card === 'good_message' || card === 'good_rogue';
+        const exiled = submittedSuccess;
+        setPreviewGawainResult({ target: move.target, submittedSuccess });
         setView((current) => {
           if (!current || current.phase !== 'gawain_check') return current;
           const event = gawainCheckEvent(current.mission, user.name, current.players.find((player) => player.id === move.target)?.name ?? '알 수 없음', card);
           return { ...current, gawainExiled: exiled,
             players: exiled ? current.players.map((player) => player.id === user.id ? { ...player, publicRoles: [...player.publicRoles, 'gawain' as const] } : player) : current.players,
-            myCardPeeks: [...current.myCardPeeks, { target: move.target, card }],
+            myCardPeeks: [...current.myCardPeeks, { target: move.target, submittedSuccess }],
             publicEvents: [...current.publicEvents, event],
             history: [...current.history, { type: 'event', index: current.publicEvents.length }],
           };
@@ -534,7 +535,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
             <p className="font-bold text-violet-950">{selectedRoles || (view.mySide === 'good' ? '충신' : '하수인')} · {view.mySide === 'good' ? '선' : '악'} 진영</p>
             {view.myKnowledge.map((row, i) => <div key={i} className="mt-3"><p className="font-semibold">{row.label}</p><div className="mt-1 flex flex-wrap gap-1.5">{(row.players.length ? row.players : ['없음']).map((name, index) => <span key={`${name}-${index}`} className="max-w-full rounded-lg border border-violet-200 bg-white px-2 py-1 text-xs font-medium whitespace-normal [overflow-wrap:anywhere]">{name}</span>)}</div></div>)}
             {view.myFindings.map((finding, i) => <p key={i} className="mt-3">진영 조사: {view.players.find((p) => p.id === finding.target)?.name} → {finding.side === 'good' ? '선' : '악'}</p>)}
-            {view.myCardPeeks.map((peek, i) => <p key={i} className="mt-3">확인한 카드: {view.players.find((p) => p.id === peek.target)?.name} → {cardName[peek.card]}</p>)}
+            {view.myCardPeeks.map((peek, i) => <p key={i} className="mt-3">{view.players.find((p) => p.id === peek.target)?.name} → {'submittedSuccess' in peek ? `가웨인 조사: 성공 ${peek.submittedSuccess ? '제출' : '미제출'}` : `확인한 카드: ${cardName[peek.card]}`}</p>)}
           </div>}
         </section>}
         </div>
@@ -759,7 +760,7 @@ function PhaseControls({ view, user, busy, send, previewQuestChoice, previewLady
   view: View; user: User; busy: boolean; send: (move: Move) => Promise<void>;
   previewQuestChoice: Card | null;
   previewLadyResult: { target: string; side: Side } | null;
-  previewGawainResult: { target: string; card: Card } | null;
+  previewGawainResult: { target: string; submittedSuccess: boolean } | null;
   previewExcaliburResult: PreviewExcaliburResult | null;
   previewAssignedSwordHolder: string | null;
   previewAssassination: PreviewAssassination | null;
@@ -803,7 +804,7 @@ function PhaseControls({ view, user, busy, send, previewQuestChoice, previewLady
   </>;
   if (view.phase === 'excalibur') return <><h2 className="font-bold">엑스칼리버</h2>{view.excaliburHolder === user.id ? <><p className="mt-2 text-sm text-slate-600">다른 팀원의 카드를 바꾸거나 사용하지 않을 수 있습니다.</p><div className="mt-3 flex gap-2"><button className={primary} disabled={busy || !target || Boolean(previewExcaliburResult)} onClick={() => void send({ type: 'excalibur', target })}>카드 바꾸기</button><button className={secondary} disabled={busy || Boolean(previewExcaliburResult)} onClick={() => void send({ type: 'excalibur' })}>사용 안 함</button></div>{previewExcaliburResult && <p role="status" className="mt-3 rounded-lg bg-violet-50 p-3 text-sm text-violet-800">{previewExcaliburResult.target ? `${view.players.find((player) => player.id === previewExcaliburResult.target)?.name}님의 원래 카드: ${cardName[previewExcaliburResult.original!]} → ${cardName[previewExcaliburResult.changed!]}` : '엑스칼리버를 사용하지 않았습니다.'} · 원정 {previewExcaliburResult.success ? '성공' : '실패'} (실패 {previewExcaliburResult.failCount}장)</p>}</> : <p className="mt-2 text-sm text-slate-600">엑스칼리버 소유자의 선택을 기다립니다.</p>}</>;
   if (view.phase === 'trapper') return <><h2 className="font-bold">함정꾼</h2>{isLeader ? <><p className="mt-2 text-sm text-slate-600">원정 카드 한 장을 확인하고 판정에서 제외합니다.</p><p className="mt-3 text-sm text-violet-700">제외할 팀원: {selectedName ?? '위에서 선택'}</p><button className={`${primary} mt-3 w-full`} disabled={busy || !target} onClick={() => void send({ type: 'trapper', target })}>카드 제외</button></> : <p className="mt-2 text-sm text-slate-600">리더의 선택을 기다립니다.</p>}</>;
-  if (view.phase === 'gawain_check') return <><h2 className="font-bold">가웨인의 원정 카드 확인</h2><p className="mt-2 text-sm text-slate-600">{view.mission}차 원정 {view.results.at(-1)?.success ? '성공' : '실패'} · 제출 카드가 공개되었습니다.</p>{view.myRole.includes('gawain') ? <><p className="mt-3 text-sm text-slate-600">이번 원정에 참가하지 않았으므로 팀원 한 명이 제출한 카드를 비밀리에 확인할 수 있습니다. 성공 카드를 확인하면 추방됩니다.</p><button className={`${primary} mt-3 w-full`} disabled={busy || !target || !view.proposal.includes(target) || Boolean(previewGawainResult)} onClick={() => void send({ type: 'gawain_check', target })}>{previewGawainResult ? '확인 완료' : `[ ${selectedName} ] 카드 확인`}</button>{previewGawainResult && <p role="status" className={`mt-3 rounded-lg p-3 text-sm font-semibold ${view.gawainExiled ? 'bg-rose-50 text-rose-800' : 'bg-blue-50 text-blue-800'}`}>{view.players.find((player) => player.id === previewGawainResult.target)?.name}님의 카드: {cardName[previewGawainResult.card]} · {view.gawainExiled ? '가웨인 추방' : '다음 원정에서도 능력 사용 가능'}</p>}<p className="mt-2 text-xs text-slate-500">확인한 카드는 내 정보에서 볼 수 있습니다.</p></> : <p className="mt-3 text-sm text-slate-600">가웨인의 확인을 기다립니다.</p>}</>;
+  if (view.phase === 'gawain_check') return <><h2 className="font-bold">가웨인의 원정 카드 확인</h2><p className="mt-2 text-sm text-slate-600">{view.mission}차 원정 {view.results.at(-1)?.success ? '성공' : '실패'} · 제출 카드가 공개되었습니다.</p>{view.myRole.includes('gawain') ? <><p className="mt-3 text-sm text-slate-600">이번 원정에 참가하지 않았으므로 팀원 한 명의 반대쪽 카드를 확인할 수 있습니다. 성공 카드를 제출했다면 추방됩니다.</p><button className={`${primary} mt-3 w-full`} disabled={busy || !target || !view.proposal.includes(target) || Boolean(previewGawainResult)} onClick={() => void send({ type: 'gawain_check', target })}>{previewGawainResult ? '확인 완료' : `[ ${selectedName} ] 카드 확인`}</button>{previewGawainResult && <p role="status" className={`mt-3 rounded-lg p-3 text-sm font-semibold ${view.gawainExiled ? 'bg-rose-50 text-rose-800' : 'bg-blue-50 text-blue-800'}`}>{view.players.find((player) => player.id === previewGawainResult.target)?.name}님: 성공 {previewGawainResult.submittedSuccess ? '제출' : '미제출'} · {view.gawainExiled ? '가웨인 추방' : '다음 원정에서도 능력 사용 가능'}</p>}<p className="mt-2 text-xs text-slate-500">확인 결과는 내 정보에서 볼 수 있습니다.</p></> : <p className="mt-3 text-sm text-slate-600">가웨인의 확인을 기다립니다.</p>}</>;
   if (view.phase === 'lady') return <><h2 className="font-bold">호수의 여인</h2>{view.ladyHolder === user.id ? <><p className="mt-2 text-sm text-slate-600">한 사람을 선택해 현재 진영을 비밀리에 확인합니다.</p><button className={`${primary} mt-3 w-full`} disabled={busy || !target || target === user.id || view.ladyUsed.includes(target)} onClick={() => void send({ type: 'lady', target })}>{target && `[ ${view.players.find((player) => player.id === target)?.name} ] `}진영 확인</button>{previewLadyResult && <p role="status" className={`mt-3 rounded-lg p-3 text-sm font-semibold ${previewLadyResult.side === 'good' ? 'bg-blue-50 text-blue-800' : 'bg-red-50 text-red-800'}`}>{view.players.find((player) => player.id === previewLadyResult.target)?.name}의 진영: {previewLadyResult.side === 'good' ? '선' : '악'}</p>}</> : <p className="mt-2 text-sm text-slate-600">호수의 여인 보유자가 조사 중입니다.</p>}</>;
   if (view.phase === 'recruit') return <><h2 className="font-bold">불신의 충신 모집</h2>{view.myRole.includes('assassin') ? <><p className="mt-2 text-sm text-slate-600">암살자가 불신의 충신을 한 번 추측합니다.</p><button className={`${primary} mt-3 w-full`} disabled={busy || !target} onClick={() => void send({ type: 'recruit', target })}>모집 시도</button></> : <p className="mt-2 text-sm text-slate-600">암살자의 선택을 기다립니다.</p>}</>;
   if (view.phase === 'assassinate') {

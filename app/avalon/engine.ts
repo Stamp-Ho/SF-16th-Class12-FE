@@ -34,8 +34,8 @@ export function excaliburReplacementCard(target: Player, original: Card): Card {
   return original === 'success' ? 'fail' : 'success';
 }
 export function gawainCheckEvent(mission: number, checkerName: string, targetName: string, card: Card): string {
-  const result = isSuccessCard(card) ? '성공' : isFailureCard(card) ? '실패' : cardLabel[card];
-  return `${mission}차 원정 가웨인 검사: ${checkerName} → ${targetName} [${result}] 카드 확인 · ${isSuccessCard(card) ? '추방' : '계속 사용 가능'}`;
+  const submittedSuccess = isSuccessCard(card);
+  return `${mission}차 원정 가웨인 검사: ${checkerName} → ${targetName} [${submittedSuccess ? '성공 제출' : '성공 미제출'}] · ${submittedSuccess ? '추방' : '계속 사용 가능'}`;
 }
 const plotLabel: Record<PlotCard, string> = { are_you_the_one: 'Are You the One?', charge: 'Charge!', show_your_strength: 'Show Your Strength', show_your_true_nature: 'Show Your True Nature', king_returns: 'The King Returns', ambush: 'Ambush', lead_to_victory: 'Lead to Victory', we_found_you: 'We Found You!', restore_your_honor: 'Restore Your Honor' };
 const score = (s: GameState) => ({ good: s.results.filter((r) => r.success).length, evil: s.results.filter((r) => !r.success).length });
@@ -240,8 +240,11 @@ function resolveQuest(s: GameState) {
   if (s.results.filter((r) => !r.success).length === 2) for (const p of s.players) if (has(p, 'revealer')) s.publicEvents.push(`폭로자: ${p.name}`);
 
   const gawain = s.players.find((p) => has(p, 'gawain'));
-  const hasSubmittedFailure = s.proposal.some((id) => isFailureCard(s.submittedCards?.[id] ?? s.cards[id]));
-  if (gawain && !s.gawainExiled && !s.proposal.includes(gawain.id) && hasSubmittedFailure) { s.phase = 'gawain_check'; return; }
+  const hasSubmittedFailureOrMagic = s.proposal.some((id) => {
+    const card = s.submittedCards?.[id] ?? s.cards[id];
+    return isFailureCard(card) || card === 'magic';
+  });
+  if (gawain && !s.gawainExiled && !s.proposal.includes(gawain.id) && hasSubmittedFailureOrMagic) { s.phase = 'gawain_check'; return; }
   finishAfterQuest(s);
 }
 
@@ -444,8 +447,8 @@ export function applyMove(state: GameState, actorId: string, move: Move): GameSt
     if (s.phase !== 'gawain_check' || !has(actor, 'gawain') || s.gawainExiled || s.proposal.includes(actorId)) fail('이번 원정에 참가하지 않은 가웨인만 카드를 확인할 수 있습니다.');
     if (!s.proposal.includes(move.target) || !(move.target in s.cards)) fail('이번 원정의 팀원을 선택해 주세요.');
     const inspectedCard = s.submittedCards?.[move.target] ?? s.cards[move.target];
-    (s.cardPeeks[actorId] ??= []).push({ target: move.target, card: inspectedCard });
     const foundSuccess = isSuccessCard(inspectedCard);
+    (s.cardPeeks[actorId] ??= []).push({ target: move.target, submittedSuccess: foundSuccess });
     if (foundSuccess) {
       s.gawainExiled = true;
     }
