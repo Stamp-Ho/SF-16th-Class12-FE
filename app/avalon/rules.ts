@@ -40,7 +40,7 @@ export type Side = 'good' | 'evil';
 export type Card = 'success' | 'fail' | 'magic' | 'good_message' | 'evil_message' | 'good_rogue' | 'evil_rogue';
 export const PLOT_CARDS = ['are_you_the_one', 'charge', 'show_your_strength', 'show_your_true_nature', 'king_returns', 'ambush', 'lead_to_victory', 'we_found_you', 'restore_your_honor'] as const;
 export type PlotCard = typeof PLOT_CARDS[number];
-export type Phase = 'lobby' | 'reveal' | 'loyalty_check' | 'plot_lead' | 'plot_distribute' | 'plot_immediate' | 'plot_king' | 'plot_forced' | 'plot_ambush' | 'propose' | 'vote' | 'quest' | 'excalibur' | 'trapper' | 'gawain_check' | 'lady' | 'recruit' | 'assassinate' | 'finished';
+export type Phase = 'lobby' | 'reveal' | 'loyalty_check' | 'plot_lead' | 'plot_distribute' | 'plot_immediate' | 'plot_king' | 'plot_forced' | 'plot_ambush' | 'propose' | 'vote' | 'excalibur_assign' | 'quest' | 'excalibur' | 'trapper' | 'gawain_check' | 'lady' | 'recruit' | 'assassinate' | 'finished';
 export type Player = { id: string; name: string; seat: number; roles: Role[]; side: Side; currentSide: Side; ready: boolean; seen: boolean };
 export type Config = {
   playerCount: number;
@@ -55,19 +55,19 @@ export type Config = {
   plot: boolean;
   seniorKnowsJunior: boolean;
 };
-export type MissionResult = { number: number; team: string[]; success: boolean; cards: Card[]; failCount: number; vote: Record<string, boolean>; leaderId?: string };
+export type MissionResult = { number: number; team: string[]; success: boolean; cards: Card[]; failCount: number; vote: Record<string, boolean>; leaderId?: string; excaliburHolder?: string | null; excaliburTarget?: string | null };
 export type HistoryEntry = { type: 'vote' | 'quest' | 'event'; index: number };
 export type GameState = {
   phase: Phase; phaseStartedAt?: string; gameId?: string; hostId: string; players: Player[]; config: Config;
   mission: number; lockedMission: number | null; leaderSeat: number; rejected: number; rejectedVoteAt?: string | null; proposal: string[];
   votes: Record<string, boolean>; cards: Record<string, Card>;
   submittedCards?: Record<string, Card>;
-  voteHistory: { mission: number; team: string[]; votes: Record<string, boolean>; approved: boolean; leaderId?: string }[];
+  voteHistory: { mission: number; team: string[]; votes: Record<string, boolean>; approved: boolean; leaderId?: string; excaliburHolder?: string | null }[];
   results: MissionResult[]; winner: Side | null; winReason: string | null; assassinated?: string[];
   ladyHolder: string | null; ladyUsed: string[]; ladyFindings: Record<string, { target: string; side: Side }[]>;
   lancelotCards: boolean[]; lancelotApplied: number[];
   publicEvents: string[]; history?: HistoryEntry[]; historyApproximate?: boolean; recruited: string | null;
-  excaliburHolder: string | null; trapperExcluded: string | null;
+  excaliburHolder: string | null; excaliburTarget?: string | null; trapperExcluded: string | null;
   rogueWatchHolder: string | null;
   messengerUses: Record<string, number>; rogueUses: Record<string, number[]>;
   cardPeeks: Record<string, { target: string; card: Card }[]>;

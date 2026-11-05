@@ -53,6 +53,19 @@ const plotNames: Record<PlotCard, string> = {
   lead_to_victory: 'Lead to Victory', we_found_you: 'We Found You!', restore_your_honor: 'Restore Your Honor',
 };
 
+const basicRoles: Role[] = ['merlin', 'percival', 'good_lancelot', 'cleric', 'assassin', 'mordred', 'oberon', 'morgana', 'evil_lancelot'];
+const expansionRoles = (Object.keys(ROLES) as Role[]).filter((role) => !basicRoles.includes(role));
+
+function RoleList({ roles, ordinary = false }: { roles: Role[]; ordinary?: boolean }) {
+  return <div className="space-y-3">{(['good', 'evil'] as const).map((side) => <div key={side}>
+    <h3 className={`font-bold ${side === 'good' ? 'text-blue-700' : 'text-red-700'}`}>{side === 'good' ? '선 진영' : '악 진영'}</h3>
+    <dl className="mt-2 space-y-2">
+      {ordinary && <div className="rounded-lg bg-slate-50 px-3 py-2"><dt className="font-semibold">{side === 'good' ? '충신' : '하수인'}</dt><dd>{side === 'good' ? '특별한 시작 정보나 능력이 없는 선 진영입니다. 원정에 참여하면 성공 카드를 제출합니다.' : '특별한 능력이 없는 악 진영입니다. 원정에서 성공 또는 실패 카드를 선택합니다.'}</dd></div>}
+      {roles.filter((role) => ROLES[role].side === side).map((role) => <div key={role} className="rounded-lg bg-slate-50 px-3 py-2"><dt className="font-semibold">{ROLES[role].name}</dt><dd>{roleRules[role]}</dd></div>)}
+    </dl>
+  </div>)}</div>;
+}
+
 export function getPendingAvalonAction(view: AvalonView, userId: string): string | null {
   const me = view.players.find((player) => player.id === userId);
   if (!me) return null;
@@ -72,6 +85,7 @@ export function getPendingAvalonAction(view: AvalonView, userId: string): string
       return '원정 팀 투표';
     }
     case 'quest': return view.proposal.includes(userId) && !view.cardSubmitted ? '원정 카드 제출' : null;
+    case 'excalibur_assign': return isLeader ? '엑스칼리버 수여' : null;
     case 'gawain_check': return view.myRole.includes('gawain') ? '원정 카드 확인' : null;
     case 'excalibur': return view.excaliburHolder === userId ? '엑스칼리버 결정' : null;
     case 'trapper': return isLeader ? '함정꾼 카드 제외' : null;
@@ -94,7 +108,6 @@ function RuleSection({ title, children, initiallyOpen = false }: { title: string
 export default function RulebookModal({ onClose, turnKey, actionLabel }: { onClose: () => void; turnKey: string | null; actionLabel: string | null }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [toast, setToast] = useState<{ key: string; label: string } | null>(null);
-  const [showExpansionRoles, setShowExpansionRoles] = useState(false);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -126,32 +139,22 @@ export default function RulebookModal({ onClose, turnKey, actionLabel }: { onClo
         <RuleSection title="인원별 원정대 크기">
           <ul className="space-y-1">{Object.entries(TEAM_COUNTS).map(([count, sizes]) => <li key={count} className="rounded-lg bg-slate-50 px-3 py-2"><strong>{count}명</strong> · 선 {GOOD_COUNTS[Number(count)]} / 악 {Number(count) - GOOD_COUNTS[Number(count)]} · 1~5차 {sizes.join(' / ')}명</li>)}</ul>
         </RuleSection>
-        <RuleSection title="기본 직업과 확장 직업">
-          <p>멀린과 암살자는 필수입니다. 나머지 직업은 방 설정에서 선택합니다. 일반 선은 충신, 일반 악은 하수인으로 표시됩니다.</p>
-          {(['good', 'evil'] as const).map((side) => <div key={side}><h3 className={`font-bold ${side === 'good' ? 'text-blue-700' : 'text-red-700'}`}>{side === 'good' ? '선 진영' : '악 진영'}</h3><dl className="mt-2 space-y-2">{side === 'good' && <div className="rounded-lg bg-slate-50 px-3 py-2"><dt className="font-semibold">충신</dt><dd>특별한 시작 정보나 능력이 없는 선 진영입니다. 원정에 참여하면 성공 카드를 제출합니다.</dd></div>}{(Object.keys(ROLES) as Role[]).filter((role) => ROLES[role].side === side && !ROLES[role].expansion).map((role) => <div key={role} className="rounded-lg bg-slate-50 px-3 py-2"><dt className="font-semibold">{ROLES[role].name}</dt><dd>{roleRules[role]}</dd></div>)}</dl></div>)}
-          <div className="rounded-xl border border-violet-200 bg-white p-3">
-            <div className="flex items-center justify-between gap-3"><h3 className="font-bold text-violet-900">확장 직업</h3><button type="button" aria-expanded={showExpansionRoles} aria-controls="avalon-expansion-roles" onClick={() => setShowExpansionRoles((visible) => !visible)} className="rounded-lg border border-violet-300 px-3 py-1.5 text-xs font-semibold text-violet-800 focus-visible:outline-2 focus-visible:outline-violet-600">{showExpansionRoles ? '확장 접기' : '확장 보기'}</button></div>
-            {showExpansionRoles && <div id="avalon-expansion-roles" className="mt-3 space-y-3">{(['good', 'evil'] as const).map((side) => <div key={side}><h4 className={`font-bold ${side === 'good' ? 'text-blue-700' : 'text-red-700'}`}>{side === 'good' ? '선 진영' : '악 진영'}</h4><dl className="mt-2 space-y-2">{(Object.keys(ROLES) as Role[]).filter((role) => ROLES[role].side === side && ROLES[role].expansion).map((role) => <div key={role} className="rounded-lg bg-slate-50 px-3 py-2"><dt className="font-semibold">{ROLES[role].name}</dt><dd>{roleRules[role]}</dd></div>)}</dl></div>)}</div>}
-          </div>
+        <RuleSection title="기본 직업 (성직자 포함)">
+          <p>멀린과 암살자는 필수입니다. 일반 선은 충신, 일반 악은 하수인입니다. 성직자는 여기서 함께 설명하지만 게임 설정에서는 확장을 켜야 선택할 수 있습니다.</p>
+          <RoleList roles={basicRoles} ordinary />
         </RuleSection>
-        <RuleSection title="연인·아서왕·가웨인">
-          <p><strong>트리스탄과 이졸데:</strong> 두 직업은 반드시 서로 다른 두 선 진영 참가자에게 함께 배정됩니다. 게임 시작부터 서로가 누구인지 비밀리에 압니다. 선이 원정 3개를 성공하면 암살 담당자는 멀린 대신 두 연인을 지목할 수 있습니다. 순서와 관계없이 둘 다 맞히면 악이 승리하고, 한 명이라도 틀리면 선이 승리합니다.</p>
-          <p><strong>아서왕:</strong> 시작부터 멀린이 누구인지 비밀리에 압니다. 아서왕 본인의 정체는 역할 확인 단계부터 모든 참가자의 카드에 공개됩니다. 멀린의 정체는 공개되지 않습니다.</p>
-          <p><strong>가웨인:</strong> 자신이 원정대에 포함되지 않은 채로 원정이 승인되어 끝났고, 팀원들이 처음 낸 카드에 실패 카드가 있을 때만 능력을 사용합니다. 엑스칼리버로 바뀐 카드가 아닌 최초 제출 카드를 기준으로 합니다. 원정 결과와 제출 카드 목록이 공개된 뒤, 그 팀원 한 명이 실제로 낸 카드를 혼자 확인합니다. 확인한 내용은 자신의 ‘내 정보’에 남습니다.</p>
-          <p>검사한 대상과 카드의 성공·실패 분류, 추방 여부는 모두에게 공개됩니다. 정확히 어떤 카드를 냈는지는 가웨인만 압니다. 선 전령·선 도적 카드는 성공 카드로, 마법 카드는 성공·실패 어느 쪽도 아닌 카드로 취급합니다. 성공 카드를 확인하면 공개적으로 추방되어 남은 게임 동안 원정대에 들어가거나 가웨인 능력을 다시 사용할 수 없습니다. 투표와 팀 제안은 계속할 수 있습니다.</p>
+        <RuleSection title="확장 직업">
+          <p>기본 직업 외의 직업입니다. 방 설정에서 확장을 켜고 선택합니다. 마법사·전령의 원정 카드 규칙과 연인·아서왕·가웨인의 세부 효과는 아래 항목에서 확인할 수 있습니다.</p>
+          <RoleList roles={expansionRoles} />
         </RuleSection>
-        <RuleSection title="호수의 여인과 랜슬롯">
-          <p>호수의 여인은 시작 리더의 오른쪽 사람이 갖습니다. 2·3·4차 원정이 끝나면 보유자가 다른 사람의 현재 진영을 비밀리에 확인하고 토큰을 넘깁니다. 이미 여인 능력을 사용한 사람은 대상이 될 수 없습니다.</p>
-          <p>랜슬롯을 사용하면 선·악 랜슬롯을 한 명씩 넣습니다. 2·3·4차 원정 뒤 여인 확인을 마친 후 충성심 카드를 한 장 공개합니다. 덱은 전환 2장과 변화 없음 5장으로 구성되며, 전환이면 두 랜슬롯의 현재 진영이 함께 바뀝니다. 이미 얻은 시작 정보와 직업 자체는 바뀌지 않습니다.</p>
+        <RuleSection title="호수의 여인 · 엑스칼리버 · 랜슬롯">
+          <p><strong>호수의 여인:</strong> 시작 리더의 오른쪽 사람이 갖습니다. 2·3·4차 원정이 끝나면 보유자가 다른 사람의 현재 진영을 비밀리에 확인하고 토큰을 넘깁니다. 이미 여인 능력을 사용한 사람은 대상이 될 수 없습니다.</p>
+          <p><strong>엑스칼리버:</strong> 팀 투표가 승인된 뒤 리더가 자신이 아닌 원정 팀원 한 명에게 주거나 수여하지 않을 수 있습니다. 소유자는 카드 제출 후 다른 팀원 한 명의 카드를 반대 카드로 바꾸고 원래 카드를 혼자 확인하거나 사용하지 않을 수 있습니다.</p>
+          <p><strong>랜슬롯:</strong> 선·악 랜슬롯을 한 명씩 넣습니다. 2·3·4차 원정 뒤 여인 확인을 마친 후 충성심 카드를 한 장 공개합니다. 덱은 전환 2장과 변화 없음 5장으로 구성되며, 전환이면 두 랜슬롯의 현재 진영이 함께 바뀝니다. 이미 얻은 시작 정보와 직업 자체는 바뀌지 않습니다.</p>
           <p>변형 1에서는 현재 악 랜슬롯이 성공/실패를 선택합니다. 변형 2에서는 현재 악 랜슬롯이 실패만 제출하고 현재 선 랜슬롯은 성공만 제출합니다.</p>
         </RuleSection>
-        <RuleSection title="확장 모듈과 특수 원정 카드">
-          <p><strong>목표 원정 선택:</strong> 리더가 아직 수행하지 않은 원정을 고릅니다. 5차 원정은 다른 원정 2개 이상 성공해야 선택할 수 있습니다.</p>
+        <RuleSection title="함정꾼 · 마법 · 전령 등">
           <p><strong>함정꾼:</strong> 팀을 한 명 크게 만들고, 제출 후 리더가 원정 카드 한 장을 비밀리에 보고 판정에서 제외합니다.</p>
-          <p><strong>엑스칼리버:</strong> 리더가 자신이 아닌 팀원에게 줍니다. 소유자는 다른 팀원 한 명의 카드를 반대 카드로 바꾸고 원래 카드를 혼자 확인할 수 있습니다.</p>
-          <p><strong>도적:</strong> 감시 대상 도적은 전용 카드를 낼 수 없습니다. 전용 카드로 세 번째 같은 결과의 원정과 앞선 원정에 참여하면 개인 승리합니다.</p>
-        </RuleSection>
-        <RuleSection title="마법 카드와 전령">
           <div><h3 className="font-bold text-violet-800">마법 카드</h3>
             <p className="mt-1">선·악 마법사는 함께 사용합니다. 선 마법사는 성공 또는 마법 카드를, 악 마법사는 성공 또는 마법 카드를 낼 수 있습니다. 악 마법사는 일반 실패 카드를 낼 수 없습니다.</p>
             <p className="mt-2">먼저 실패 카드 수로 원정의 기본 성공·실패를 판정합니다. 그다음 제출된 마법 카드가 홀수 장이면 결과를 뒤집고, 짝수 장이면 그대로 둡니다. 마법 카드 자체는 실패 카드로 세지 않습니다.</p>
@@ -163,6 +166,14 @@ export default function RulebookModal({ onClose, turnKey, actionLabel }: { onClo
             <ul className="mt-2 list-disc space-y-1 pl-5"><li>선 전령 카드 합계가 3장 이상이고 악 전령 카드가 2장 미만이면 실패 카드 수를 1장 줄입니다. 0장 아래로는 줄지 않습니다.</li><li>악 전령 카드 합계가 2장 이상이고 선 전령 카드가 3장 미만이면 실패 카드 수를 1장 늘립니다.</li><li>선 전령 카드가 3장 이상이고 악 전령 카드도 2장 이상이거나, 둘 다 그보다 적으면 보정하지 않습니다.</li></ul>
             <p className="mt-2">이 보정을 적용한 뒤 기본 성공·실패를 판정하고, 마법 카드가 있다면 마지막에 뒤집습니다. 선이 원정 3개를 성공하면 암살 담당자는 멀린 한 명 대신 선 전령 두 명을 지목할 수 있습니다. 두 명 모두 맞히면 악이 승리합니다.</p>
           </div>
+          <p><strong>도적 전용 카드:</strong> 감시 대상 도적은 전용 카드를 낼 수 없습니다. 전용 카드로 세 번째 같은 결과의 원정과 앞선 원정에 참여하면 개인 승리합니다.</p>
+        </RuleSection>
+        <RuleSection title="그 밖의 규칙 · 직업 효과">
+          <p><strong>목표 원정 선택:</strong> 리더가 아직 수행하지 않은 원정을 고릅니다. 5차 원정은 다른 원정 2개 이상 성공해야 선택할 수 있습니다.</p>
+          <p><strong>트리스탄과 이졸데:</strong> 두 직업은 반드시 서로 다른 두 선 진영 참가자에게 함께 배정됩니다. 게임 시작부터 서로가 누구인지 비밀리에 압니다. 선이 원정 3개를 성공하면 암살 담당자는 멀린 대신 두 연인을 지목할 수 있습니다. 순서와 관계없이 둘 다 맞히면 악이 승리하고, 한 명이라도 틀리면 선이 승리합니다.</p>
+          <p><strong>아서왕:</strong> 시작부터 멀린이 누구인지 비밀리에 압니다. 아서왕 본인의 정체는 역할 확인 단계부터 모든 참가자의 카드에 공개됩니다. 멀린의 정체는 공개되지 않습니다.</p>
+          <p><strong>가웨인:</strong> 자신이 원정대에 포함되지 않은 채로 원정이 승인되어 끝났고, 팀원들이 처음 낸 카드에 실패 카드가 있을 때만 능력을 사용합니다. 엑스칼리버로 바뀐 카드가 아닌 최초 제출 카드를 기준으로 합니다. 원정 결과와 제출 카드 목록이 공개된 뒤, 그 팀원 한 명이 실제로 낸 카드를 혼자 확인합니다. 확인한 내용은 자신의 ‘내 정보’에 남습니다.</p>
+          <p>검사한 대상과 카드의 성공·실패 분류, 추방 여부는 모두에게 공개됩니다. 정확히 어떤 카드를 냈는지는 가웨인만 압니다. 선 전령·선 도적 카드는 성공 카드로, 마법 카드는 성공·실패 어느 쪽도 아닌 카드로 취급합니다. 성공 카드를 확인하면 공개적으로 추방되어 남은 게임 동안 원정대에 들어가거나 가웨인 능력을 다시 사용할 수 없습니다. 투표와 팀 제안은 계속할 수 있습니다.</p>
         </RuleSection>
         <RuleSection title="플롯 카드 9종">
           <p>리더가 원정마다 다른 사람에게 플롯 카드를 배분합니다. 5~6명은 1장, 7~8명은 2장, 9~10명은 3장입니다. 카드는 공개 정보입니다.</p>

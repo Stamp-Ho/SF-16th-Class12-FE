@@ -7,7 +7,8 @@ export type Move =
   | { type: 'kick'; playerId: string }
   | { type: 'stop' }
   | { type: 'seen' }
-  | { type: 'propose'; team: string[]; mission?: number; excaliburHolder?: string; rogueWatchHolder?: string }
+  | { type: 'propose'; team: string[]; mission?: number; rogueWatchHolder?: string }
+  | { type: 'excalibur_give'; holder?: string }
   | { type: 'vote'; approve: boolean }
   | { type: 'quest'; card: Card }
   | { type: 'gawain_check'; target: string }
@@ -75,19 +76,24 @@ function beginQuestEffects(s: GameState) {
   s.phase = s.plotOpportunity.length ? 'plot_forced' : 'quest';
 }
 
+function afterTeamApproved(s: GameState) {
+  if (s.config.excalibur) s.phase = 'excalibur_assign';
+  else beginQuestEffects(s);
+}
+
 function afterQuestCards(s: GameState) {
   if (s.config.plot) {
     s.plotOpportunity = s.players.filter((p) => (s.plotHands[p.id] ?? []).includes('ambush')).map((p) => p.id);
     if (s.plotOpportunity.length) { s.phase = 'plot_ambush'; return; }
   }
-  if (s.config.excalibur) s.phase = 'excalibur';
+  if (s.excaliburHolder) s.phase = 'excalibur';
   else if (s.config.trapper) s.phase = 'trapper';
   else resolveQuest(s);
 }
 
 function afterAmbush(s: GameState) {
   if (s.plotOpportunity.length) { s.phase = 'plot_ambush'; return; }
-  if (s.config.excalibur) s.phase = 'excalibur';
+  if (s.excaliburHolder) s.phase = 'excalibur';
   else if (s.config.trapper) s.phase = 'trapper';
   else resolveQuest(s);
 }
@@ -99,7 +105,7 @@ export function initialState(host: { id: string; name: string }): GameState {
     config: defaultConfig(), mission: 1, lockedMission: null, leaderSeat: 0, rejected: 0, rejectedVoteAt: null, proposal: [], votes: {}, cards: {}, submittedCards: {}, voteHistory: [], results: [],
     winner: null, winReason: null, assassinated: [], ladyHolder: null, ladyUsed: [], ladyFindings: {},
     lancelotCards: [], lancelotApplied: [], publicEvents: [], history: [], recruited: null,
-    excaliburHolder: null, trapperExcluded: null, rogueWatchHolder: null, messengerUses: {}, rogueUses: {}, cardPeeks: {}, pendingCheck: null,
+    excaliburHolder: null, excaliburTarget: null, trapperExcluded: null, rogueWatchHolder: null, messengerUses: {}, rogueUses: {}, cardPeeks: {}, pendingCheck: null,
     plotDeck: [], plotHands: {}, plotDrawn: [], plotPending: null, plotOpportunity: [], plotLeadUsed: false, plotPrepared: [],
     forcedPublicCard: null, inspectedCards: [], gawainExiled: false,
   };
@@ -162,7 +168,7 @@ function advanceAfterQuest(s: GameState) {
   drawLancelotCard(s);
   s.mission = s.config.targeting ? ([1, 2, 3, 4, 5].find((n) => !s.results.some((r) => r.number === n)) ?? 5) : s.results.length + 1;
   s.leaderSeat = nextSeat(s); s.rejected = 0; s.lockedMission = null; s.phase = 'propose';
-  s.proposal = []; s.votes = {}; s.cards = {}; s.submittedCards = {}; s.excaliburHolder = null; s.trapperExcluded = null; s.rogueWatchHolder = null;
+  s.proposal = []; s.votes = {}; s.cards = {}; s.submittedCards = {}; s.excaliburHolder = null; s.excaliburTarget = null; s.trapperExcluded = null; s.rogueWatchHolder = null;
   s.forcedPublicCard = null; s.inspectedCards = [];
   prepareRound(s);
 }
@@ -180,7 +186,7 @@ function afterLady(s: GameState) {
   drawLancelotCard(s);
   s.mission = s.config.targeting ? ([1, 2, 3, 4, 5].find((n) => !s.results.some((r) => r.number === n)) ?? 5) : s.results.length + 1;
   s.leaderSeat = nextSeat(s); s.rejected = 0; s.lockedMission = null; s.phase = 'propose';
-  s.proposal = []; s.votes = {}; s.cards = {}; s.submittedCards = {}; s.excaliburHolder = null; s.trapperExcluded = null; s.rogueWatchHolder = null;
+  s.proposal = []; s.votes = {}; s.cards = {}; s.submittedCards = {}; s.excaliburHolder = null; s.excaliburTarget = null; s.trapperExcluded = null; s.rogueWatchHolder = null;
   s.forcedPublicCard = null; s.inspectedCards = [];
   prepareRound(s);
 }
@@ -221,7 +227,8 @@ function resolveQuest(s: GameState) {
   const threshold = s.players.length >= 7 && s.mission === 4 ? 2 : 1;
   let success = failCount < threshold;
   if (cards.filter((c) => c === 'magic').length % 2) success = !success;
-  const result = { number: s.mission, team: [...s.proposal], success, cards, failCount, vote: { ...s.votes }, leaderId: s.players[s.leaderSeat].id };
+  const result = { number: s.mission, team: [...s.proposal], success, cards, failCount, vote: { ...s.votes }, leaderId: s.players[s.leaderSeat].id,
+    excaliburHolder: s.excaliburHolder, excaliburTarget: s.excaliburTarget ?? null };
   s.results.push(result);
   s.publicEvents.push(`${s.mission}차 원정 ${success ? '성공' : '실패'} (실패 ${failCount}장)`);
   if (s.results.filter((r) => !r.success).length === 2) for (const p of s.players) if (has(p, 'revealer')) s.publicEvents.push(`폭로자: ${p.name}`);
@@ -314,7 +321,7 @@ export function applyMove(state: GameState, actorId: string, move: Move): GameSt
       }
     }
     s.plotOpportunity.shift();
-    if (phase === 'plot_king' && !s.plotOpportunity.length) beginQuestEffects(s);
+    if (phase === 'plot_king' && !s.plotOpportunity.length) afterTeamApproved(s);
     if (phase === 'plot_forced' && !s.plotOpportunity.length) s.phase = 'quest';
     if (phase === 'plot_ambush') afterAmbush(s);
     return s;
@@ -372,12 +379,10 @@ export function applyMove(state: GameState, actorId: string, move: Move): GameSt
     const size = TEAM_COUNTS[s.players.length][mission - 1] + Number(s.config.trapper);
     if (move.team.length !== size || new Set(move.team).size !== size || move.team.some((id) => !playerById(s, id))) fail(`팀원 ${size}명을 선택해 주세요.`);
     if (s.gawainExiled && move.team.some((id) => has(playerById(s, id)!, 'gawain'))) fail('추방된 가웨인은 원정대에 참가할 수 없습니다.');
-    if (s.config.excalibur && (!move.excaliburHolder || !move.team.includes(move.excaliburHolder) || move.excaliburHolder === actorId)) fail('엑스칼리버는 리더가 아닌 팀원에게 주세요.');
     const watchNeeded = s.players.some((p) => has(p, 'good_rogue') || has(p, 'evil_rogue')) && (s.players.length >= 7 || mission > 2);
     if (watchNeeded && (!move.rogueWatchHolder || !move.team.includes(move.rogueWatchHolder))) fail('감시 대상을 원정 팀에서 선택해 주세요.');
-    s.mission = mission; s.lockedMission = mission; s.proposal = [...move.team]; s.excaliburHolder = s.config.excalibur ? move.excaliburHolder! : null;
+    s.mission = mission; s.lockedMission = mission; s.proposal = [...move.team]; s.excaliburHolder = null; s.excaliburTarget = null;
     s.rogueWatchHolder = watchNeeded ? move.rogueWatchHolder! : null;
-    if (s.excaliburHolder) publicEvent(s, `${mission}차 원정 엑스칼리버: ${actor.name} → ${playerById(s, s.excaliburHolder)?.name}`);
     if (s.rogueWatchHolder) publicEvent(s, `${mission}차 원정 도적 감시 대상: ${playerById(s, s.rogueWatchHolder)?.name}`);
     s.votes = {}; s.rejectedVoteAt = null; s.phase = 'vote'; return s;
   }
@@ -388,13 +393,13 @@ export function applyMove(state: GameState, actorId: string, move: Move): GameSt
     s.votes[actorId] = move.approve;
     if (Object.keys(s.votes).length === s.players.length) {
       const approvals = Object.values(s.votes).filter(Boolean).length;
-      s.voteHistory.push({ mission: s.mission, team: [...s.proposal], votes: { ...s.votes }, approved: approvals > s.players.length / 2, leaderId: s.players[s.leaderSeat].id });
+      s.voteHistory.push({ mission: s.mission, team: [...s.proposal], votes: { ...s.votes }, approved: approvals > s.players.length / 2, leaderId: s.players[s.leaderSeat].id, excaliburHolder: s.excaliburHolder });
       if (approvals > s.players.length / 2) {
         s.rejectedVoteAt = null;
         if (s.config.plot) {
           s.plotOpportunity = s.players.filter((p) => (s.plotHands[p.id] ?? []).includes('king_returns')).map((p) => p.id);
-          if (s.plotOpportunity.length) s.phase = 'plot_king'; else beginQuestEffects(s);
-        } else s.phase = 'quest';
+          if (s.plotOpportunity.length) s.phase = 'plot_king'; else afterTeamApproved(s);
+        } else afterTeamApproved(s);
       }
       else {
         s.rejected++; s.publicEvents.push(`${s.mission}차 팀 투표 부결 (${s.rejected}/5)`);
@@ -403,6 +408,18 @@ export function applyMove(state: GameState, actorId: string, move: Move): GameSt
         else { s.leaderSeat = nextSeat(s); s.phase = 'propose'; s.proposal = []; }
       }
     }
+    return s;
+  }
+  if (move.type === 'excalibur_give') {
+    if (s.phase !== 'excalibur_assign' || actor.seat !== s.leaderSeat) fail('확정된 원정대의 리더만 엑스칼리버를 수여할 수 있습니다.');
+    if (move.holder && (!s.proposal.includes(move.holder) || move.holder === actorId)) fail('엑스칼리버는 리더가 아닌 원정 팀원에게 주세요.');
+    s.excaliburHolder = move.holder ?? null;
+    const approvedVote = s.voteHistory.at(-1);
+    if (approvedVote?.approved && approvedVote.mission === s.mission) approvedVote.excaliburHolder = s.excaliburHolder;
+    publicEvent(s, s.excaliburHolder
+      ? `${s.mission}차 원정 엑스칼리버: ${actor.name} → ${playerById(s, s.excaliburHolder)?.name}`
+      : `${s.mission}차 원정 엑스칼리버: ${actor.name}님이 사용하지 않았습니다.`);
+    beginQuestEffects(s);
     return s;
   }
   if (move.type === 'quest') {
@@ -436,6 +453,7 @@ export function applyMove(state: GameState, actorId: string, move: Move): GameSt
       if (!s.proposal.includes(move.target) || move.target === actorId) fail('다른 팀원을 선택해 주세요.');
       const previous = s.cards[move.target];
       s.cards[move.target] = previous === 'success' ? 'fail' : 'success';
+      s.excaliburTarget = move.target;
       (s.cardPeeks[actorId] ??= []).push({ target: move.target, card: previous });
       publicEvent(s, `${s.mission}차 원정 엑스칼리버: ${actor.name}님이 ${playerById(s, move.target)?.name}님의 카드를 교체했습니다.`);
     } else {
@@ -544,7 +562,7 @@ export function publicView(s: GameState, actorId: string) {
     earlyVotes: s.phase === 'vote' && s.players.filter((p) => (s.plotHands[p.id] ?? []).includes('charge')).every((p) => p.id in s.votes)
       ? Object.fromEntries(Object.entries(s.votes).filter(([id]) => (s.plotHands[id] ?? []).includes('charge'))) : {},
     cardSubmitted: actorId in s.cards, cardCount: Object.keys(s.cards).length, cardSubmitters: Object.keys(s.cards),
-    results: s.results.map(({ number, team, success, cards, failCount, vote, leaderId }) => ({ number, team, success, cards, failCount, vote, leaderId })),
+    results: s.results.map(({ number, team, success, cards, failCount, vote, leaderId, excaliburHolder, excaliburTarget }) => ({ number, team, success, cards, failCount, vote, leaderId, excaliburHolder, excaliburTarget })),
     voteHistory: s.voteHistory,
     winner: s.winner, winReason: s.winReason, assassinated: finished ? s.assassinated ?? [] : [], ladyHolder: s.ladyHolder,
     ladyUsed: s.ladyUsed, lancelotCards: s.lancelotCards.slice(0, s.lancelotApplied.length),
