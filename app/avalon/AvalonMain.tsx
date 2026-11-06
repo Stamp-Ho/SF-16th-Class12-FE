@@ -71,6 +71,15 @@ const plotName: Record<PlotCard, string> = { are_you_the_one: 'Are You the One?'
 const field = 'rounded-xl border border-slate-300 bg-white px-3 py-3 text-slate-900 outline-none focus:border-violet-500';
 const primary = 'rounded-xl bg-violet-700 px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40';
 const secondary = 'rounded-xl border border-slate-300 bg-white px-4 py-3 font-medium text-slate-800 disabled:opacity-40';
+function showGameNotification(title: string, body: string) {
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted' || document.hasFocus()) return;
+  try {
+    const notification = new Notification(title, { body });
+    notification.onclick = () => { window.focus(); notification.close(); };
+  } catch {
+    // 알림을 지원하지 않는 환경에서도 게임 진행은 계속한다.
+  }
+}
 const previewPeople: User[] = PREVIEW_NAMES.map((name, index) => ({ id: PREVIEW_FALLBACK_IDS[index], name }));
 type PreviewScreen = 'reveal' | 'propose' | 'excalibur_assign' | 'vote' | 'reselect_after_rejection' | 'quest' | 'excalibur' | 'gawain_check' | 'lady' | 'assassinate' | 'finished';
 type AssassinationKind = 'merlin' | 'messengers' | 'lovers';
@@ -233,6 +242,11 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
   const [config, setConfig] = useState<Config | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [notificationFeedback, setNotificationFeedback] = useState('');
+  const previousRoomPhase = useRef<{ roomId: string; phase: Phase } | null>(null);
+  const seenActionTurns = useRef(new Set<string>());
+  const originalTitle = useRef<string | null>(null);
+  const lastAvalonTitle = useRef<string | null>(null);
   const [team, setTeam] = useState<string[]>([]);
   const [missionChoice, setMissionChoice] = useState(1);
   const [watchHolder, setWatchHolder] = useState('');
@@ -308,6 +322,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
   }, [roomId, playerIds, preview]);
 
   async function create() {
+    void enableGameNotification();
     setBusy(true); setError('');
     const result = await createAvalonRoom();
     if (result.ok) {
@@ -319,6 +334,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
     setBusy(false);
   }
   async function join(id: string) {
+    void enableGameNotification();
     setBusy(true); setError('');
     const result = await joinAvalonRoom(id);
     if (result.ok && result.data.view) { configDirty.current = false; setShowSecret(false); setRoomId(result.data.id); setView(result.data.view); setConfig(result.data.view.config); }
@@ -456,6 +472,67 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
   }, [roomId, busy, preview]);
 
   useEffect(() => {
+    originalTitle.current = document.title;
+    return () => {
+      if (document.title === lastAvalonTitle.current && originalTitle.current !== null) {
+        document.title = originalTitle.current;
+      }
+    };
+  }, []);
+
+  const lobbyPlayers = view?.phase === 'lobby' ? view.players.length : null;
+  const lobbyCapacity = view?.phase === 'lobby' ? view.config.playerCount : null;
+  useEffect(() => {
+    if (!roomId || lobbyPlayers === null || lobbyCapacity === null) {
+      if (lastAvalonTitle.current && document.title === lastAvalonTitle.current && originalTitle.current !== null) {
+        document.title = originalTitle.current;
+      }
+      lastAvalonTitle.current = null;
+      return;
+    }
+
+    const title = `AVALON ${lobbyPlayers}/${lobbyCapacity}`;
+    const setTitle = (value: string) => {
+      document.title = value;
+      lastAvalonTitle.current = value;
+    };
+    if (lobbyPlayers < lobbyCapacity) {
+      setTitle(title);
+      return;
+    }
+
+    let green = false;
+    setTitle(`🔴 ${title}`);
+    const timer = window.setInterval(() => {
+      green = !green;
+      setTitle(`${green ? '🟢' : '🔴'} ${title}`);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [roomId, lobbyPlayers, lobbyCapacity]);
+
+  useEffect(() => {
+    const phase = view?.phase;
+    const previous = previousRoomPhase.current;
+    if (!preview && roomId && phase && previous?.roomId === roomId && previous.phase === 'lobby' && phase !== 'lobby') {
+      showGameNotification('AVALON 게임 시작', '게임이 시작되었습니다. 역할을 확인해 주세요.');
+    }
+    previousRoomPhase.current = roomId && phase ? { roomId, phase } : null;
+  }, [roomId, view?.phase, preview]);
+
+  async function enableGameNotification() {
+    if (typeof Notification === 'undefined') {
+      setNotificationFeedback('이 브라우저는 OS 알림을 지원하지 않습니다.');
+      return;
+    }
+    try {
+      const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+      setNotificationFeedback(permission === 'granted' ? '게임 알림이 켜졌습니다.' : '알림이 차단되었습니다. 브라우저의 사이트 설정에서 허용해 주세요.');
+    } catch {
+      setNotificationFeedback('알림 권한을 요청하지 못했습니다. 브라우저 설정을 확인해 주세요.');
+    }
+  }
+
+  useEffect(() => {
     const timer = setTimeout(() => {
       if (view?.phase === 'propose') { setTeam([]); setWatchHolder(''); setProposalPick('team'); setMissionChoice(view.mission); }
       if (view?.phase === 'assassinate') setAssassinationKind('merlin');
@@ -509,6 +586,17 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
     view.plotDrawn.length, view.plotPending?.card, view.plotPending?.holder, view.pendingCheck?.target,
     view.proposal.join(','), preview ? previewTurn : ''].join(':') : null;
   const reminderActionLabel = preview && previewActionDoneKey === actionTurnKey ? null : actionLabel;
+
+  useEffect(() => {
+    if (!roomId || view?.phase === 'lobby') {
+      seenActionTurns.current.clear();
+      return;
+    }
+    if (preview || !actionTurnKey || !reminderActionLabel || seenActionTurns.current.has(actionTurnKey)) return;
+    seenActionTurns.current.add(actionTurnKey);
+    // 역할 확인은 게임 시작 알림에 포함된다.
+    if (view?.phase !== 'reveal') showGameNotification('AVALON 내 차례', reminderActionLabel);
+  }, [roomId, view?.phase, actionTurnKey, reminderActionLabel, preview]);
 
   useEffect(() => {
     if (!actionTurnKey || !reminderActionLabel) return;
@@ -582,7 +670,8 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
           <section className="rounded-2xl bg-white p-4 shadow-sm sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-bold">참가자 {view.players.length}/{view.config.playerCount}</h2><button type="button" className={secondary} onClick={() => void openStats()}>역대 승률 · 랭킹</button></div>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">{view.players.map((p) => <div key={p.id} className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm"><span className="flex min-w-0 items-center gap-2"><PlayerAvatar name={p.name} url={avatarUrls[p.id]} /><span className="truncate">{p.seat + 1}. {p.name}</span>{p.id === view.hostId && <Crown aria-label="방장" className="size-4 shrink-0 text-amber-600" />}</span>{isHost && p.id !== view.hostId && <button type="button" className="shrink-0 rounded-lg border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-700" disabled={busy} onClick={() => void send({ type: 'kick', playerId: p.id })}>추방</button>}</div>)}</div>
-            <div className="mt-4 flex flex-wrap gap-2"><button className={secondary} disabled={busy} onClick={async () => { const result = await leaveAvalonRoom(roomId); if (result.ok) { setRoomId(''); setView(null); setConfig(null); const list = await listAvalonRooms(); if (list.ok) setRooms(list.data); } else setError(result.error); }}>방 나가기</button>{isHost && <button className={primary} disabled={busy || view.players.length !== view.config.playerCount || Boolean(config && JSON.stringify(config) !== JSON.stringify(view.config))} onClick={() => void send({ type: 'start' })}>게임 시작</button>}</div>
+            <div className="mt-4 flex flex-wrap gap-2"><button className={secondary} disabled={busy} onClick={async () => { const result = await leaveAvalonRoom(roomId); if (result.ok) { setRoomId(''); setView(null); setConfig(null); const list = await listAvalonRooms(); if (list.ok) setRooms(list.data); } else setError(result.error); }}>방 나가기</button><button type="button" className={secondary} onClick={() => void enableGameNotification()}>게임 알림 켜기</button>{isHost && <button className={primary} disabled={busy || view.players.length !== view.config.playerCount || Boolean(config && JSON.stringify(config) !== JSON.stringify(view.config))} onClick={() => void send({ type: 'start' })}>게임 시작</button>}</div>
+            {notificationFeedback && <p role="status" className="mt-2 text-sm text-slate-600">{notificationFeedback}</p>}
           </section>
           <RoleComposition config={view.config} />
           {isHost && config && <ConfigEditor config={config} setConfig={setConfigDraft} busy={busy} save={() => { configDirty.current = false; void send({ type: 'config', config }); }} />}
