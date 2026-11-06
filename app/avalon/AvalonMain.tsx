@@ -491,7 +491,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
       return;
     }
 
-    const title = `AVALON ${lobbyPlayers}/${lobbyCapacity}`;
+    const title = `아발론 ${lobbyPlayers}/${lobbyCapacity}`;
     const setTitle = (value: string) => {
       document.title = value;
       lastAvalonTitle.current = value;
