@@ -40,7 +40,7 @@ export type Side = 'good' | 'evil';
 export type Card = 'success' | 'fail' | 'magic' | 'good_message' | 'evil_message' | 'good_rogue' | 'evil_rogue';
 export const PLOT_CARDS = ['are_you_the_one', 'charge', 'show_your_strength', 'show_your_true_nature', 'king_returns', 'ambush', 'lead_to_victory', 'we_found_you', 'restore_your_honor'] as const;
 export type PlotCard = typeof PLOT_CARDS[number];
-export type Phase = 'lobby' | 'reveal' | 'loyalty_check' | 'plot_lead' | 'plot_distribute' | 'plot_immediate' | 'plot_king' | 'plot_forced' | 'plot_ambush' | 'propose' | 'vote' | 'excalibur_assign' | 'quest' | 'excalibur' | 'trapper' | 'gawain_check' | 'lady' | 'recruit' | 'assassinate' | 'finished';
+export type Phase = 'lobby' | 'reveal' | 'loyalty_check' | 'plot_lead' | 'plot_distribute' | 'plot_immediate' | 'plot_king' | 'plot_forced' | 'plot_ambush' | 'propose' | 'vote' | 'excalibur_assign' | 'quest' | 'excalibur' | 'trapper' | 'gawain_check' | 'lady' | 'recruit' | 'assassinate' | 'best_player_vote' | 'finished';
 export type Player = { id: string; name: string; seat: number; roles: Role[]; side: Side; currentSide: Side; ready: boolean; seen: boolean };
 export type Config = {
   playerCount: number;
@@ -59,6 +59,7 @@ export type MissionResult = { number: number; team: string[]; success: boolean; 
 export type HistoryEntry = { type: 'vote' | 'quest' | 'event'; index: number };
 export type GameState = {
   phase: Phase; phaseStartedAt?: string; gameId?: string; hostId: string; players: Player[]; config: Config;
+  bestPlayerVotes?: Record<string, string | null>;
   mission: number; lockedMission: number | null; leaderSeat: number; rejected: number; rejectedVoteAt?: string | null; proposal: string[];
   votes: Record<string, boolean>; cards: Record<string, Card>;
   submittedCards?: Record<string, Card>;

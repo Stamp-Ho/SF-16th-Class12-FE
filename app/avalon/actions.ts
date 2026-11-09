@@ -4,13 +4,124 @@ import { requireAuth } from '@/utils/auth';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { createClient } from '@/utils/supabase/server';
 import { applyMove, historyFromState, initialState, joinRoom, leaveRoom, publicView, type Move } from './engine';
-import type { GameState } from './rules';
+import { defaultConfig, type GameState } from './rules';
 
 type Actor = { id: string; name: string };
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 export type AvalonRoomSummary = { id: string; hostName: string; players: { id: string; name: string }[]; capacity: number; phase: string };
 export type AvalonPlayerStats = { playerId: string; playerName: string; games: number; wins: number; goodGames: number; goodWins: number; evilGames: number; evilWins: number };
 export type AvalonSideStats = { games: number; goodWins: number; evilWins: number };
+export type AvalonGamePlayerRecord = { playerId: string; playerName: string; side: string; won: boolean; bestPlayerVotes: number };
+export type AvalonGameRecord = { gameId: string; completedAt: string; roomId: string; players: AvalonGamePlayerRecord[] };
+export type AvalonGameDetail = { gameId: string; completedAt: string; state: GameState | null; players: AvalonGamePlayerRecord[] };
+
+export async function getAvalonGameRecords(): Promise<Result<AvalonGameRecord[]>> {
+  try {
+    await actor();
+    const db = createAdminClient();
+    const records = new Map<string, AvalonGameRecord>();
+    for (let offset = 0; ; offset += 1000) {
+      const { data, error } = await db.from('avalon_game_results')
+        .select('game_id, room_id, completed_at, player_id, player_name, side, won, best_player_votes')
+        .order('completed_at', { ascending: false }).range(offset, offset + 999);
+      if (error) throw new Error(error.message);
+      for (const row of data ?? []) {
+        const gameId = String(row.game_id);
+        let game = records.get(gameId);
+        if (!game) {
+          game = { gameId, roomId: String(row.room_id), completedAt: String(row.completed_at), players: [] };
+          records.set(gameId, game);
+        }
+        game.players.push({ playerId: String(row.player_id), playerName: String(row.player_name), side: String(row.side), won: Boolean(row.won), bestPlayerVotes: Number(row.best_player_votes ?? 0) });
+      }
+      if ((data ?? []).length < 1000) break;
+    }
+    return { ok: true, data: [...records.values()] };
+  } catch (error) { return { ok: false, error: error instanceof Error ? error.message : '전적을 불러오지 못했습니다.' }; }
+}
+
+export async function getAvalonGameDetail(gameId: string, roomId: string): Promise<Result<AvalonGameDetail>> {
+  try {
+    await actor();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(gameId)) throw new Error('경기 정보를 확인해 주세요.');
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(roomId)) throw new Error('방 정보를 확인해 주세요.');
+    const db = createAdminClient();
+    const { data: playerRows, error: playersError } = await db.from('avalon_game_results')
+      .select('room_id, player_id, player_name, side, won, best_player_votes, completed_at').eq('game_id', gameId).order('player_name', { ascending: true });
+    if (playersError) throw new Error(playersError.message);
+    if (!playerRows?.length) throw new Error('경기 기록을 찾을 수 없습니다.');
+    if (playerRows.some((row) => String(row.room_id) !== roomId)) throw new Error('경기와 방 정보가 일치하지 않습니다.');
+    const { data: room, error: roomError } = await db.from('avalon_rooms').select('state, updated_at').eq('id', roomId).maybeSingle();
+    if (roomError) throw new Error(roomError.message);
+    const roomState = room?.state as GameState | undefined;
+    const stateMatchesGame = roomState?.phase === 'finished' && (roomState.gameId ?? roomId) === gameId;
+    const players = playerRows.map((row) => ({ playerId: String(row.player_id), playerName: String(row.player_name), side: String(row.side), won: Boolean(row.won), bestPlayerVotes: Number(row.best_player_votes ?? 0) }));
+    return { ok: true, data: {
+      gameId,
+      completedAt: String((stateMatchesGame && room?.updated_at) || playerRows[0].completed_at || new Date().toISOString()),
+      state: stateMatchesGame ? roomState! : null,
+      players,
+    } };
+  } catch (error) { return { ok: false, error: error instanceof Error ? error.message : '경기 상세를 불러오지 못했습니다.' }; }
+}
+
+export async function createAvalonRoomsFromTeams(teamUserIds: string[][]): Promise<Result<{ roomIds: string[] }>> {
+  try {
+    const auth = await requireAuth();
+    if (auth.status !== 'AUTHORIZED' || auth.profile?.role !== 'super_admin' || !auth.user) throw new Error('최고 관리자만 팀 편성으로 방을 만들 수 있습니다.');
+    if (teamUserIds.length < 1 || teamUserIds.length > 5) throw new Error('팀은 1~5개까지 만들 수 있습니다.');
+    if (teamUserIds.some((team) => team.length < 1 || team.length > 10)) throw new Error('각 팀에는 1~10명을 배치해 주세요.');
+    const userIds = teamUserIds.flat();
+    if (new Set(userIds).size !== userIds.length || userIds.some((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) {
+      throw new Error('팀 배치에 중복되거나 올바르지 않은 유저가 있습니다.');
+    }
+
+    const db = createAdminClient();
+    const { data: profiles, error: profileError } = await db.from('users').select('id, username').in('id', userIds);
+    if (profileError) throw new Error(profileError.message);
+    if ((profiles ?? []).length !== userIds.length) throw new Error('선택한 유저 목록이 변경되었습니다. 모달을 닫고 다시 열어 주세요.');
+    const people = new Map((profiles ?? []).map((profile) => [String(profile.id), String(profile.username)]));
+
+    const { data: roomRows, error: roomsError } = await db.from('avalon_rooms').select('id, state');
+    if (roomsError) throw new Error(roomsError.message);
+    const assignedElsewhere = new Set((roomRows ?? []).flatMap((row) => {
+      const state = row.state as GameState;
+      return state.phase === 'finished' ? [] : state.players.map((player) => player.id).filter((id) => people.has(id));
+    }));
+    if (assignedElsewhere.size) {
+      const names = [...assignedElsewhere].map((id) => people.get(id)).filter(Boolean).join(', ');
+      throw new Error(`이미 열린 방에 참가 중인 유저가 있습니다: ${names}. 해당 방을 먼저 해산하거나 유저를 빼 주세요.`);
+    }
+
+    const inserts = teamUserIds.map((teamIds) => {
+      const hostId = teamIds[0];
+      const hostName = people.get(hostId)!;
+      const state = initialState({ id: hostId, name: hostName });
+      const template = state.players[0];
+      state.players = teamIds.map((id, seat) => ({ ...template, id, name: people.get(id)!, seat }));
+      state.config = defaultConfig(Math.max(5, teamIds.length));
+      return { host_user_id: hostId, state };
+    });
+    const { data, error } = await db.from('avalon_rooms').insert(inserts).select('id');
+    if (error) throw new Error(error.message);
+    return { ok: true, data: { roomIds: (data ?? []).map((room) => String(room.id)) } };
+  } catch (error) { return { ok: false, error: error instanceof Error ? error.message : '팀 편성 방 생성에 실패했습니다.' }; }
+}
+
+export async function getUsersForTeamAssignment(): Promise<Result<{ id: string; name: string }[]>> {
+  try {
+    const auth = await requireAuth();
+    if (auth.status !== 'AUTHORIZED' || auth.profile?.role !== 'super_admin') {
+      throw new Error('최고 관리자만 전체 유저 목록을 조회할 수 있습니다.');
+    }
+    const { data, error } = await createAdminClient().from('users')
+      .select('id, username').order('username', { ascending: true });
+    if (error) throw new Error(error.message);
+    return { ok: true, data: (data ?? []).map((row) => ({ id: String(row.id), name: String(row.username) })) };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : '유저 목록을 불러오지 못했습니다.' };
+  }
+}
 
 async function actor(): Promise<Actor> {
   const auth = await requireAuth();
@@ -42,6 +153,20 @@ export async function listAvalonRooms(): Promise<Result<AvalonRoomSummary[]>> {
       return { id: row.id, hostName: s.players.find((p) => p.id === s.hostId)?.name ?? '방장', players: s.players.map((p) => ({ id: p.id, name: p.name })), capacity: s.config.playerCount, phase: s.phase };
     }) };
   } catch (error) { return { ok: false, error: error instanceof Error ? error.message : '방 목록을 불러오지 못했습니다.' }; }
+}
+
+export async function dissolveAvalonRoom(roomId: string): Promise<Result<{ id: string }>> {
+  try {
+    const auth = await requireAuth();
+    if (auth.status !== 'AUTHORIZED' || auth.profile?.role !== 'super_admin') throw new Error('최고 관리자만 방을 해산할 수 있습니다.');
+    const row = await findRoom(roomId);
+    if (row.state.phase !== 'lobby') throw new Error('현재 열려 있는 대기실만 해산할 수 있습니다.');
+    const { data, error } = await createAdminClient().from('avalon_rooms').delete()
+      .eq('id', row.id).eq('version', row.version).select('id').maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error('방이 변경되었습니다. 목록을 새로고침한 뒤 다시 시도해 주세요.');
+    return { ok: true, data: { id: row.id } };
+  } catch (error) { return { ok: false, error: error instanceof Error ? error.message : '방을 해산하지 못했습니다.' }; }
 }
 
 export async function getAvalonPlayerStats(): Promise<Result<AvalonPlayerStats[]>> {

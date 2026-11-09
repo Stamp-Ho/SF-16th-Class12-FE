@@ -20,6 +20,7 @@ export type Move =
   | { type: 'plot_apply'; target?: string; card?: PlotCard }
   | { type: 'plot_use'; card: PlotCard; target?: string }
   | { type: 'recruit'; target: string }
+  | { type: 'best_player_vote'; target?: string | null }
   | { type: 'assassinate'; target: string; targetType?: 'merlin' | 'messengers' | 'lovers'; secondTarget?: string };
 
 const fail = (message: string): never => { throw new Error(message); };
@@ -116,7 +117,7 @@ export function initialState(host: { id: string; name: string }): GameState {
     lancelotCards: [], lancelotApplied: [], publicEvents: [], history: [], recruited: null,
     excaliburHolder: null, excaliburTarget: null, trapperExcluded: null, rogueWatchHolder: null, messengerUses: {}, rogueUses: {}, cardPeeks: {}, pendingCheck: null,
     plotDeck: [], plotHands: {}, plotDrawn: [], plotPending: null, plotOpportunity: [], plotLeadUsed: false, plotPrepared: [],
-    forcedPublicCard: null, inspectedCards: [], gawainExiled: false,
+    forcedPublicCard: null, inspectedCards: [], gawainExiled: false, bestPlayerVotes: {},
   };
 }
 
@@ -147,7 +148,7 @@ function resetToLobby(s: GameState): GameState {
 }
 
 function finish(s: GameState, winner: Side, reason: string) {
-  s.phase = 'finished'; s.winner = winner; s.winReason = reason;
+  s.phase = 'best_player_vote'; s.winner = winner; s.winReason = reason; s.bestPlayerVotes = {};
   s.publicEvents.push(reason);
   if (s.results.length === 5 && !reason.includes('도적 개인 승리')) {
     for (const p of s.players) {
@@ -268,7 +269,7 @@ export function applyMove(state: GameState, actorId: string, move: Move): GameSt
     return s;
   }
   if (move.type === 'stop') {
-    if (actorId !== s.hostId || s.phase === 'lobby' || s.phase === 'finished') fail('진행 중인 게임은 방장만 종료할 수 있습니다.');
+    if (actorId !== s.hostId || s.phase === 'lobby' || s.phase === 'best_player_vote' || s.phase === 'finished') fail('진행 중인 게임은 방장만 종료할 수 있습니다.');
     return resetToLobby(s);
   }
   if (move.type === 'config') {
@@ -529,6 +530,18 @@ export function applyMove(state: GameState, actorId: string, move: Move): GameSt
     finish(s, has(target, 'merlin') ? 'evil' : 'good', has(target, 'merlin') ? '멀린 암살 성공' : '멀린 암살 실패');
     return s;
   }
+  if (move.type === 'best_player_vote') {
+    if (s.phase !== 'best_player_vote' || !s.winner) fail('베스트 플레이어 투표 단계가 아닙니다.');
+    s.bestPlayerVotes ??= {};
+    if (actorId in s.bestPlayerVotes) fail('이미 투표를 완료했습니다.');
+    if (move.target) {
+      const nominee = playerById(s, move.target);
+      if (!nominee || nominee.currentSide !== s.winner) fail('승리 진영 플레이어만 선택할 수 있습니다.');
+    }
+    s.bestPlayerVotes[actorId] = move.target ?? null;
+    if (s.players.every((player) => player.id in s.bestPlayerVotes!)) s.phase = 'finished';
+    return s;
+  }
   return fail('현재 단계에서 사용할 수 없는 행동입니다.');
 }
 
@@ -553,7 +566,8 @@ export function publicView(s: GameState, actorId: string) {
   const actor = playerById(s, actorId);
   if (!actor) throw new Error('방 참가자가 아닙니다.');
   const finished = s.phase === 'finished';
-  const revealSides = finished || s.phase === 'assassinate';
+  const gameOver = finished || s.phase === 'best_player_vote';
+  const revealSides = gameOver || s.phase === 'assassinate';
   return {
     phase: s.phase, phaseStartedAt: s.phaseStartedAt ?? null, hostId: s.hostId, config: normalizeConfig(s.config), mission: s.mission, lockedMission: s.lockedMission, gawainExiled: s.gawainExiled ?? false,
     leaderSeat: s.leaderSeat, rejected: s.rejected, rejectedVoteAt: s.rejectedVoteAt ?? null, proposal: s.proposal,
@@ -562,7 +576,7 @@ export function publicView(s: GameState, actorId: string) {
         ...(has(p, 'king_arthur') && s.phase !== 'lobby' ? ['king_arthur' as const] : []),
         ...(s.gawainExiled && has(p, 'gawain') ? ['gawain' as const] : []),
       ],
-      roles: finished || p.id === actorId ? p.roles : [],
+      roles: gameOver || p.id === actorId ? p.roles : [],
       side: revealSides || p.id === actorId ? p.currentSide : null })),
     myRole: s.phase === 'lobby' ? [] : actor.roles, mySide: s.phase === 'lobby' ? null : actor.currentSide,
     myKnowledge: s.phase === 'lobby' ? [] : knows(s, actor),
@@ -577,7 +591,8 @@ export function publicView(s: GameState, actorId: string) {
     cardSubmitted: actorId in s.cards, cardCount: Object.keys(s.cards).length, cardSubmitters: Object.keys(s.cards),
     results: s.results.map(({ number, team, success, cards, failCount, vote, leaderId, excaliburHolder, excaliburTarget }) => ({ number, team, success, cards, failCount, vote, leaderId, excaliburHolder, excaliburTarget })),
     voteHistory: s.voteHistory,
-    winner: s.winner, winReason: s.winReason, assassinated: finished ? s.assassinated ?? [] : [], ladyHolder: s.ladyHolder,
+    winner: s.winner, winReason: s.winReason, assassinated: gameOver ? s.assassinated ?? [] : [], ladyHolder: s.ladyHolder,
+    bestPlayerVotes: finished ? s.bestPlayerVotes ?? {} : {}, bestPlayerVoted: actorId in (s.bestPlayerVotes ?? {}), bestPlayerVoteCount: Object.keys(s.bestPlayerVotes ?? {}).length,
     ladyUsed: s.ladyUsed, lancelotCards: s.lancelotCards.slice(0, s.lancelotApplied.length),
     publicEvents: s.publicEvents, history: historyFromState(s), historyApproximate: s.historyApproximate ?? !s.history, recruited: s.recruited, excaliburHolder: s.excaliburHolder, rogueWatchHolder: s.rogueWatchHolder,
     plotHands: s.plotHands, plotDrawn: s.plotDrawn, plotPending: s.plotPending,

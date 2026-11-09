@@ -5,16 +5,16 @@ import Image from 'next/image';
 import { startTransition, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowLeftRight, BookOpen, Check, Crown, Eye, EyeOff, Shield, ShieldAlert, ShieldHalf, ShieldOff, ShieldQuestionMark, Skull, Sword, Swords, X } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
-import { createAvalonRoom, getAvalonAvatarUrls, getAvalonPlayerStats, getAvalonRoom, getAvalonSideStats, getMyAvalonRoom, joinAvalonRoom, leaveAvalonRoom, listAvalonRooms, moveAvalonRoom } from './actions';
-import type { AvalonPlayerStats, AvalonRoomSummary, AvalonSideStats } from './actions';
-import PlayerStatsTable from './PlayerStatsTable';
-import SideStatsSummary from './SideStatsSummary';
+import { createAvalonRoom, dissolveAvalonRoom, getAvalonAvatarUrls, getAvalonRoom, getMyAvalonRoom, joinAvalonRoom, leaveAvalonRoom, listAvalonRooms, moveAvalonRoom } from './actions';
+import type { AvalonRoomSummary } from './actions';
 import { defaultConfig, GOOD_COUNTS, REJECTED_VOTE_REVEAL_MS, ROLES, TEAM_COUNTS, validateConfig, type Card, type Config, type GameState, type Phase, type PlotCard, type Role, type Side } from './rules';
 import { applyMove, excaliburReplacementCard, gawainCheckEvent, gawainUnplayedCard, initialState, publicView, type AvalonView, type Move } from './engine';
 import { useLocalNotes } from './useLocalNotes';
 import { PREVIEW_FALLBACK_IDS, PREVIEW_NAMES } from './previewData';
 import RulebookModal, { getPendingAvalonAction } from './RulebookModal';
 import LadyIcon from './LadyIcon';
+import TeamAssignmentModal from './TeamAssignmentModal';
+import HistoryRankingModal from './HistoryRankingModal';
 
 type View = AvalonView;
 type User = { id: string; name: string };
@@ -81,7 +81,7 @@ function showGameNotification(title: string, body: string) {
   }
 }
 const previewPeople: User[] = PREVIEW_NAMES.map((name, index) => ({ id: PREVIEW_FALLBACK_IDS[index], name }));
-type PreviewScreen = 'reveal' | 'propose' | 'excalibur_assign' | 'vote' | 'reselect_after_rejection' | 'quest' | 'excalibur' | 'gawain_check' | 'lady' | 'assassinate' | 'finished';
+type PreviewScreen = 'reveal' | 'propose' | 'excalibur_assign' | 'vote' | 'reselect_after_rejection' | 'quest' | 'excalibur' | 'gawain_check' | 'lady' | 'assassinate' | 'best_player_vote' | 'finished';
 type AssassinationKind = 'merlin' | 'messengers' | 'lovers';
 type PreviewAssassination = { target: string; secondTarget?: string; kind: AssassinationKind };
 type PreviewExcaliburResult = { target?: string; original?: Card; changed?: Card; success: boolean; failCount: number };
@@ -91,6 +91,7 @@ const previewPhases: { screen: PreviewScreen; label: string }[] = [
   { screen: 'reselect_after_rejection', label: '부결 투표 후 재선정' },
   { screen: 'quest', label: '원정 카드' }, { screen: 'excalibur', label: '엑스칼리버' }, { screen: 'gawain_check', label: '가웨인 판정' }, { screen: 'lady', label: '호수의 여인' },
   { screen: 'assassinate', label: '암살자 암살 턴' },
+  { screen: 'best_player_vote', label: '승패 확정 후 베스트 플레이어 투표' },
   { screen: 'finished', label: '게임 결과' },
 ];
 
@@ -147,8 +148,8 @@ function previewState(screen: PreviewScreen, people: User[], rejectedAt: string 
     { number: 2, team: secondTeam, success: false, cards: ['success', 'fail', 'success', 'success'], failCount: 1, vote: secondVote, leaderId: second.id },
   ];
   state.voteHistory = [{ mission: 2, team: secondTeam, votes: secondVote, approved: true, leaderId: second.id }];
-  if (phase === 'quest' || phase === 'assassinate' || phase === 'finished') state.voteHistory.push({ mission: 3, team: thirdTeam, votes: thirdVote, approved: true, leaderId: self.id,
-    excaliburHolder: phase === 'assassinate' || phase === 'finished' ? sixth.id : null });
+  if (phase === 'quest' || phase === 'assassinate' || phase === 'best_player_vote' || phase === 'finished') state.voteHistory.push({ mission: 3, team: thirdTeam, votes: thirdVote, approved: true, leaderId: self.id,
+    excaliburHolder: phase === 'assassinate' || phase === 'best_player_vote' || phase === 'finished' ? sixth.id : null });
   if (phase === 'gawain_check') {
     state.players[1].roles.push('good_sorcerer');
     state.players[3].roles.push('evil_sorcerer');
@@ -188,7 +189,7 @@ function previewState(screen: PreviewScreen, people: User[], rejectedAt: string 
     { type: 'quest', index: 0 }, { type: 'event', index: 0 },
     { type: 'vote', index: 0 }, { type: 'quest', index: 1 },
     { type: 'event', index: 1 }, { type: 'event', index: 2 },
-    ...(phase === 'quest' || phase === 'assassinate' || phase === 'finished' || phase === 'gawain_check' || phase === 'excalibur' || phase === 'excalibur_assign' ? [{ type: 'vote' as const, index: 1 }] : []),
+    ...(phase === 'quest' || phase === 'assassinate' || phase === 'best_player_vote' || phase === 'finished' || phase === 'gawain_check' || phase === 'excalibur' || phase === 'excalibur_assign' ? [{ type: 'vote' as const, index: 1 }] : []),
     ...(phase === 'gawain_check' ? [{ type: 'quest' as const, index: 2 }] : []),
   ];
   state.ladyHolder = self.id;
@@ -204,7 +205,7 @@ function previewState(screen: PreviewScreen, people: User[], rejectedAt: string 
     state.publicEvents.push('3차 팀 투표 부결 (1/5)');
     state.history.push({ type: 'vote', index: 1 }, { type: 'event', index: 3 });
   }
-  if (phase === 'assassinate' || phase === 'finished') {
+  if (phase === 'assassinate' || phase === 'best_player_vote' || phase === 'finished') {
     state.config.excalibur = true;
     state.voteHistory.push(
       { mission: 4, team: fourthTeam, votes: fourthVote, approved: true, leaderId: third.id },
@@ -220,7 +221,10 @@ function previewState(screen: PreviewScreen, people: User[], rejectedAt: string 
     state.proposal = fifthTeam;
     state.history.push({ type: 'quest', index: 2 }, { type: 'vote', index: 2 }, { type: 'quest', index: 3 }, { type: 'vote', index: 3 }, { type: 'quest', index: 4 });
   }
-  if (phase === 'finished') { state.winner = 'good'; state.winReason = '멀린 암살 실패'; state.assassinated = [third.id]; }
+  if (phase === 'best_player_vote' || phase === 'finished') {
+    state.winner = 'good'; state.winReason = '멀린 암살 실패'; state.assassinated = [third.id];
+  }
+  if (phase === 'best_player_vote') state.bestPlayerVotes = { [second.id]: third.id, [fourth.id]: null };
   return state;
 }
 
@@ -228,14 +232,10 @@ function previewView(screen: PreviewScreen, people: User[], actorId = people[0].
   return publicView(previewState(screen, people, rejectedAt), actorId);
 }
 
-export default function AvalonMain({ user, preview = false, previewParticipants = previewPeople, previewAvatarUrls = {}, previewAvatarError }: { user: User; preview?: boolean; previewParticipants?: User[]; previewAvatarUrls?: Record<string, string>; previewAvatarError?: string }) {
+export default function AvalonMain({ user, role = '', preview = false, previewParticipants = previewPeople, previewAvatarUrls = {}, previewAvatarError }: { user: User; role?: string; preview?: boolean; previewParticipants?: User[]; previewAvatarUrls?: Record<string, string>; previewAvatarError?: string }) {
   const [roomId, setRoomId] = useState(preview ? 'preview' : '');
   const [rooms, setRooms] = useState<AvalonRoomSummary[]>([]);
   const [statsOpen, setStatsOpen] = useState(false);
-  const [statsLoading, setStatsLoading] = useState(false);
-  const [statsError, setStatsError] = useState('');
-  const [playerStats, setPlayerStats] = useState<AvalonPlayerStats[]>([]);
-  const [sideStats, setSideStats] = useState<AvalonSideStats | null>(null);
   const configDirty = useRef(false);
   const [previewScreen, setPreviewScreen] = useState<PreviewScreen>('propose');
   const [view, setView] = useState<View | null>(() => preview ? previewView('propose', previewParticipants) : null);
@@ -259,6 +259,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
   const [showSecret, setShowSecret] = useState(false);
   const [rulebookOpen, setRulebookOpen] = useState(false);
   const [compositionOpen, setCompositionOpen] = useState(false);
+  const [teamAssignmentOpen, setTeamAssignmentOpen] = useState(false);
   const [avatarUrls, setAvatarUrls] = useState<Record<string, string>>(previewAvatarUrls);
   const [avatarError, setAvatarError] = useState(previewAvatarError ?? '');
   const [previewTurn, setPreviewTurn] = useState(0);
@@ -341,14 +342,26 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
     else if (!result.ok) setError(result.error);
     setBusy(false);
   }
-  async function openStats() {
-    setStatsOpen(true);
-    setStatsLoading(true);
-    setStatsError('');
-    const [players, sides] = await Promise.all([getAvalonPlayerStats(), getAvalonSideStats()]);
-    if (players.ok && sides.ok) { setPlayerStats(players.data); setSideStats(sides.data); }
-    else setStatsError(!players.ok ? players.error : !sides.ok ? sides.error : '승률을 불러오지 못했습니다.');
-    setStatsLoading(false);
+  function openStats() { setStatsOpen(true); }
+  async function dissolveRoom(room: AvalonRoomSummary) {
+    if (!window.confirm(`${room.hostName}님의 대기실을 해산할까요? 참가자 전원이 방에서 나가게 됩니다.`)) return;
+    setBusy(true); setError('');
+    const result = await dissolveAvalonRoom(room.id);
+    if (result.ok) setRooms((current) => current.filter((item) => item.id !== room.id));
+    else setError(result.error);
+    setBusy(false);
+  }
+  async function refreshAfterTeamCreation() {
+    setBusy(true); setError('');
+    const [mine, roomList] = await Promise.all([getMyAvalonRoom(), listAvalonRooms()]);
+    if (roomList.ok) setRooms(roomList.data);
+    if (mine.ok && mine.data) {
+      configDirty.current = false;
+      setRoomId(mine.data.id);
+      setView(mine.data.view);
+      setConfig(mine.data.view.config);
+    } else if (!mine.ok) setError(mine.error);
+    setBusy(false);
   }
   async function send(move: Move) {
     if (preview) {
@@ -374,6 +387,15 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
       }
       if (move.type === 'quest') { setPreviewQuestChoice(move.card); setPreviewActionDoneKey(actionTurnKey); setError(''); return; }
       if (move.type === 'vote') { setPreviewVoteChoice(move.approve); setPreviewActionDoneKey(actionTurnKey); setError(''); return; }
+      if (move.type === 'best_player_vote' && previewScreen === 'best_player_vote') {
+        setView((current) => {
+          if (!current) return current;
+          const bestPlayerVotes = { ...current.bestPlayerVotes, [user.id]: move.target ?? null };
+          return { ...current, bestPlayerVotes, bestPlayerVoted: true, bestPlayerVoteCount: current.bestPlayerVoteCount + 1 };
+        });
+        setError('');
+        return;
+      }
       if (move.type === 'lady') {
         const index = previewParticipants.findIndex((person) => person.id === move.target);
         const side = (['good', 'evil', 'good', 'evil', 'good', 'good', 'evil', 'good'] as Side[])[index];
@@ -617,7 +639,10 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
     <div className="mx-auto max-w-4xl space-y-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <Link href="/" className="inline-flex items-center gap-2 text-sm font-medium text-slate-600"><ArrowLeft size={17} /> 대시보드</Link>
-        <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => setRulebookOpen(true)} className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-white px-3 py-1.5 text-sm font-semibold text-violet-800 focus-visible:outline-2 focus-visible:outline-violet-600"><BookOpen size={16} /> 룰북</button>{view && view.phase !== 'lobby' && <button type="button" aria-haspopup="dialog" aria-expanded={compositionOpen} onClick={() => setCompositionOpen(true)} className="rounded-full border border-violet-200 bg-white px-3 py-1.5 text-sm font-semibold text-violet-800 focus-visible:outline-2 focus-visible:outline-violet-600">직업 구성</button>}<span className="inline-flex items-center gap-2 rounded-full bg-violet-100 px-3 py-1 text-sm font-semibold text-violet-800"><Shield size={15} /> 레지스탕스: 아발론</span></div>
+        <div className="flex flex-wrap items-center gap-2">
+          {role === 'super_admin' && <button type="button" aria-haspopup="dialog" aria-expanded={teamAssignmentOpen} onClick={() => setTeamAssignmentOpen(true)} className="rounded-full border border-violet-200 bg-white px-3 py-1.5 text-sm font-semibold text-violet-800 focus-visible:outline-2 focus-visible:outline-violet-600">팀 편성</button>}
+          <button type="button" onClick={() => setRulebookOpen(true)} className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-white px-3 py-1.5 text-sm font-semibold text-violet-800 focus-visible:outline-2 focus-visible:outline-violet-600"><BookOpen size={16} /> 룰북</button>{view && view.phase !== 'lobby' && <button type="button" aria-haspopup="dialog" aria-expanded={compositionOpen} onClick={() => setCompositionOpen(true)} className="rounded-full border border-violet-200 bg-white px-3 py-1.5 text-sm font-semibold text-violet-800 focus-visible:outline-2 focus-visible:outline-violet-600">직업 구성</button>}<span className="inline-flex items-center gap-2 rounded-full bg-violet-100 px-3 py-1 text-sm font-semibold text-violet-800"><Shield size={15} /> 레지스탕스: 아발론</span>
+        </div>
       </header>
       {preview && <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><p className="font-bold">플레이 화면 미리보기</p><p className="mt-1">예시 게임 결과를 사용합니다. 실제 방에 연결되거나 행동이 저장되지 않습니다. 참가자 이름과 프로필 이미지는 사용자 목록에서 불러옵니다. 자신의 차례에서 5초 동안 행동하지 않으면 우측 하단에 알림이 표시됩니다.</p><label className="mt-3 block font-medium">확인할 화면 <select className={`${field} mt-1 w-full`} value={previewScreen} onChange={(e) => showPreviewScreen(e.target.value as PreviewScreen)}>{previewPhases.map(({ screen, label }) => <option key={screen} value={screen}>{label}</option>)}</select></label>{previewScreen === 'reselect_after_rejection' && <button type="button" className={`${secondary} mt-3`} onClick={() => showPreviewScreen('reselect_after_rejection')}>5초 다시 보기</button>}{previewScreen === 'gawain_check' && <button type="button" className={`${secondary} mt-3`} onClick={() => showPreviewScreen('gawain_check')}>가웨인 판정 다시 보기</button>}{previewScreen === 'excalibur' && <button type="button" className={`${secondary} mt-3`} onClick={() => showPreviewScreen('excalibur')}>엑스칼리버 다시 보기</button>}</section>}
       {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
@@ -627,14 +652,14 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
         <h1 className="text-2xl font-bold">아발론 게임</h1>
         <p className="mt-2 text-sm text-slate-600">5~10명이 각자 휴대전화로 역할을 확인하고 투표합니다. 토론은 대면 또는 별도 메신저에서 진행하세요.</p>
         <button className={`${primary} mt-6 w-full`} disabled={busy} onClick={create}>새 방 만들기</button>
-        <div className="mt-7 flex items-center justify-between gap-3"><h2 className="font-bold">열려 있는 방</h2><button type="button" className={secondary} onClick={() => void openStats()}>역대 승률 · 랭킹</button></div>
-        <div className="mt-3 space-y-2">{rooms.length ? rooms.map((room) => <div key={room.id} className="rounded-xl border border-slate-200 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-semibold">{room.hostName}님의 방 · {room.players.length}/{room.capacity}명</p><p className="mt-1 text-sm text-slate-500">{room.players.map((player) => player.name).join(', ')} · {room.phase === 'lobby' ? '대기 중' : '진행 중'}</p></div><button className={secondary} disabled={busy || room.phase !== 'lobby' || room.players.length >= room.capacity} onClick={() => void join(room.id)}>{room.phase === 'lobby' ? '입장' : '진행 중'}</button></div></div>) : <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">열려 있는 방이 없습니다.</p>}</div>
+        <div className="mt-7 flex items-center justify-between gap-3"><h2 className="font-bold">열려 있는 방</h2><button type="button" className={secondary} onClick={openStats}>전적 보기</button></div>
+        <div className="mt-3 space-y-2">{rooms.length ? rooms.map((room) => <div key={room.id} className="rounded-xl border border-slate-200 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-semibold">{room.hostName}님의 방 · {room.players.length}/{room.capacity}명</p><p className="mt-1 text-sm text-slate-500">{room.players.map((player) => player.name).join(', ')} · {room.phase === 'lobby' ? '대기 중' : '진행 중'}</p></div><div className="flex gap-2"><button className={secondary} disabled={busy || room.phase !== 'lobby' || room.players.length >= room.capacity} onClick={() => void join(room.id)}>{room.phase === 'lobby' ? '입장' : '진행 중'}</button>{role === 'super_admin' && room.phase === 'lobby' && <button type="button" className="rounded-xl border border-rose-200 bg-white px-4 py-3 font-medium text-rose-700 disabled:opacity-40" disabled={busy} onClick={() => void dissolveRoom(room)}>해산</button>}</div></div></div>) : <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">열려 있는 방이 없습니다.</p>}</div>
       </section> : <>
         <div className={view.phase === 'lobby' ? '' : 'grid items-stretch gap-5 md:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]'}>
         <section className="flex min-w-0 flex-col rounded-2xl bg-white p-4 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div><p className="text-xs font-bold uppercase tracking-widest text-violet-600">{view.players.find((p) => p.id === view.hostId)?.name}님의 방</p><h1 className="mt-1 text-2xl font-bold">{view.phase === 'lobby' ? '대기실' : view.phase === 'finished' ? '게임 종료' : `${view.mission}차 원정`}</h1></div>
-            {view.phase !== 'lobby' && <RejectionTrack rejected={view.rejected} active={view.phase !== 'finished'} />}
+            <div><p className="text-xs font-bold uppercase tracking-widest text-violet-600">{view.players.find((p) => p.id === view.hostId)?.name}님의 방</p><h1 className="mt-1 text-2xl font-bold">{view.phase === 'lobby' ? '대기실' : view.phase === 'finished' ? '게임 종료' : view.phase === 'best_player_vote' ? '베스트 플레이어 투표' : `${view.mission}차 원정`}</h1></div>
+            {view.phase !== 'lobby' && <RejectionTrack rejected={view.rejected} active={view.phase !== 'finished' && view.phase !== 'best_player_vote'} />}
           </div>
           {view.phase !== 'lobby' && <div className="mt-auto grid grid-cols-5 gap-1.5 pt-3">{Array.from({ length: 5 }, (_, i) => {
             const result = view.results.find((r) => r.number === i + 1);
@@ -668,7 +693,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
 
         {view.phase === 'lobby' ? <>
           <section className="rounded-2xl bg-white p-4 shadow-sm sm:p-6">
-            <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-bold">참가자 {view.players.length}/{view.config.playerCount}</h2><button type="button" className={secondary} onClick={() => void openStats()}>역대 승률 · 랭킹</button></div>
+            <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-bold">참가자 {view.players.length}/{view.config.playerCount}</h2><button type="button" className={secondary} onClick={openStats}>전적 보기</button></div>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">{view.players.map((p) => <div key={p.id} className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm"><span className="flex min-w-0 items-center gap-2"><PlayerAvatar name={p.name} url={avatarUrls[p.id]} /><span className="truncate">{p.seat + 1}. {p.name}</span>{p.id === view.hostId && <Crown aria-label="방장" className="size-4 shrink-0 text-amber-600" />}</span>{isHost && p.id !== view.hostId && <button type="button" className="shrink-0 rounded-lg border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-700" disabled={busy} onClick={() => void send({ type: 'kick', playerId: p.id })}>추방</button>}</div>)}</div>
             <div className="mt-4 flex flex-wrap gap-2"><button className={secondary} disabled={busy} onClick={async () => { const result = await leaveAvalonRoom(roomId); if (result.ok) { setRoomId(''); setView(null); setConfig(null); const list = await listAvalonRooms(); if (list.ok) setRooms(list.data); } else setError(result.error); }}>방 나가기</button><button type="button" className={secondary} onClick={() => void enableGameNotification()}>게임 알림 켜기</button>{isHost && <button className={primary} disabled={busy || view.players.length !== view.config.playerCount || Boolean(config && JSON.stringify(config) !== JSON.stringify(view.config))} onClick={() => void send({ type: 'start' })}>게임 시작</button>}</div>
             {notificationFeedback && <p role="status" className="mt-2 text-sm text-slate-600">{notificationFeedback}</p>}
@@ -696,9 +721,9 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
               const otherSelected = (canPickTeam && watchHolder === p.id && rogueWatchEnabled) || (actionCandidate && view.phase !== 'excalibur_assign' && target === p.id);
               const complete = (view.phase === 'reveal' && p.seen) || (showCompletionChecks && view.phase === 'vote' && view.voteSubmitted.includes(p.id)) || (showCompletionChecks && view.phase === 'quest' && view.cardSubmitters.includes(p.id));
               const roles = p.roles.map((role) => ROLES[role].name).join(' + ') || (p.side === 'good' ? '충신' : '하수인');
-              return <div key={p.id} className={`relative min-w-0 rounded-xl border p-2.5 pb-1.5 text-center text-sm ${assassinationSelected ? 'border-violet-600 bg-violet-50 ring-2 ring-inset ring-violet-600' : assigningExcalibur ? 'border-amber-500 bg-amber-50 ring-2 ring-inset ring-amber-500' : excaliburSelected ? 'border-rose-500 bg-rose-50 ring-2 ring-inset ring-rose-500' : otherSelected ? 'border-violet-500 bg-violet-50 ring-2 ring-inset ring-violet-500' : view.phase === 'finished' || view.phase === 'assassinate' ? p.side === 'good' ? 'border-blue-500 bg-blue-50' : 'border-red-500 bg-red-50' : view.phase === 'lady' && p.id === view.ladyHolder ? 'lady-border-pulse border-cyan-500 bg-cyan-50' : view.phase === 'propose' && p.seat === view.leaderSeat ? `leader-border-pulse border-red-500 ${selected ? 'bg-amber-50' : 'bg-slate-50'}` : ladyCandidate && target === p.id ? 'border-emerald-500 bg-emerald-50 ring-2 ring-inset ring-emerald-500' : selected ? 'border-amber-500 bg-amber-50' : 'border-slate-200 bg-slate-50'}`}>
+              return <div key={p.id} className={`relative min-w-0 rounded-xl border p-2.5 pb-1.5 text-center text-sm ${assassinationSelected ? 'border-violet-600 bg-violet-50 ring-2 ring-inset ring-violet-600' : assigningExcalibur ? 'border-amber-500 bg-amber-50 ring-2 ring-inset ring-amber-500' : excaliburSelected ? 'border-rose-500 bg-rose-50 ring-2 ring-inset ring-rose-500' : otherSelected ? 'border-violet-500 bg-violet-50 ring-2 ring-inset ring-violet-500' : view.phase === 'finished' || view.phase === 'best_player_vote' || view.phase === 'assassinate' ? p.side === 'good' ? 'border-blue-500 bg-blue-50' : 'border-red-500 bg-red-50' : view.phase === 'lady' && p.id === view.ladyHolder ? 'lady-border-pulse border-cyan-500 bg-cyan-50' : view.phase === 'propose' && p.seat === view.leaderSeat ? `leader-border-pulse border-red-500 ${selected ? 'bg-amber-50' : 'bg-slate-50'}` : ladyCandidate && target === p.id ? 'border-emerald-500 bg-emerald-50 ring-2 ring-inset ring-emerald-500' : selected ? 'border-amber-500 bg-amber-50' : 'border-slate-200 bg-slate-50'}`}>
                 {ownsExcalibur && <ExcaliburSword />}
-                {view.phase === 'finished' ? <span className="pointer-events-none absolute inset-x-1 top-1 z-10 block whitespace-normal break-keep text-center text-[11px] leading-tight font-semibold text-violet-900 mt-3 -mb-3">{roles}</span> : <>
+                {view.phase === 'finished' || view.phase === 'best_player_vote' ? <span className="pointer-events-none absolute inset-x-1 top-1 z-10 block whitespace-normal break-keep text-center text-[11px] leading-tight font-semibold text-violet-900 mt-3 -mb-3">{roles}</span> : <>
                   {p.seat === view.leaderSeat && <Crown role="img" aria-label="리더 토큰" className="absolute left-4 top-3.25 size-8 fill-rose-100 text-rose-600" />}
                   {excaliburSelected ? <ArrowLeftRight aria-label="엑스칼리버 대상 선택됨" className="absolute right-2 top-2 size-8 rounded-full bg-rose-100 p-1 text-rose-700" />
                     : otherSelected ? <Check aria-label="대상 선택됨" className="absolute right-2 top-2 size-8 rounded-full bg-violet-100 p-1 text-violet-700" />
@@ -721,7 +746,7 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
                   else if (canPickTeam && proposalPick === 'watch') setWatchHolder(watchHolder === p.id ? '' : p.id);
                   else if (actionCandidate) { setTarget(target === p.id ? '' : p.id); setPlotCardChoice(''); }
                 }} className="w-full rounded-lg p-1 focus-visible:outline-2 focus-visible:outline-violet-600 disabled:cursor-default">
-                  <span className={`flex items-center justify-center h-8`} aria-hidden="true">{view.phase === 'finished' ? <span className="invisible whitespace-normal break-keep text-[11px] leading-tight">{roles}</span> : selected && <ShieldHalf className="-mt-1 size-10 fill-amber-100 text-amber-600" />}</span>
+                  <span className={`flex items-center justify-center h-8`} aria-hidden="true">{view.phase === 'finished' || view.phase === 'best_player_vote' ? <span className="invisible whitespace-normal break-keep text-[11px] leading-tight">{roles}</span> : selected && <ShieldHalf className="-mt-1 size-10 fill-amber-100 text-amber-600" />}</span>
                   <span className="relative mt-1 flex h-7 min-w-0 items-center justify-center">
                     <span className="absolute -left-0.5 top-1/2 -translate-y-1/2"><PlayerAvatar name={p.name} url={avatarUrls[p.id]} /></span>
                     <span className="inline-flex max-w-[calc(100%-4.5rem)] min-w-0 items-center justify-center gap-0.5 font-semibold"><span className="truncate">{p.name}</span>{view.assassinated.includes(p.id) && <Skull aria-label="암살 대상" className="absolute right-2 size-8 shrink-0 text-red-700" />}</span>
@@ -747,8 +772,8 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
               {preview && previewScreen === 'reselect_after_rejection' && previewProposedTeam.length > 0 && <p role="status" className="mt-2 text-sm text-violet-700">미리보기 제안: {previewProposedTeam.map((id) => view.players.find((player) => player.id === id)?.name).join(', ')} · 실제 방에는 저장되지 않습니다.</p>}
             </> : <p className="text-sm text-slate-600">리더가 원정 팀을 고르고 있습니다.</p>}</div>}
           </section>
-          {view.phase !== 'propose' && <section className="rounded-2xl bg-white p-4 shadow-sm sm:p-6"><PhaseControls view={view} user={activeUser} busy={busy} send={send} previewQuestChoice={preview ? previewQuestChoice : null} previewVoteChoice={preview ? previewVoteChoice : null} previewLadyResult={preview ? previewLadyResult : null} previewGawainResult={preview ? previewGawainResult : null} previewExcaliburResult={preview ? previewExcaliburResult : null} previewAssignedSwordHolder={preview ? previewAssignedSwordHolder : null} previewAssassination={preview ? previewAssassination : null} clearPreviewAssassination={() => setPreviewAssassination(null)} target={target} setTarget={setTarget} secondTarget={secondTarget} setSecondTarget={setSecondTarget} assassinationKind={assassinationKind} setAssassinationKind={setAssassinationKind} plotCardChoice={plotCardChoice} setPlotCardChoice={setPlotCardChoice} /></section>}
-          {isHost && !preview && view.phase !== 'finished' && <button className={`${secondary} w-full border-rose-200 text-rose-700`} disabled={busy} onClick={() => void send({ type: 'stop' })}>게임 중단하고 대기실로</button>}
+          {view.phase !== 'propose' && <section className="rounded-2xl bg-white p-4 shadow-sm sm:p-6"><PhaseControls view={view} user={activeUser} busy={busy} preview={preview} send={send} previewQuestChoice={preview ? previewQuestChoice : null} previewVoteChoice={preview ? previewVoteChoice : null} previewLadyResult={preview ? previewLadyResult : null} previewGawainResult={preview ? previewGawainResult : null} previewExcaliburResult={preview ? previewExcaliburResult : null} previewAssignedSwordHolder={preview ? previewAssignedSwordHolder : null} previewAssassination={preview ? previewAssassination : null} clearPreviewAssassination={() => setPreviewAssassination(null)} target={target} setTarget={setTarget} secondTarget={secondTarget} setSecondTarget={setSecondTarget} assassinationKind={assassinationKind} setAssassinationKind={setAssassinationKind} plotCardChoice={plotCardChoice} setPlotCardChoice={setPlotCardChoice} /></section>}
+          {isHost && !preview && view.phase !== 'finished' && view.phase !== 'best_player_vote' && <button className={`${secondary} w-full border-rose-200 text-rose-700`} disabled={busy} onClick={() => void send({ type: 'stop' })}>게임 중단하고 대기실로</button>}
           {view.phase === 'finished' && !preview && <button className={`${secondary} w-full`} onClick={async () => { setRoomId(''); setView(null); const result = await listAvalonRooms(); if (result.ok) setRooms(result.data); }}>열린 방 목록으로</button>}
           {view.config.plot && <section className="rounded-2xl bg-white p-4 shadow-sm sm:p-6"><h2 className="font-bold">공개 플롯 카드</h2><div className="mt-2 space-y-1 text-sm text-slate-600">{view.players.map((p) => <div key={p.id}>{p.name}: {(view.plotHands[p.id] ?? []).map((card) => plotName[card]).join(', ') || '없음'}</div>)}</div></section>}
           {(view.voteHistory.length > 0 || view.results.length > 0 || view.publicEvents.length > 0) && <GameHistory view={view} />}
@@ -756,9 +781,10 @@ export default function AvalonMain({ user, preview = false, previewParticipants 
       </>}
     </div>
     {!busy && reminderActionLabel && reminderTurnKey === actionTurnKey && <div role="alert" className="avalon-turn-reminder-blink pointer-events-none fixed right-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-40 w-[min(30rem,calc(100vw-2rem))] rounded-2xl bg-red-600 px-4 py-3 text-sm font-bold text-white shadow-xl sm:right-6 sm:bottom-6"><p>지금 행동할 차례예요</p><p className="mt-1 text-red-100">{reminderActionLabel}</p></div>}
+    {teamAssignmentOpen && role === 'super_admin' && <TeamAssignmentModal onClose={() => setTeamAssignmentOpen(false)} onCreated={refreshAfterTeamCreation} />}
     {rulebookOpen && <RulebookModal onClose={() => setRulebookOpen(false)} turnKey={actionTurnKey} actionLabel={actionLabel} />}
     {compositionOpen && view && view.phase !== 'lobby' && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setCompositionOpen(false); }}><div role="dialog" aria-modal="true" aria-labelledby="avalon-composition-title" onKeyDown={(event) => { if (event.key === 'Escape') setCompositionOpen(false); }} className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"><div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4"><div><h2 id="avalon-composition-title" className="text-lg font-bold">직업 구성</h2><p className="mt-1 text-sm text-slate-500">이 게임에 포함된 직업과 적용 규칙입니다. 참가자별 직업은 공개되지 않습니다.</p></div><button type="button" autoFocus className="shrink-0 rounded-lg p-2 text-slate-500 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-violet-600" aria-label="직업 구성 닫기" onClick={() => setCompositionOpen(false)}><X size={20} /></button></div><div className="min-h-0 overflow-y-auto p-5"><RoleComposition config={view.config} embedded /></div></div></div>}
-    {statsOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setStatsOpen(false); }}><div role="dialog" aria-modal="true" aria-labelledby="avalon-stats-title" className="flex max-h-[80vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"><div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><h2 id="avalon-stats-title" className="text-lg font-bold">역대 승률 · 랭킹</h2><p className="mt-1 text-xs text-slate-500">모든 완료된 아발론 게임의 기록</p></div><button type="button" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="닫기" onClick={() => setStatsOpen(false)}><X size={20} /></button></div><div className="min-h-0 overflow-y-auto px-4 pb-5">{statsLoading ? <p className="py-12 text-center text-sm text-slate-500">기록을 불러오는 중...</p> : statsError ? <p role="alert" className="py-12 text-center text-sm text-rose-600">{statsError}</p> : <>{sideStats && <SideStatsSummary stats={sideStats} />}{playerStats.length ? <PlayerStatsTable people={playerStats.map((row) => ({ id: row.playerId, name: row.playerName }))} stats={Object.fromEntries(playerStats.map((row) => [row.playerId, row]))} /> : <p className="py-12 text-center text-sm text-slate-500">완료된 게임 기록이 없습니다.</p>}</>}</div></div></div>}
+    {statsOpen && <HistoryRankingModal onClose={() => setStatsOpen(false)} />}
   </main>;
 }
 
@@ -884,8 +910,8 @@ function ConfigEditor({ config, setConfig, save, busy }: { config: Config; setCo
   </section>;
 }
 
-function PhaseControls({ view, user, busy, send, previewQuestChoice, previewVoteChoice, previewLadyResult, previewGawainResult, previewExcaliburResult, previewAssignedSwordHolder, previewAssassination, clearPreviewAssassination, target, setTarget, secondTarget, setSecondTarget, assassinationKind, setAssassinationKind, plotCardChoice, setPlotCardChoice }: {
-  view: View; user: User; busy: boolean; send: (move: Move) => Promise<void>;
+function PhaseControls({ view, user, busy, preview, send, previewQuestChoice, previewVoteChoice, previewLadyResult, previewGawainResult, previewExcaliburResult, previewAssignedSwordHolder, previewAssassination, clearPreviewAssassination, target, setTarget, secondTarget, setSecondTarget, assassinationKind, setAssassinationKind, plotCardChoice, setPlotCardChoice }: {
+  view: View; user: User; busy: boolean; preview: boolean; send: (move: Move) => Promise<void>;
   previewQuestChoice: Card | null;
   previewVoteChoice: boolean | null;
   previewLadyResult: { target: string; side: Side } | null;
@@ -957,6 +983,15 @@ function PhaseControls({ view, user, busy, send, previewQuestChoice, previewVote
       </> : <p className="mt-2 text-sm text-slate-600">악 진영의 마지막 선택을 기다립니다.</p>}
     </>;
   }
-  if (view.phase === 'finished') return <><h2 className="text-xl font-bold">{view.winner === 'good' ? '선 진영 승리' : '악 진영 승리'}</h2><p className="mt-2 text-sm text-slate-600">{view.winReason}</p></>;
+  if (view.phase === 'best_player_vote') {
+    const candidates = view.players.filter((player) => player.side === view.winner);
+    return <><h2 className="text-lg font-bold">{view.winner === 'good' ? '선 진영 승리' : '악 진영 승리'}</h2><p className="mt-1 text-sm text-slate-600">{view.winReason}</p><p className="mt-3 text-sm text-slate-600">승리 플레이어 중 한 명에게 투표해 주세요. 투표하지 않으려면 건너뛰기를 선택하면 됩니다. {view.bestPlayerVoteCount}/{view.players.length}명 응답</p>{view.bestPlayerVoted ? <p role="status" className="mt-4 rounded-xl bg-violet-50 p-3 text-sm font-semibold text-violet-800">{preview ? '미리보기 투표를 완료했습니다. 실제 게임에는 저장되지 않습니다.' : '투표를 마쳤습니다. 다른 참가자의 응답을 기다리는 중입니다.'}</p> : <><div className="mt-4 grid gap-2 sm:grid-cols-2">{candidates.map((player) => <button key={player.id} type="button" className={secondary} disabled={busy} onClick={() => void send({ type: 'best_player_vote', target: player.id })}>{player.name}에게 투표</button>)}</div><button type="button" className="mt-2 w-full rounded-xl px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-40" disabled={busy} onClick={() => void send({ type: 'best_player_vote' })}>투표 건너뛰기</button></>}</>;
+  }
+  if (view.phase === 'finished') {
+    const counts = Object.values(view.bestPlayerVotes).reduce<Record<string, number>>((result, playerId) => { if (playerId) result[playerId] = (result[playerId] ?? 0) + 1; return result; }, {});
+    const highScore = Math.max(0, ...Object.values(counts));
+    const bestPlayers = view.players.filter((player) => counts[player.id] === highScore && highScore > 0);
+    return <><h2 className="text-xl font-bold">{view.winner === 'good' ? '선 진영 승리' : '악 진영 승리'}</h2><p className="mt-2 text-sm text-slate-600">{view.winReason}</p><div className="mt-4 rounded-xl bg-amber-50 p-4"><h3 className="font-bold text-amber-950">베스트 플레이어 투표 결과</h3>{bestPlayers.length ? <p className="mt-1 text-sm text-amber-900">{bestPlayers.map((player) => `${player.name} ${counts[player.id]}표`).join(' · ')}</p> : <p className="mt-1 text-sm text-amber-900">베스트 플레이어 투표가 없습니다.</p>}</div></>;
+  }
   return null;
 }
