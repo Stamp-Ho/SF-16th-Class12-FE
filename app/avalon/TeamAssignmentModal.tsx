@@ -7,6 +7,7 @@ import { createAvalonRoomsFromTeams, getUsersForTeamAssignment } from './actions
 
 type Person = { id: string; name: string };
 type Team = { id: string; people: Person[] };
+type Assignment = { pool: Person[]; teams: Team[] };
 
 function PersonBadges({ id, people, emptyLabel }: { id: string; people: Person[]; emptyLabel: string }) {
   return <Droppable droppableId={id} direction="horizontal">
@@ -24,8 +25,8 @@ function PersonBadges({ id, people, emptyLabel }: { id: string; people: Person[]
 }
 
 export default function TeamAssignmentModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => Promise<void> }) {
-  const [pool, setPool] = useState<Person[]>([]);
-  const [teams, setTeams] = useState<Team[]>([{ id: 'team-1', people: [] }]);
+  const [assignment, setAssignment] = useState<Assignment>({ pool: [], teams: [{ id: 'team-1', people: [] }] });
+  const { pool, teams } = assignment;
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
@@ -35,7 +36,7 @@ export default function TeamAssignmentModal({ onClose, onCreated }: { onClose: (
     let active = true;
     void getUsersForTeamAssignment().then((result) => {
       if (!active) return;
-      if (result.ok) setPool(result.data);
+      if (result.ok) setAssignment((current) => ({ ...current, pool: result.data }));
       else setLoadError(result.error);
       setLoading(false);
     }).catch(() => {
@@ -46,49 +47,62 @@ export default function TeamAssignmentModal({ onClose, onCreated }: { onClose: (
 
   function addTeam() {
     setError('');
-    setTeams((current) => current.length >= 5 ? current : [...current, { id: `team-${Date.now()}`, people: [] }]);
+    setAssignment((current) => current.teams.length >= 5 ? current : { ...current, teams: [...current.teams, { id: `team-${Date.now()}`, people: [] }] });
   }
 
   function removeTeam(teamId: string) {
-    if (teams.length <= 1) return;
-    const removed = teams.find((team) => team.id === teamId);
-    if (!removed) return;
     setError('');
-    setTeams((current) => current.filter((team) => team.id !== teamId));
-    setPool((people) => [...people, ...removed.people].sort((a, b) => a.name.localeCompare(b.name)));
+    setAssignment((current) => {
+      if (current.teams.length <= 1) return current;
+      const removed = current.teams.find((team) => team.id === teamId);
+      if (!removed) return current;
+      return {
+        teams: current.teams.filter((team) => team.id !== teamId),
+        pool: [...current.pool, ...removed.people].sort((a, b) => a.name.localeCompare(b.name)),
+      };
+    });
   }
 
   function handleDragEnd(result: DropResult) {
     const { source, destination, draggableId } = result;
     if (!destination || (source.droppableId === destination.droppableId && source.index === destination.index)) return;
-    const sourceList = source.droppableId === 'pool' ? pool : teams.find((team) => team.id === source.droppableId)?.people ?? [];
-    const destinationList = destination.droppableId === 'pool' ? pool : teams.find((team) => team.id === destination.droppableId)?.people ?? [];
-    const person = sourceList.find((entry) => entry.id === draggableId);
-    if (!person) return;
     setError('');
+    setAssignment((current) => {
+      const isPool = (id: string) => id === 'pool';
+      const sourceList = isPool(source.droppableId) ? current.pool : current.teams.find((team) => team.id === source.droppableId)?.people ?? [];
+      const sourceIndex = sourceList.findIndex((person) => person.id === draggableId);
+      if (sourceIndex < 0) return current;
+      const person = sourceList[sourceIndex];
+      if (source.droppableId === destination.droppableId) {
+        const reordered = [...sourceList];
+        reordered.splice(sourceIndex, 1);
+        reordered.splice(Math.min(destination.index, reordered.length), 0, person);
+        return isPool(source.droppableId)
+          ? { ...current, pool: reordered }
+          : { ...current, teams: current.teams.map((team) => team.id === source.droppableId ? { ...team, people: reordered } : team) };
+      }
 
-    if (source.droppableId === destination.droppableId) {
-      const reordered = [...sourceList];
-      reordered.splice(source.index, 1);
-      reordered.splice(destination.index, 0, person);
-      if (source.droppableId === 'pool') setPool(reordered);
-      else setTeams((current) => current.map((team) => team.id === source.droppableId ? { ...team, people: reordered } : team));
-      return;
-    }
-
-    const nextSource = [...sourceList];
-    nextSource.splice(source.index, 1);
-    const nextDestination = [...destinationList];
-    nextDestination.splice(destination.index, 0, person);
-    if (source.droppableId === 'pool') setPool(nextSource);
-    else setTeams((current) => current.map((team) => team.id === source.droppableId ? { ...team, people: nextSource } : team));
-    if (destination.droppableId === 'pool') setPool(nextDestination);
-    else setTeams((current) => current.map((team) => team.id === destination.droppableId ? { ...team, people: nextDestination } : team));
+      const destinationList = isPool(destination.droppableId) ? current.pool : current.teams.find((team) => team.id === destination.droppableId)?.people ?? [];
+      if (destinationList.some((entry) => entry.id === draggableId)) return current;
+      const nextSource = [...sourceList];
+      nextSource.splice(sourceIndex, 1);
+      const nextDestination = [...destinationList];
+      nextDestination.splice(Math.min(destination.index, nextDestination.length), 0, person);
+      const pool = isPool(source.droppableId) ? nextSource : isPool(destination.droppableId) ? nextDestination : current.pool;
+      const teams = current.teams.map((team) => team.id === source.droppableId
+        ? { ...team, people: nextSource }
+        : team.id === destination.droppableId ? { ...team, people: nextDestination } : team);
+      return { pool, teams };
+    });
   }
 
   const assignedCount = teams.reduce((total, team) => total + team.people.length, 0);
+  const assignedIds = teams.flatMap((team) => team.people.map((person) => person.id));
+  const duplicateIds = assignedIds.filter((id, index) => assignedIds.indexOf(id) !== index);
+  const invalidIdCount = assignedIds.filter((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)).length;
   const oversizedTeam = teams.some((team) => team.people.length > 10);
-  const canCreateRooms = !loading && !loadError && !oversizedTeam && teams.every((team) => team.people.length > 0);
+  const integrityError = duplicateIds.length ? '같은 유저가 여러 팀에 중복 배치되어 있습니다.' : invalidIdCount ? '유저 계정 ID 형식이 올바르지 않습니다. 유저 목록을 새로 불러와 주세요.' : '';
+  const canCreateRooms = !loading && !loadError && !integrityError && !oversizedTeam && teams.every((team) => team.people.length > 0);
 
   async function createRooms() {
     if (!canCreateRooms || creating) return;
@@ -127,7 +141,7 @@ export default function TeamAssignmentModal({ onClose, onCreated }: { onClose: (
           </section>
         </DragDropContext>
       </div>
-      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-6"><div><p className="text-sm text-slate-600">배치 {assignedCount}명 · 미배치 {pool.length}명</p>{error && <p role="alert" className="mt-1 text-xs text-rose-700">{error}</p>}</div><div className="flex gap-2"><button type="button" onClick={() => void createRooms()} disabled={!canCreateRooms || creating} className="inline-flex items-center gap-2 rounded-xl bg-violet-700 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{creating && <LoaderCircle size={16} className="animate-spin" />}{creating ? '생성 중...' : '편성'}</button><button type="button" onClick={onClose} disabled={creating} className="rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50">취소</button></div></footer>
+      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-6"><div><p className="text-sm text-slate-600">배치 {assignedCount}명 · 미배치 {pool.length}명</p>{(integrityError || error) && <p role="alert" className="mt-1 text-xs text-rose-700">{integrityError || error}</p>}</div><div className="flex gap-2"><button type="button" onClick={() => void createRooms()} disabled={!canCreateRooms || creating} className="inline-flex items-center gap-2 rounded-xl bg-violet-700 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{creating && <LoaderCircle size={16} className="animate-spin" />}{creating ? '생성 중...' : '편성'}</button><button type="button" onClick={onClose} disabled={creating} className="rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50">취소</button></div></footer>
     </section>
   </div>;
 }

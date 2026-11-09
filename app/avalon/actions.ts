@@ -72,9 +72,8 @@ export async function createAvalonRoomsFromTeams(teamUserIds: string[][]): Promi
     if (teamUserIds.length < 1 || teamUserIds.length > 5) throw new Error('팀은 1~5개까지 만들 수 있습니다.');
     if (teamUserIds.some((team) => team.length < 1 || team.length > 10)) throw new Error('각 팀에는 1~10명을 배치해 주세요.');
     const userIds = teamUserIds.flat();
-    if (new Set(userIds).size !== userIds.length || userIds.some((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) {
-      throw new Error('팀 배치에 중복되거나 올바르지 않은 유저가 있습니다.');
-    }
+    if (new Set(userIds).size !== userIds.length) throw new Error('같은 유저가 여러 팀에 중복 배치되어 있습니다.');
+    if (userIds.some((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) throw new Error('유저 계정 ID 형식이 올바르지 않습니다.');
 
     const db = createAdminClient();
     const { data: profiles, error: profileError } = await db.from('users').select('id, username').in('id', userIds);
