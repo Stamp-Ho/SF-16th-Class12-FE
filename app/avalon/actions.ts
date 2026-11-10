@@ -139,7 +139,10 @@ async function findMine(userId: string) {
   const { data, error } = await createAdminClient().from('avalon_rooms').select('id, state, version, created_at')
     .contains('state', { players: [{ id: userId }] }).order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
-  return (data ?? []).find((row) => (row.state as GameState).phase !== 'finished') as { id: string; state: GameState; version: number } | undefined;
+  return (data ?? []).find((row) => {
+    const state = row.state as GameState;
+    return state.phase !== 'finished' && !(state.phase === 'best_player_vote' && userId in (state.bestPlayerVotes ?? {}));
+  }) as { id: string; state: GameState; version: number } | undefined;
 }
 
 export async function listAvalonRooms(): Promise<Result<AvalonRoomSummary[]>> {

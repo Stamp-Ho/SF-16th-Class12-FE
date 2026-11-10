@@ -363,7 +363,12 @@ export default function AvalonMain({ user, role = '', preview = false, previewPa
     } else if (!mine.ok) setError(mine.error);
     setBusy(false);
   }
-  async function send(move: Move) {
+  async function returnToRooms() {
+    setRoomId(''); setView(null); setConfig(null);
+    const result = await listAvalonRooms();
+    if (result.ok) setRooms(result.data);
+  }
+  async function send(move: Move, onSuccess?: () => void | Promise<void>) {
     if (preview) {
       if (move.type === 'excalibur' && previewScreen === 'excalibur') {
         if (previewExcaliburResult) return;
@@ -451,6 +456,7 @@ export default function AvalonMain({ user, role = '', preview = false, previewPa
         setConfig((current) => current && JSON.stringify(current) !== JSON.stringify(move.config) ? current : savedConfig);
       }
       if (move.type === 'stop') { configDirty.current = false; setConfig(result.data.view.config); setShowSecret(false); }
+      await onSuccess?.();
     }
     else if (!result.ok) setError(result.error);
     setBusy(false);
@@ -772,7 +778,7 @@ export default function AvalonMain({ user, role = '', preview = false, previewPa
               {preview && previewScreen === 'reselect_after_rejection' && previewProposedTeam.length > 0 && <p role="status" className="mt-2 text-sm text-violet-700">미리보기 제안: {previewProposedTeam.map((id) => view.players.find((player) => player.id === id)?.name).join(', ')} · 실제 방에는 저장되지 않습니다.</p>}
             </> : <p className="text-sm text-slate-600">리더가 원정 팀을 고르고 있습니다.</p>}</div>}
           </section>
-          {view.phase !== 'propose' && <section className="rounded-2xl bg-white p-4 shadow-sm sm:p-6"><PhaseControls view={view} user={activeUser} busy={busy} preview={preview} send={send} previewQuestChoice={preview ? previewQuestChoice : null} previewVoteChoice={preview ? previewVoteChoice : null} previewLadyResult={preview ? previewLadyResult : null} previewGawainResult={preview ? previewGawainResult : null} previewExcaliburResult={preview ? previewExcaliburResult : null} previewAssignedSwordHolder={preview ? previewAssignedSwordHolder : null} previewAssassination={preview ? previewAssassination : null} clearPreviewAssassination={() => setPreviewAssassination(null)} target={target} setTarget={setTarget} secondTarget={secondTarget} setSecondTarget={setSecondTarget} assassinationKind={assassinationKind} setAssassinationKind={setAssassinationKind} plotCardChoice={plotCardChoice} setPlotCardChoice={setPlotCardChoice} /></section>}
+          {view.phase !== 'propose' && <section className="rounded-2xl bg-white p-4 shadow-sm sm:p-6"><PhaseControls view={view} user={activeUser} busy={busy} preview={preview} send={send} onReturnToRooms={returnToRooms} previewQuestChoice={preview ? previewQuestChoice : null} previewVoteChoice={preview ? previewVoteChoice : null} previewLadyResult={preview ? previewLadyResult : null} previewGawainResult={preview ? previewGawainResult : null} previewExcaliburResult={preview ? previewExcaliburResult : null} previewAssignedSwordHolder={preview ? previewAssignedSwordHolder : null} previewAssassination={preview ? previewAssassination : null} clearPreviewAssassination={() => setPreviewAssassination(null)} target={target} setTarget={setTarget} secondTarget={secondTarget} setSecondTarget={setSecondTarget} assassinationKind={assassinationKind} setAssassinationKind={setAssassinationKind} plotCardChoice={plotCardChoice} setPlotCardChoice={setPlotCardChoice} /></section>}
           {isHost && !preview && view.phase !== 'finished' && view.phase !== 'best_player_vote' && <button className={`${secondary} w-full border-rose-200 text-rose-700`} disabled={busy} onClick={() => void send({ type: 'stop' })}>게임 중단하고 대기실로</button>}
           {view.phase === 'finished' && !preview && <button className={`${secondary} w-full`} onClick={async () => { setRoomId(''); setView(null); const result = await listAvalonRooms(); if (result.ok) setRooms(result.data); }}>열린 방 목록으로</button>}
           {view.config.plot && <section className="rounded-2xl bg-white p-4 shadow-sm sm:p-6"><h2 className="font-bold">공개 플롯 카드</h2><div className="mt-2 space-y-1 text-sm text-slate-600">{view.players.map((p) => <div key={p.id}>{p.name}: {(view.plotHands[p.id] ?? []).map((card) => plotName[card]).join(', ') || '없음'}</div>)}</div></section>}
@@ -910,8 +916,8 @@ function ConfigEditor({ config, setConfig, save, busy }: { config: Config; setCo
   </section>;
 }
 
-function PhaseControls({ view, user, busy, preview, send, previewQuestChoice, previewVoteChoice, previewLadyResult, previewGawainResult, previewExcaliburResult, previewAssignedSwordHolder, previewAssassination, clearPreviewAssassination, target, setTarget, secondTarget, setSecondTarget, assassinationKind, setAssassinationKind, plotCardChoice, setPlotCardChoice }: {
-  view: View; user: User; busy: boolean; preview: boolean; send: (move: Move) => Promise<void>;
+function PhaseControls({ view, user, busy, preview, send, onReturnToRooms, previewQuestChoice, previewVoteChoice, previewLadyResult, previewGawainResult, previewExcaliburResult, previewAssignedSwordHolder, previewAssassination, clearPreviewAssassination, target, setTarget, secondTarget, setSecondTarget, assassinationKind, setAssassinationKind, plotCardChoice, setPlotCardChoice }: {
+  view: View; user: User; busy: boolean; preview: boolean; send: (move: Move, onSuccess?: () => void | Promise<void>) => Promise<void>; onReturnToRooms: () => void | Promise<void>;
   previewQuestChoice: Card | null;
   previewVoteChoice: boolean | null;
   previewLadyResult: { target: string; side: Side } | null;
@@ -985,7 +991,7 @@ function PhaseControls({ view, user, busy, preview, send, previewQuestChoice, pr
   }
   if (view.phase === 'best_player_vote') {
     const candidates = view.players.filter((player) => player.side === view.winner);
-    return <><h2 className="text-lg font-bold">{view.winner === 'good' ? '선 진영 승리' : '악 진영 승리'}</h2><p className="mt-1 text-sm text-slate-600">{view.winReason}</p><p className="mt-3 text-sm text-slate-600">승리 플레이어 중 한 명에게 투표해 주세요. 투표하지 않으려면 건너뛰기를 선택하면 됩니다. {view.bestPlayerVoteCount}/{view.players.length}명 응답</p>{view.bestPlayerVoted ? <p role="status" className="mt-4 rounded-xl bg-violet-50 p-3 text-sm font-semibold text-violet-800">{preview ? '미리보기 투표를 완료했습니다. 실제 게임에는 저장되지 않습니다.' : '투표를 마쳤습니다. 다른 참가자의 응답을 기다리는 중입니다.'}</p> : <><div className="mt-4 grid gap-2 sm:grid-cols-2">{candidates.map((player) => <button key={player.id} type="button" className={secondary} disabled={busy} onClick={() => void send({ type: 'best_player_vote', target: player.id })}>{player.name}에게 투표</button>)}</div><button type="button" className="mt-2 w-full rounded-xl px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-40" disabled={busy} onClick={() => void send({ type: 'best_player_vote' })}>투표 건너뛰기</button></>}</>;
+    return <><h2 className="text-lg font-bold">{view.winner === 'good' ? '선 진영 승리' : '악 진영 승리'}</h2><p className="mt-1 text-sm text-slate-600">{view.winReason}</p><p className="mt-3 text-sm text-slate-600">승리 플레이어 중 한 명에게 투표해 주세요. {view.bestPlayerVoteCount}/{view.players.length}명 응답</p>{view.bestPlayerVoted ? <p role="status" className="mt-4 rounded-xl bg-violet-50 p-3 text-sm font-semibold text-violet-800">{preview ? '미리보기 투표를 완료했습니다. 실제 게임에는 저장되지 않습니다.' : '투표를 마쳤습니다. 다른 참가자의 응답을 기다리는 중입니다.'}</p> : <div className="mt-4 grid gap-2 sm:grid-cols-2">{candidates.map((player) => <button key={player.id} type="button" className={secondary} disabled={busy} onClick={() => void send({ type: 'best_player_vote', target: player.id })}>{player.name}에게 투표</button>)}</div>}{!preview && <button type="button" className="mt-2 w-full rounded-xl px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-40" disabled={busy} onClick={() => view.bestPlayerVoted ? void onReturnToRooms() : void send({ type: 'best_player_vote' }, onReturnToRooms)}>중단 후 대기실로 돌아가기{view.bestPlayerVoted ? '' : ' (무투표)'}</button>}</>;
   }
   if (view.phase === 'finished') {
     const counts = Object.values(view.bestPlayerVotes).reduce<Record<string, number>>((result, playerId) => { if (playerId) result[playerId] = (result[playerId] ?? 0) + 1; return result; }, {});
