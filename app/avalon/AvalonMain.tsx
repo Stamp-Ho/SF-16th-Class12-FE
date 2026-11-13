@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { startTransition, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowLeftRight, BookOpen, Check, Crown, Eye, EyeOff, Shield, ShieldAlert, ShieldHalf, ShieldOff, ShieldQuestionMark, Skull, Sword, Swords, X } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
-import { createAvalonRoom, dissolveAvalonRoom, getAvalonAvatarUrls, getAvalonRoom, getMyAvalonRoom, joinAvalonRoom, leaveAvalonRoom, listAvalonRooms, moveAvalonRoom } from './actions';
+import { createAvalonRoom, dissolveAvalonRoom, finishAvalonVote, getAvalonAvatarUrls, getAvalonRoom, getMyAvalonRoom, joinAvalonRoom, leaveAvalonRoom, listAvalonRooms, moveAvalonRoom } from './actions';
 import type { AvalonRoomSummary } from './actions';
 import { defaultConfig, GOOD_COUNTS, REJECTED_VOTE_REVEAL_MS, ROLES, TEAM_COUNTS, validateConfig, type Card, type Config, type GameState, type Phase, type PlotCard, type Role, type Side } from './rules';
 import { applyMove, excaliburReplacementCard, gawainCheckEvent, gawainUnplayedCard, initialState, publicView, type AvalonView, type Move } from './engine';
@@ -351,6 +351,14 @@ export default function AvalonMain({ user, role = '', preview = false, previewPa
     else setError(result.error);
     setBusy(false);
   }
+  async function finishVoteRoom(room: AvalonRoomSummary) {
+    if (!window.confirm(`${room.hostName}님의 게임 투표를 종료하고 결과를 확정할까요? 아직 제출하지 않은 투표는 미투표로 남습니다.`)) return;
+    setBusy(true); setError('');
+    const result = await finishAvalonVote(room.id);
+    if (result.ok) setRooms((current) => current.filter((item) => item.id !== room.id));
+    else setError(result.error);
+    setBusy(false);
+  }
   async function refreshAfterTeamCreation() {
     setBusy(true); setError('');
     const [mine, roomList] = await Promise.all([getMyAvalonRoom(), listAvalonRooms()]);
@@ -659,7 +667,7 @@ export default function AvalonMain({ user, role = '', preview = false, previewPa
         <p className="mt-2 text-sm text-slate-600">5~10명이 각자 휴대전화로 역할을 확인하고 투표합니다. 토론은 대면 또는 별도 메신저에서 진행하세요.</p>
         <button className={`${primary} mt-6 w-full`} disabled={busy} onClick={create}>새 방 만들기</button>
         <div className="mt-7 flex items-center justify-between gap-3"><h2 className="font-bold">열려 있는 방</h2><button type="button" className={secondary} onClick={openStats}>전적 보기</button></div>
-        <div className="mt-3 space-y-2">{rooms.length ? rooms.map((room) => <div key={room.id} className="rounded-xl border border-slate-200 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-semibold">{room.hostName}님의 방 · {room.players.length}/{room.capacity}명</p><p className="mt-1 text-sm text-slate-500">{room.players.map((player) => player.name).join(', ')} · {room.phase === 'lobby' ? '대기 중' : room.phase === 'best_player_vote' ? '투표 중':'진행 중'}</p></div><div className="flex gap-2"><button className={secondary} disabled={busy || room.phase !== 'lobby' || room.players.length >= room.capacity} onClick={() => void join(room.id)}>{room.phase === 'lobby' ? '입장' : room.phase === 'best_player_vote' ? '투표 중' : '진행 중'}</button>{role === 'super_admin' && room.phase === 'lobby' && <button type="button" className="rounded-xl border border-rose-200 bg-white px-4 py-3 font-medium text-rose-700 disabled:opacity-40" disabled={busy} onClick={() => void dissolveRoom(room)}>해산</button>}</div></div></div>) : <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">열려 있는 방이 없습니다.</p>}</div>
+        <div className="mt-3 space-y-2">{rooms.length ? rooms.map((room) => <div key={room.id} className="rounded-xl border border-slate-200 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-semibold">{room.hostName}님의 방 · {room.players.length}/{room.capacity}명</p><p className="mt-1 text-sm text-slate-500">{room.players.map((player) => player.name).join(', ')} · {room.phase === 'lobby' ? '대기 중' : room.phase === 'best_player_vote' ? '투표 중':'진행 중'}</p></div><div className="flex gap-2"><button className={secondary} disabled={busy || room.phase !== 'lobby' || room.players.length >= room.capacity} onClick={() => void join(room.id)}>{room.phase === 'lobby' ? '입장' : room.phase === 'best_player_vote' ? '투표 중' : '진행 중'}</button>{role === 'super_admin' && room.phase === 'lobby' && <button type="button" className="rounded-xl border border-rose-200 bg-white px-4 py-3 font-medium text-rose-700 disabled:opacity-40" disabled={busy} onClick={() => void dissolveRoom(room)}>해산</button>}{role === 'super_admin' && room.phase === 'best_player_vote' && <button type="button" className="rounded-xl border border-amber-200 bg-white px-4 py-3 font-medium text-amber-800 disabled:opacity-40" disabled={busy} onClick={() => void finishVoteRoom(room)}>투표 종료</button>}</div></div></div>) : <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">열려 있는 방이 없습니다.</p>}</div>
       </section> : <>
         <div className={view.phase === 'lobby' ? '' : 'grid items-stretch gap-5 md:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]'}>
         <section className="flex min-w-0 flex-col rounded-2xl bg-white p-4 shadow-sm sm:p-6">

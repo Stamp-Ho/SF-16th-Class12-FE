@@ -171,6 +171,24 @@ export async function dissolveAvalonRoom(roomId: string): Promise<Result<{ id: s
   } catch (error) { return { ok: false, error: error instanceof Error ? error.message : '방을 해산하지 못했습니다.' }; }
 }
 
+export async function finishAvalonVote(roomId: string): Promise<Result<{ id: string }>> {
+  try {
+    const auth = await requireAuth();
+    if (auth.status !== 'AUTHORIZED' || auth.profile?.role !== 'super_admin') throw new Error('최고 관리자만 투표를 종료할 수 있습니다.');
+    const db = createAdminClient();
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const row = await findRoom(roomId);
+      if (row.state.phase !== 'best_player_vote') throw new Error('투표 중인 게임만 종료할 수 있습니다.');
+      const state: GameState = { ...row.state, phase: 'finished' };
+      const { data, error } = await db.from('avalon_rooms').update({ state, version: row.version + 1, updated_at: new Date().toISOString() })
+        .eq('id', row.id).eq('version', row.version).select('id').maybeSingle();
+      if (error) throw new Error(error.message);
+      if (data) return { ok: true, data: { id: row.id } };
+    }
+    throw new Error('동시에 변경된 내용이 있습니다. 목록을 새로고침한 뒤 다시 시도해 주세요.');
+  } catch (error) { return { ok: false, error: error instanceof Error ? error.message : '투표를 종료하지 못했습니다.' }; }
+}
+
 export async function getAvalonPlayerStats(): Promise<Result<AvalonPlayerStats[]>> {
   try {
     await actor();
