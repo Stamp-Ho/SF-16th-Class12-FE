@@ -1,64 +1,108 @@
 "use server";
 
+const RESTAURANT_CODE = "REST000213";
+const DEFAULT_MENU_IMAGE = "https://i.ytimg.com/vi/ritv9l9lJWs/mqdefault.jpg";
+
+type WelstoryMeal = {
+  menuCourseType?: string;
+  subMenuTxt?: string;
+  photoUrl?: string;
+  photoCd?: string;
+};
+
+type WelstoryResponse = {
+  data?: {
+    mealList?: WelstoryMeal[];
+  };
+};
+
+const getSeoulDate = () => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+
+  return `${values.year}${values.month}${values.day}`;
+};
+
+const getMealType = () => {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Seoul",
+      hour: "2-digit",
+      hourCycle: "h23"
+    })
+      .formatToParts(new Date())
+      .find(({ type }) => type === "hour")?.value
+  );
+
+  return hour >= 17
+    ? { mealType: "3", courses: new Set(["AA", "BB", "CC"]) }
+    : { mealType: "2", courses: new Set(["AA", "BB"]) };
+};
+
 export const getMenu = async () => {
-  //console.log("Fetching menu...");
-
   try {
-    const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const { mealType, courses } = getMealType();
+    const params = new URLSearchParams({
+      menuDt: getSeoulDate(),
+      menuMealType: mealType,
+      restaurantCode: RESTAURANT_CODE
+    });
+    const rememberMe = process.env.WELSTORY_REMEMBER_ME;
 
-    const response = await fetch(
-      `https://welplan.pmh.codes/restaurants/welstory/REST000133/r5-b1f/${today}`,
-      {
-        headers: {
-          Accept: "text/html"
-        },
-        cache: "no-store"
-      }
-    );
+    if (!rememberMe) {
+      throw new Error("WELSTORY_REMEMBER_ME is not configured");
+    }
+
+    const response = await fetch(`https://welplus.welstory.com/api/meal?${params}`, {
+      headers: {
+        Accept: "application/json",
+        Cookie: `remember-me=${rememberMe}`
+      },
+      cache: "no-store"
+    });
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw new Error(`Welstory API returned HTTP ${response.status}`);
     }
 
-    const html = await response.text();
-
-    // 1. 모든 img 태그 탐색
-    const imgTagRegex = /<img\b[^>]*>/gi;
-    const results: { text: string; image: string }[] = [];
-    let match;
-
-    while ((match = imgTagRegex.exec(html)) !== null) {
-      const imgTag = match[0];
-
-      // 2. src 속성 추출
-      const srcMatch = imgTag.match(/src=["']([^"']+)["']/i);
-      const src = srcMatch ? srcMatch[1] : "";
-
-      // 3. src에 'recipe'가 포함된 경우만 필터링
-      if (src.includes("recipe")) {
-        // 4. alt 속성 추출 (없으면 빈 문자열)
-        const altMatch = imgTag.match(/alt=["']([^"']*)["']/i);
-        const alt = altMatch ? altMatch[1].trim() : "";
-
-        // HTML 엔티티 치환 (&amp;, &nbsp; 등)
-        const cleanText = alt
-          .replace(/&amp;/g, "&")
-          .replace(/&lt;/g, "<")
-          .replace(/&gt;/g, ">")
-          .replace(/&quot;/g, '"')
-          .replace(/&#39;/g, "'")
-          .replace(/&nbsp;/g, " ");
-
-        results.push({
-          text: cleanText,
-          image: src
-        });
-      }
+    const responseBody = await response.text();
+    if (!responseBody.trim()) {
+      throw new Error(`Welstory API returned an empty body (HTTP ${response.status})`);
     }
 
-    return { status: "success", data: results };
+    let result: WelstoryResponse;
+    try {
+      result = JSON.parse(responseBody) as WelstoryResponse;
+    } catch {
+      throw new Error("Welstory API returned a non-JSON response");
+    }
+
+    const mealList = result.data?.mealList;
+
+    if (!Array.isArray(mealList)) {
+      throw new Error("Welstory API response did not contain a meal list");
+    }
+
+    const data = mealList
+      .filter((meal) => meal.menuCourseType && courses.has(meal.menuCourseType))
+      .map((meal) => {
+        const image = meal.photoUrl && meal.photoCd
+          ? `${meal.photoUrl}${meal.photoCd}`
+          : DEFAULT_MENU_IMAGE;
+
+        return {
+          text: meal.subMenuTxt?.trim() ?? "",
+          image
+        };
+      });
+    return { status: "success" as const, data };
   } catch (error) {
     console.error("Error fetching menu data:", error);
-    return { status: "error", message: "Failed to fetch menu" };
+    return { status: "error" as const, message: "Failed to fetch menu" };
   }
 };

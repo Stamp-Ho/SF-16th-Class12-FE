@@ -10,6 +10,15 @@ import {
     
 export const MainLinks = [
     {
+      badge: "TEAM DRAW",
+      title: "처음 만나는 조 뽑기",
+      description: "고정 조원과 함께 새로운 3인 조 편성",
+      url: "/groups",
+      icon: Shuffle,
+      bgColor: "from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 transition-colors duration-750",
+      desColor: "text-indigo-100"
+    },
+    {
       badge: "SEAT AUCTION",
       title: "자리 배정 경매",
       description: "A~M 구역 선점 및 실시간 입찰",
