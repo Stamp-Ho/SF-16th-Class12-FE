@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Network, Table2, X } from "lucide-react";
 import { count, names } from "./data";
+import GroupPreview from "./GroupPreview";
 import { getRelationshipAvatars } from "./actions";
 
 const maximum = Math.max(...count.flat(), 1);
@@ -61,12 +62,15 @@ function Face({
 export default function RelationshipModal({
   onClose,
   userName,
+  assignments,
 }: {
   onClose: () => void;
   userName: string;
+  assignments: string[][];
 }) {
+  const [showPreview, setShowPreview] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
-  const [myIndex, setMyIndex] = useState<number | null>(
+  const [myIndex] = useState<number | null>(
     names.indexOf(userName),
   );
   const [selected, setSelected] = useState<number | null>(null);
@@ -161,9 +165,10 @@ export default function RelationshipModal({
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {selected !== null && (
+            <button onClick={() => setShowPreview(true)} aria-pressed={showPreview} className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700">내 조 미리보기</button>
+            {(selected !== null || showPreview) && (
               <button
-                onClick={() => setSelected(null)}
+                onClick={() => { setShowPreview(false); setSelected(null); }}
                 className="flex items-center gap-1 rounded-lg border px-3 py-2 text-sm"
               >
                 <ArrowLeft size={15} />
@@ -171,7 +176,7 @@ export default function RelationshipModal({
               </button>
             )}
             <button
-              onClick={() => setSelected(myIndex)}
+              onClick={() => { setShowPreview(false); setSelected(myIndex); }}
               className="flex items-center gap-1 rounded-lg border px-3 py-2 text-sm"
             >
               내 관계도
@@ -185,7 +190,7 @@ export default function RelationshipModal({
             </button>
           </div>
         </header>
-        {selected === null ? (
+        {showPreview ? <GroupPreview assignments={assignments} userName={userName} avatars={avatars} /> : selected === null ? (
           <div className="min-h-0 flex-1 overflow-auto">
             <table className="border-separate border-l border-spacing-0 text-center text-xs ml-0.5">
               <caption className="sr-only">27명의 쌍별 누적 만남 횟수</caption>

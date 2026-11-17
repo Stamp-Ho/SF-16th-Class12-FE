@@ -12,11 +12,12 @@ import {
   Shuffle,
   Users,
 } from "lucide-react";
-import { defaultAnchors, names } from "./data";
+import { count, names } from "./data";
 
 export default function GroupDraw({ userName }: { userName: string }) {
   const [showRelationships, setShowRelationships] = useState(false);
-  const [anchors, setAnchors] = useState(defaultAnchors);
+  const [assignments, setAssignments] = useState<string[][]>(() => Array.from({ length: 9 }, () => ["", "", ""]));
+  const [checking, setChecking] = useState(true);
   const [groups, setGroups] = useState<string[][] | null>(null);
   const [total, setTotal] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -27,48 +28,31 @@ export default function GroupDraw({ userName }: { userName: string }) {
   useEffect(() => {
     const instance = new Worker(new URL("./draw.worker.ts", import.meta.url));
     worker.current = instance;
-    instance.onmessage = ({
-      data,
-    }: MessageEvent<{ error?: string; groups: string[][]; total: number }>) => {
-      setBusy(false);
-      if (data.error) {
-        setError(data.error);
-        return;
-      }
-      setGroups(data.groups);
+    instance.onmessage = ({ data }: MessageEvent<{ type?: 'check' | 'draw'; error?: string; groups?: string[][]; total: number }>) => {
+      setChecking(false); setBusy(false);
+      if (data.error) { setError(data.error); return; }
       setTotal(data.total);
-      setRound((r) => r + 1);
-      setCopied(false);
+      if (data.groups) { setGroups(data.groups); setRound(r => r + 1); setCopied(false); }
     };
-    instance.onerror = () => {
-      setBusy(false);
-      setError("추첨을 실행하지 못했어요. 새로고침 후 다시 시도해주세요.");
-    };
-    return () => {
-      instance.terminate();
-      worker.current = null;
-    };
-  }, []);
+    instance.onerror = () => { setChecking(false); setBusy(false); setError("편성을 계산하지 못했어요. 새로고침 후 다시 시도해주세요."); };
+    instance.postMessage({ type: 'check', assignments });
+    return () => { instance.terminate(); worker.current = null; };
+  }, [assignments]);
 
-  function changeAnchor(index: number, name: string) {
-    const next = [...anchors];
-    const other = next.indexOf(name);
-    if (name && other !== -1) next[other] = next[index];
-    next[index] = name;
-    setAnchors(next);
-    setGroups(null);
-    setTotal(null);
-    setError("");
-    setCopied(false);
+  function canAssign(group: number, slot: number, name: string) {
+    if (!name) return true;
+    return !assignments.some((g, i) => g.some((n, j) => (i !== group || j !== slot) && n === name))
+      && assignments[group].every((n, j) => j === slot || !n || count[names.indexOf(name)][names.indexOf(n)] === 0);
+  }
+  function changeAssignment(group: number, slot: number, name: string) {
+    if (!canAssign(group, slot, name)) return;
+    setAssignments(current => current.map((g, i) => i === group ? g.map((n, j) => j === slot ? name : n) : g));
+    setGroups(null); setTotal(null); setChecking(true); setBusy(false); setError(""); setCopied(false);
   }
   function draw() {
-    if (!worker.current) {
-      setError("페이지를 준비 중이에요. 잠시 후 다시 시도해주세요.");
-      return;
-    }
-    setBusy(true);
-    setError("");
-    worker.current.postMessage({ anchors });
+    if (!worker.current || checking || !total || busy || error) return;
+    setBusy(true); setError("");
+    worker.current.postMessage({ type: 'draw', assignments });
   }
   async function copy() {
     if (!groups) return;
@@ -101,6 +85,7 @@ export default function GroupDraw({ userName }: { userName: string }) {
           <RelationshipModal
             onClose={() => setShowRelationships(false)}
             userName={userName}
+            assignments={assignments}
           />
         )}
         <header className="mb-9 flex flex-wrap items-end justify-between gap-5">
@@ -126,49 +111,25 @@ export default function GroupDraw({ userName }: { userName: string }) {
             <h2 className="flex items-center gap-2 text-lg font-bold">
               <LockKeyhole size={18} className="text-indigo-500" /> 고정 조원
             </h2>
-            <p className="mb-6 mt-2 text-xs leading-5 text-slate-500">
-              각 조에 한 명씩 고정해요. 이미 선택한 사람을 고르면 두 사람의
-              자리가 바뀝니다.
-            </p>
+            <p className="mb-6 mt-2 text-xs leading-5 text-slate-500">원하는 조원을 직접 배정하고, 남은 자리는 무작위 추첨으로 채워보세요.</p>
             <div className="space-y-3">
-              {anchors.map((name, i) => (
-                <label key={i} className="flex items-center gap-3">
-                  <span className="w-9 text-sm font-medium text-slate-400">
-                    {i + 1}조
-                  </span>
-                  <select
-                    aria-label={`${i + 1}조 고정 조원`}
-                    value={name}
-                    disabled={busy}
-                    onChange={(e) => changeAnchor(i, e.target.value)}
-                    className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:opacity-60"
-                  >
-                    <option value="">선택하지 않음</option>
-                    {names.map((n) => (
-                      <option key={n}>{n}</option>
-                    ))}
-                  </select>
-                </label>
-              ))}
+              {assignments.map((members, i) => <fieldset key={i} className="rounded-xl border border-slate-200 p-3">
+                <legend className="px-1 text-sm font-semibold text-slate-600">{i + 1}조</legend>
+                <div className="grid gap-2">{members.map((name, slot) => <select key={slot}
+                  aria-label={`${i + 1}조 ${slot + 1}번째 고정 조원`}
+                  value={name} disabled={busy} onChange={e => changeAssignment(i, slot, e.target.value)}
+                  className="min-w-0 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-indigo-500 disabled:opacity-60">
+                  <option value="">선택하지 않음</option>
+                  {names.filter(n => canAssign(i, slot, n)).map(n => <option key={n} value={n}>{n}</option>)}
+                </select>)}</div>
+              </fieldset>)}
             </div>
-            <p className="mt-4 text-xs text-slate-400">
-              선택하지 않은 조는 무작위로 배정됩니다.
-            </p>
-            <button
-              disabled={busy}
-              onClick={draw}
-              className="mt-7 flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3.5 text-sm font-bold text-white transition hover:bg-indigo-700 disabled:cursor-wait disabled:opacity-60"
-            >
-              {busy ? (
-                <LoaderCircle size={18} className="animate-spin" />
-              ) : (
-                <Shuffle size={18} />
-              )}
-              {busy
-                ? "가능한 조합을 찾는 중"
-                : groups
-                  ? "다시 뽑기"
-                  : "랜덤으로 조 뽑기"}
+            <p className="mt-4 text-xs text-slate-400">한 조에 최대 3명까지 고정할 수 있어요. 이미 배정된 조원 모두와 첫 만남인 사람만 선택할 수 있어요.</p>
+            <p role="status" aria-live="polite" className="mt-3 text-xs text-slate-500">{checking ? '남은 인원의 편성 가능 여부를 확인하고 있어요.' : error ? '편성 확인에 실패했어요.' : total === 0 ? '남은 인원으로 조건을 만족하는 편성을 만들 수 없어요. 고정 조원을 변경해주세요.' : `가능한 편성 ${total?.toLocaleString('ko-KR')}가지`}</p>
+            <button disabled={busy || checking || !total || !!error} onClick={draw}
+              className="mt-7 flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3.5 text-sm font-bold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60">
+              {busy || checking ? <LoaderCircle size={18} className="animate-spin" /> : <Shuffle size={18} />}
+              {checking ? '가능한 조합 확인 중' : total === 0 ? '불가능한 조합' : error ? '편성 확인 실패' : busy ? '조 뽑는 중' : groups ? '다시 뽑기' : '랜덤으로 조 뽑기'}
             </button>
             <p className="mt-3 text-center text-xs leading-5 text-slate-400">
               가능한 전체 편성 중 동일한 확률로 추첨해요.
@@ -224,13 +185,13 @@ export default function GroupDraw({ userName }: { userName: string }) {
                           <span className="text-xs text-slate-400">3명</span>
                         </div>
                         <ul className="space-y-3">
-                          {g.map((name, j) => (
+                          {g.map((name) => (
                             <li
                               key={name}
                               className="flex items-center justify-between text-base font-semibold"
                             >
                               {name}
-                              {anchors[i] === name && j === 0 && (
+                              {assignments[i].includes(name) && (
                                 <span className="flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-1 text-[10px] font-medium text-indigo-600">
                                   <LockKeyhole size={10} /> 고정
                                 </span>
