@@ -16,7 +16,9 @@ import { count, names } from "./data";
 
 export default function GroupDraw({ userName }: { userName: string }) {
   const [showRelationships, setShowRelationships] = useState(false);
-  const [assignments, setAssignments] = useState<string[][]>(() => Array.from({ length: 9 }, () => ["", "", ""]));
+  const [assignments, setAssignments] = useState<string[][]>(() =>
+    Array.from({ length: 9 }, () => ["", "", ""]),
+  );
   const [checking, setChecking] = useState(true);
   const [groups, setGroups] = useState<string[][] | null>(null);
   const [total, setTotal] = useState<number | null>(null);
@@ -28,31 +30,72 @@ export default function GroupDraw({ userName }: { userName: string }) {
   useEffect(() => {
     const instance = new Worker(new URL("./draw.worker.ts", import.meta.url));
     worker.current = instance;
-    instance.onmessage = ({ data }: MessageEvent<{ type?: 'check' | 'draw'; error?: string; groups?: string[][]; total: number }>) => {
-      setChecking(false); setBusy(false);
-      if (data.error) { setError(data.error); return; }
+    instance.onmessage = ({
+      data,
+    }: MessageEvent<{
+      type?: "check" | "draw";
+      error?: string;
+      groups?: string[][];
+      total: number;
+    }>) => {
+      setChecking(false);
+      setBusy(false);
+      if (data.error) {
+        setError(data.error);
+        return;
+      }
       setTotal(data.total);
-      if (data.groups) { setGroups(data.groups); setRound(r => r + 1); setCopied(false); }
+      if (data.groups) {
+        setGroups(data.groups);
+        setRound((r) => r + 1);
+        setCopied(false);
+      }
     };
-    instance.onerror = () => { setChecking(false); setBusy(false); setError("편성을 계산하지 못했어요. 새로고침 후 다시 시도해주세요."); };
-    instance.postMessage({ type: 'check', assignments });
-    return () => { instance.terminate(); worker.current = null; };
+    instance.onerror = () => {
+      setChecking(false);
+      setBusy(false);
+      setError("편성을 계산하지 못했어요. 새로고침 후 다시 시도해주세요.");
+    };
+    instance.postMessage({ type: "check", assignments });
+    return () => {
+      instance.terminate();
+      worker.current = null;
+    };
   }, [assignments]);
 
   function canAssign(group: number, slot: number, name: string) {
     if (!name) return true;
-    return !assignments.some((g, i) => g.some((n, j) => (i !== group || j !== slot) && n === name))
-      && assignments[group].every((n, j) => j === slot || !n || count[names.indexOf(name)][names.indexOf(n)] === 0);
+    return (
+      !assignments.some((g, i) =>
+        g.some((n, j) => (i !== group || j !== slot) && n === name),
+      ) &&
+      assignments[group].every(
+        (n, j) =>
+          j === slot ||
+          !n ||
+          count[names.indexOf(name)][names.indexOf(n)] === 0,
+      )
+    );
   }
   function changeAssignment(group: number, slot: number, name: string) {
     if (!canAssign(group, slot, name)) return;
-    setAssignments(current => current.map((g, i) => i === group ? g.map((n, j) => j === slot ? name : n) : g));
-    setGroups(null); setTotal(null); setChecking(true); setBusy(false); setError(""); setCopied(false);
+    setAssignments((current) =>
+      current.map((g, i) =>
+        i === group ? g.map((n, j) => (j === slot ? name : n)) : g,
+      ),
+    );
+    setGroups(null);
+    setTotal(null);
+    setChecking(true);
+    setBusy(false);
+    setError("");
+    setCopied(false);
   }
   function draw() {
     if (!worker.current || checking || !total || busy || error) return;
-    setBusy(true); setError("");
-    worker.current.postMessage({ type: 'draw', assignments });
+    setBusy(true);
+    setError("");
+    worker.current.postMessage({ type: "draw", assignments });
   }
   async function copy() {
     if (!groups) return;
@@ -107,30 +150,89 @@ export default function GroupDraw({ userName }: { userName: string }) {
           </span>
         </header>
         <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-          <aside className="self-start rounded-3xl border border-slate-200 bg-white p-6">
+          <aside className="self-start rounded-3xl border border-slate-200 bg-white p-3 sm:p-4">
+            <button
+              disabled={busy || checking || !total || !!error}
+              onClick={draw}
+              className="mb-5 flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3.5 text-sm font-bold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {busy || checking ? (
+                <LoaderCircle size={18} className="animate-spin" />
+              ) : (
+                <Shuffle size={18} />
+              )}
+              {checking
+                ? "가능한 조합 확인 중"
+                : total === 0
+                  ? "불가능한 조합"
+                  : error
+                    ? "편성 확인 실패"
+                    : busy
+                      ? "조 뽑는 중"
+                      : groups
+                        ? "다시 뽑기"
+                        : "랜덤으로 조 뽑기"}
+            </button>
             <h2 className="flex items-center gap-2 text-lg font-bold">
               <LockKeyhole size={18} className="text-indigo-500" /> 고정 조원
             </h2>
-            <p className="mb-6 mt-2 text-xs leading-5 text-slate-500">원하는 조원을 직접 배정하고, 남은 자리는 무작위 추첨으로 채워보세요.</p>
-            <div className="space-y-3">
-              {assignments.map((members, i) => <fieldset key={i} className="rounded-xl border border-slate-200 p-3">
-                <legend className="px-1 text-sm font-semibold text-slate-600">{i + 1}조</legend>
-                <div className="grid gap-2">{members.map((name, slot) => <select key={slot}
-                  aria-label={`${i + 1}조 ${slot + 1}번째 고정 조원`}
-                  value={name} disabled={busy} onChange={e => changeAssignment(i, slot, e.target.value)}
-                  className="min-w-0 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-indigo-500 disabled:opacity-60">
-                  <option value="">선택하지 않음</option>
-                  {names.filter(n => canAssign(i, slot, n)).map(n => <option key={n} value={n}>{n}</option>)}
-                </select>)}</div>
-              </fieldset>)}
+            <p className="mb-6 mt-2 text-xs leading-5 text-slate-500">
+              원하는 조원을 직접 배정하고, 남은 자리는 무작위 추첨으로
+              채워보세요.
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {assignments.map((members, i) => (
+                <fieldset
+                  key={i}
+                  className="min-w-0 rounded-xl border border-slate-200 px-1.5 pb-2 pt-1"
+                >
+                  <legend className="px-1 text-sm font-semibold text-slate-600">
+                    {i + 1}조
+                  </legend>
+                  <div className="grid gap-1.5">
+                    {members.map((name, slot) => (
+                      <select
+                        key={slot}
+                        aria-label={`${i + 1}조 ${slot + 1}번째 고정 조원`}
+                        value={name}
+                        disabled={busy}
+                        onChange={(e) =>
+                          changeAssignment(i, slot, e.target.value)
+                        }
+                        className="min-w-0 w-full rounded-md border border-slate-200 bg-slate-50 px-1 py-1.5 text-xs focus:border-indigo-500 disabled:opacity-60"
+                      >
+                        <option value="">-</option>
+                        {names
+                          .filter((n) => canAssign(i, slot, n))
+                          .map((n) => (
+                            <option key={n} value={n}>
+                              {n}
+                            </option>
+                          ))}
+                      </select>
+                    ))}
+                  </div>
+                </fieldset>
+              ))}
             </div>
-            <p className="mt-4 text-xs text-slate-400">한 조에 최대 3명까지 고정할 수 있어요. 이미 배정된 조원 모두와 첫 만남인 사람만 선택할 수 있어요.</p>
-            <p role="status" aria-live="polite" className="mt-3 text-xs text-slate-500">{checking ? '남은 인원의 편성 가능 여부를 확인하고 있어요.' : error ? '편성 확인에 실패했어요.' : total === 0 ? '남은 인원으로 조건을 만족하는 편성을 만들 수 없어요. 고정 조원을 변경해주세요.' : `가능한 편성 ${total?.toLocaleString('ko-KR')}가지`}</p>
-            <button disabled={busy || checking || !total || !!error} onClick={draw}
-              className="mt-7 flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3.5 text-sm font-bold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60">
-              {busy || checking ? <LoaderCircle size={18} className="animate-spin" /> : <Shuffle size={18} />}
-              {checking ? '가능한 조합 확인 중' : total === 0 ? '불가능한 조합' : error ? '편성 확인 실패' : busy ? '조 뽑는 중' : groups ? '다시 뽑기' : '랜덤으로 조 뽑기'}
-            </button>
+            <p className="mt-4 text-xs text-slate-400">
+              한 조에 최대 3명까지 고정할 수 있어요. 이미 배정된 조원 모두와 첫
+              만남인 사람만 선택할 수 있어요.
+            </p>
+            <p
+              role="status"
+              aria-live="polite"
+              className="mt-3 text-xs text-slate-500"
+            >
+              {checking
+                ? "남은 인원의 편성 가능 여부를 확인하고 있어요."
+                : error
+                  ? "편성 확인에 실패했어요."
+                  : total === 0
+                    ? "남은 인원으로 조건을 만족하는 편성을 만들 수 없어요. 고정 조원을 변경해주세요."
+                    : `가능한 편성 ${total?.toLocaleString("ko-KR")}가지`}
+            </p>
+
             <p className="mt-3 text-center text-xs leading-5 text-slate-400">
               가능한 전체 편성 중 동일한 확률로 추첨해요.
               <br />
@@ -171,7 +273,7 @@ export default function GroupDraw({ userName }: { userName: string }) {
                     </span>
                   </div>
                   <div
-                    className={`grid gap-4 sm:grid-cols-2 xl:grid-cols-3 ${busy ? "opacity-40" : ""}`}
+                    className={`grid gap-4 grid-cols-3 ${busy ? "opacity-40" : ""}`}
                   >
                     {groups.map((g, i) => (
                       <article
