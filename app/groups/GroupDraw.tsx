@@ -13,11 +13,12 @@ import {
   Users,
 } from "lucide-react";
 import { count, names } from "./data";
+import { groupSizes } from "./draw";
 
 export default function GroupDraw({ userName }: { userName: string }) {
   const [showRelationships, setShowRelationships] = useState(false);
   const [assignments, setAssignments] = useState<string[][]>(() =>
-    Array.from({ length: 9 }, () => ["", "", ""]),
+    groupSizes.map(size => Array<string>(size).fill("")),
   );
   const [checking, setChecking] = useState(true);
   const [groups, setGroups] = useState<string[][] | null>(null);
@@ -101,7 +102,7 @@ export default function GroupDraw({ userName }: { userName: string }) {
     if (!groups) return;
     try {
       await navigator.clipboard.writeText(
-        groups.map((g, i) => `${i + 1}조\t${g.join("\t")}`).join("\n"),
+        groups.map((g, i) => `${groupSizes[i] === 1 ? "대기" : `${i + 1}조`}\t${g.join("\t")}`).join("\n"),
       );
       setCopied(true);
     } catch {
@@ -146,7 +147,7 @@ export default function GroupDraw({ userName }: { userName: string }) {
           </div>
           <span className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm">
             <Users size={16} className="text-indigo-500" />
-            27명 · 3명씩 · 9개 조
+            27명 · 2명씩 13개 조 · 대기 1명
           </span>
         </header>
         <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
@@ -187,7 +188,7 @@ export default function GroupDraw({ userName }: { userName: string }) {
                   className="min-w-0 rounded-xl border border-slate-200 px-1.5 pb-2 pt-1"
                 >
                   <legend className="px-1 text-sm font-semibold text-slate-600">
-                    {i + 1}조
+                    {groupSizes[i] === 1 ? "대기" : `${i + 1}조`}
                   </legend>
                   <div className="grid gap-1.5">
                     {members.map((name, slot) => (
@@ -216,8 +217,7 @@ export default function GroupDraw({ userName }: { userName: string }) {
               ))}
             </div>
             <p className="mt-4 text-xs text-slate-400">
-              한 조에 최대 3명까지 고정할 수 있어요. 이미 배정된 조원 모두와 첫
-              만남인 사람만 선택할 수 있어요.
+              한 조에 최대 2명까지 고정할 수 있어요. 서로 첫 만남인 사람만 선택할 수 있고, 홀수 인원에서는 1명이 대기해요.
             </p>
             <p
               role="status"
@@ -282,9 +282,9 @@ export default function GroupDraw({ userName }: { userName: string }) {
                       >
                         <div className="mb-5 flex items-center justify-between">
                           <span className="text-xs font-bold tracking-wider text-indigo-500">
-                            GROUP {String(i + 1).padStart(2, "0")}
+                            {groupSizes[i] === 1 ? "대기" : `GROUP ${String(i + 1).padStart(2, "0")}`}
                           </span>
-                          <span className="text-xs text-slate-400">3명</span>
+                          <span className="text-xs text-slate-400">{g.length}명</span>
                         </div>
                         <ul className="space-y-3">
                           {g.map((name) => (

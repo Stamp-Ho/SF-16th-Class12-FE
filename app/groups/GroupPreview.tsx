@@ -16,7 +16,7 @@ export default function GroupPreview({ assignments, userName, avatars }: { assig
   }, [assignments, userName]);
   return <section className="min-h-0 flex-1 overflow-auto p-5">
     <h3 className="text-lg font-bold">{userName}이 포함된 편성 가능한 조</h3>
-    <p className="mt-2 text-sm leading-6 text-slate-500">현재 고정 배정을 반영해 나머지 24명까지 모두 편성할 수 있는 조만 표시해요. 확률은 해당 조가 포함된 전체 편성 수 ÷ 가능한 전체 편성 수예요. 조 번호는 구분하지 않아요.</p>
+    <p className="mt-2 text-sm leading-6 text-slate-500">현재 고정 배정을 반영해 2인 1조로 전체 인원을 편성할 수 있는 후보만 표시해요. 한 명만 표시된 후보는 대기할 확률이에요. 확률은 해당 조가 포함된 전체 편성 수 ÷ 가능한 전체 편성 수예요. 조 번호는 구분하지 않아요.</p>
     {!result ? <p role="status" className="mt-10 flex items-center gap-2 text-indigo-600"><LoaderCircle size={18} className="animate-spin"/>가능한 조와 정확한 확률을 계산하고 있어요.</p> : result.error ? <p role="alert" className="mt-5 text-red-600">{result.error}</p> : !result.total ? <p className="mt-5 rounded-xl bg-amber-50 p-4 text-amber-800">현재 고정 배정으로 가능한 전체 편성이 없어요. 배정을 변경해주세요.</p> : <>
       <p role="status" className="my-5 text-sm font-semibold text-indigo-700">내 조 {result.previews.length.toLocaleString('ko-KR')}가지 · 전체 편성 {result.total.toLocaleString('ko-KR')}가지 · 확률 높은 순</p>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{result.previews.map((preview, index) => {

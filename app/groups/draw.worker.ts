@@ -1,4 +1,4 @@
-import { createDraw } from './draw';
+import { createDraw, groupSizes } from './draw';
 
 type Request = { type: 'check' | 'draw'; assignments: string[][] };
 let previous = '';
@@ -20,7 +20,7 @@ self.onmessage = (event: MessageEvent<Request>) => {
     if (key !== previous || !draw) { draw = createDraw(assignments); previous = key; }
     if (type === 'check' || !draw.total) { self.postMessage({ type, total: draw.total }); return; }
     const groups = draw.at(randomBelow(draw.total));
-    const empty = assignments.flatMap((g, i) => g.some(Boolean) ? [] : [i]);
+    const empty = assignments.flatMap((g, i) => g.some(Boolean) || groupSizes[i] !== 2 ? [] : [i]);
     for (let i = empty.length - 1; i > 0; i--) {
       const j = randomBelow(i + 1);
       [groups[empty[i]], groups[empty[j]]] = [groups[empty[j]], groups[empty[i]]];
