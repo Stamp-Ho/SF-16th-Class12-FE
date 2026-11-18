@@ -740,12 +740,12 @@ const SEAT_MAP = [
   { num: 30, type: "thinking", name: "생각의자" },
 ];
 const SEAT_MAP_FOR_3 = [
-  { num: 1, type: "seat", code: "A", pos: 1 },
-  { num: 2, type: "seat", code: "A", pos: 0 },
-  { num: 3, type: "seat", code: "O", pos: 1 },
-  { num: 4, type: "seat", code: "O", pos: 0 },
-  { num: 5, type: "seat", code: "B", pos: 1 },
-  { num: 6, type: "seat", code: "B", pos: 0 },
+  { num: 1, type: "seat", code: "A", pos: 0 },
+  { num: 2, type: "seat", code: "A", pos: 1 },
+  { num: 3, type: "seat", code: "O", pos: 0 },
+  { num: 4, type: "seat", code: "O", pos: 1 },
+  { num: 5, type: "seat", code: "B", pos: 0 },
+  { num: 6, type: "seat", code: "B", pos: 1 },
 
   { num: 7, type: "seat", code: "C", pos: 0 },
   { num: 8, type: "seat", code: "C", pos: 1 },
