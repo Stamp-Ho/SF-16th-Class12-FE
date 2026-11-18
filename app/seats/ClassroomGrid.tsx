@@ -6,9 +6,17 @@ import {
   deleteAllocation,
   placeBid,
   toggleLockSeat,
-  updatePriceForcefully
+  updatePriceForcefully,
 } from "./actions";
-import { ArrowLeftRight, Check, Lock, LockOpen, Pencil, Sparkles, Trash } from "lucide-react";
+import {
+  ArrowLeftRight,
+  Check,
+  Lock,
+  LockOpen,
+  Pencil,
+  Sparkles,
+  Trash,
+} from "lucide-react";
 import BidRecordModal from "./history/BidRecordModal";
 import { getSeatBidTier } from "./utils/shield";
 import { Shield } from "@/assets/icons";
@@ -43,7 +51,7 @@ export default function ClassroomGrid({
   roundTitle,
   isClosed,
   updatedSeatSignal,
-  canUpdatePriceForcefully
+  canUpdatePriceForcefully,
 }: {
   roundId: number;
   seatList: SeatData[];
@@ -72,7 +80,10 @@ export default function ClassroomGrid({
   const [bidingSeatCode, setBidingSeatCode] = useState<string | null>(null);
   const [bidingPrice, setBidingPrice] = useState<number | null>(null);
 
-  const [editConfig, setEditConfig] = useState<{ seatCode: string; price: number } | null>(null);
+  const [editConfig, setEditConfig] = useState<{
+    seatCode: string;
+    price: number;
+  } | null>(null);
 
   const seatMap = numberPerGroup === 3 ? SEAT_MAP_FOR_3 : SEAT_MAP;
 
@@ -83,12 +94,11 @@ export default function ClassroomGrid({
     seatList.forEach(
       (s) =>
         (result +=
-          s.current_bid_price *
-          (CORNER_SEATS.includes(s.seat_code) ? 1 : numberPerGroup))
+          s.current_bid_price * (CORNER_SEATS.includes(s.seat_code) ? 1 : 2)),
     );
     setMyPrice(
       seatList.filter((s) => s.current_group_id === myGroupId)[0]
-        ?.current_bid_price || 0
+        ?.current_bid_price || 0,
     );
     setTotalCost(result);
   }, [seatList]);
@@ -135,9 +145,9 @@ export default function ClassroomGrid({
           prevUsers: [
             seat.member_left ?? "",
             seat.member_middle ?? "",
-            seat.member_right ?? ""
+            seat.member_right ?? "",
           ].filter((m) => m !== ""),
-          seatCode: code
+          seatCode: code,
         });
         if (!result.success) {
           alert(`입찰 실패: ${result.message}`);
@@ -163,7 +173,7 @@ export default function ClassroomGrid({
         allocationId: Number(seat.id),
         nextGroupId: Number(targetGroupId),
         userName: currentUserName,
-        seatCode: code
+        seatCode: code,
       });
       if (!result.success) {
         alert(`드롭 배정 실패: ${result.message}`);
@@ -178,7 +188,7 @@ export default function ClassroomGrid({
   const handleSwapClick = async (
     e: React.MouseEvent,
     seatId: string,
-    swap1and2: boolean
+    swap1and2: boolean,
   ) => {
     e.stopPropagation();
     const seat = seatList.find((item) => item.id === seatId);
@@ -195,7 +205,7 @@ export default function ClassroomGrid({
           : (seat.member_right ?? null),
         memberRight: swap1and2
           ? (seat.member_right ?? null)
-          : (seat.member_middle ?? null)
+          : (seat.member_middle ?? null),
       });
       if (!result.success) {
         alert(`위치 변경 실패: ${result.message}`);
@@ -325,8 +335,8 @@ export default function ClassroomGrid({
           {seatMap
             .filter((s) =>
               [1, 2, 3, 7, 8, 9, 13, 14, 15, 19, 20, 21, 25, 26, 27].includes(
-                s.num
-              )
+                s.num,
+              ),
             )
             .map(renderTile)}
         </div>
@@ -334,8 +344,8 @@ export default function ClassroomGrid({
           {seatMap
             .filter((s) =>
               [
-                4, 5, 6, 10, 11, 12, 16, 17, 18, 22, 23, 24, 28, 29, 30
-              ].includes(s.num)
+                4, 5, 6, 10, 11, 12, 16, 17, 18, 22, 23, 24, 28, 29, 30,
+              ].includes(s.num),
             )
             .map(renderTile)}
         </div>
@@ -407,7 +417,7 @@ export default function ClassroomGrid({
             handleSeatClick(
               tile.code,
               myPrice + seatInfo.current_bid_price + addPrice,
-              seatInfo.is_locked
+              seatInfo.is_locked,
             )
           }
           // 💡 Drag & Drop Event Listeners 추가
@@ -499,11 +509,16 @@ export default function ClassroomGrid({
                 type="text"
                 value={editConfig.price}
                 onChange={(e) => {
-                  if(Number(e.target.value) < 0 || isNaN(Number(e.target.value)) || Number(e.target.value) > 99999) return;
+                  if (
+                    Number(e.target.value) < 0 ||
+                    isNaN(Number(e.target.value)) ||
+                    Number(e.target.value) > 99999
+                  )
+                    return;
                   setEditConfig({
                     ...editConfig,
                     price: Number(e.target.value),
-                  })
+                  });
                 }}
                 className="w-14 text-center text-white text-[10px] font-bold focus:outline-none"
               />
@@ -553,7 +568,7 @@ export default function ClassroomGrid({
             </button>
           )}
         {!screenShotMode &&
-              isAdmin &&
+          isAdmin &&
           canUpdatePriceForcefully &&
           position === "middle" &&
           seatInfo.current_group_id !== null && (
@@ -567,7 +582,7 @@ export default function ClassroomGrid({
                 if (!editConfig || editConfig.seatCode !== tile.code) {
                   setEditConfig({
                     seatCode: tile.code,
-                    price: seatInfo.current_bid_price
+                    price: seatInfo.current_bid_price,
                   });
                   return;
                 }
@@ -577,7 +592,7 @@ export default function ClassroomGrid({
                     const result = await updatePriceForcefully(
                       roundId,
                       editConfig.seatCode,
-                      editConfig.price
+                      editConfig.price,
                     );
                     if (!result.success) {
                       alert(`가격 수정 실패: ${result.message}`);
@@ -594,7 +609,11 @@ export default function ClassroomGrid({
                 .replace("bg-", "bg-white ")
                 .replace("text-", "text-slate-900 ")
                 .replace("ring-3", "ring-2")}`}
-              title={editConfig?.seatCode === tile.code ? "가격 수정 완료" : "가격 수정"}
+              title={
+                editConfig?.seatCode === tile.code
+                  ? "가격 수정 완료"
+                  : "가격 수정"
+              }
             >
               {editConfig?.seatCode === tile.code ? (
                 <span className="flex items-center gap-0.5 text-[8px] sm:text-[10px] font-bold">
@@ -604,14 +623,14 @@ export default function ClassroomGrid({
                 <Pencil className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
               )}
             </button>
-        )}
+          )}
         {!screenShotMode &&
           !hideDetails &&
           isAdmin &&
           seatInfo &&
           seatInfo.current_group_id !== null &&
-          position === "middle" && (
-            canUpdatePriceForcefully ?null:
+          position === "middle" &&
+          (canUpdatePriceForcefully ? null : (
             <>
               {
                 <button
@@ -621,7 +640,7 @@ export default function ClassroomGrid({
                     .replace("bg-", "bg-white ")
                     .replace("text-", "text-slate-900 ")
                     .replace("ring-3", "ring-2")} ${
-                    numberPerGroup === 3 || isCorner
+                    isCorner
                       ? "left-1/2 -translate-x-1/2"
                       : tile.num % 6 === 4
                         ? "-left-3.5 sm:-left-9"
@@ -649,7 +668,7 @@ export default function ClassroomGrid({
                     startTransition(async () => {
                       try {
                         const result = await deleteAllocation(
-                          Number(seatInfo.id)
+                          Number(seatInfo.id),
                         );
                         if (!result.success) {
                           alert(`삭제 에러: ${result.message}`);
@@ -666,7 +685,7 @@ export default function ClassroomGrid({
                   .replace("bg-", "bg-white ")
                   .replace("text-", "text-slate-900 ")
                   .replace("ring-3", "ring-2")} ${
-                  numberPerGroup === 3 || isCorner
+                  isCorner
                     ? "left-1/2 -translate-x-1/2"
                     : tile.num % 6 === 4
                       ? "-left-3.5 sm:-left-9"
@@ -677,7 +696,7 @@ export default function ClassroomGrid({
                 <Trash className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
               </button>
             </>
-          )}
+          ))}
       </div>
     );
   }
@@ -718,43 +737,43 @@ const SEAT_MAP = [
   { num: 27, type: "seat", code: "L", pos: 1 },
   { num: 28, type: "seat", code: "M", pos: 0 },
   { num: 29, type: "seat", code: "M", pos: 1 },
-  { num: 30, type: "thinking", name: "생각의자" }
+  { num: 30, type: "thinking", name: "생각의자" },
 ];
 const SEAT_MAP_FOR_3 = [
-  { num: 1, type: "seat", code: "A", pos: 0 },
-  { num: 2, type: "seat", code: "A", pos: 1 },
-  { num: 3, type: "seat", code: "A", pos: 2 },
-  { num: 4, type: "seat", code: "B", pos: 0 },
+  { num: 1, type: "seat", code: "A", pos: 1 },
+  { num: 2, type: "seat", code: "A", pos: 0 },
+  { num: 3, type: "seat", code: "O", pos: 1 },
+  { num: 4, type: "seat", code: "O", pos: 0 },
   { num: 5, type: "seat", code: "B", pos: 1 },
-  { num: 6, type: "seat", code: "B", pos: 2 },
+  { num: 6, type: "seat", code: "B", pos: 0 },
 
   { num: 7, type: "seat", code: "C", pos: 0 },
   { num: 8, type: "seat", code: "C", pos: 1 },
-  { num: 9, type: "seat", code: "C", pos: 2 },
-  { num: 10, type: "seat", code: "D", pos: 0 },
-  { num: 11, type: "seat", code: "D", pos: 1 },
-  { num: 12, type: "seat", code: "D", pos: 2 },
+  { num: 9, type: "seat", code: "D", pos: 0 },
+  { num: 10, type: "seat", code: "D", pos: 1 },
+  { num: 11, type: "seat", code: "E", pos: 0 },
+  { num: 12, type: "seat", code: "E", pos: 1 },
 
-  { num: 13, type: "seat", code: "E", pos: 0 },
-  { num: 14, type: "seat", code: "E", pos: 1 },
-  { num: 15, type: "seat", code: "E", pos: 2 },
-  { num: 16, type: "seat", code: "F", pos: 0 },
-  { num: 17, type: "seat", code: "F", pos: 1 },
-  { num: 18, type: "seat", code: "F", pos: 2 },
+  { num: 13, type: "seat", code: "F", pos: 0 },
+  { num: 14, type: "seat", code: "F", pos: 1 },
+  { num: 15, type: "seat", code: "G", pos: 0 },
+  { num: 16, type: "seat", code: "G", pos: 1 },
+  { num: 17, type: "seat", code: "H", pos: 0 },
+  { num: 18, type: "seat", code: "H", pos: 1 },
 
-  { num: 19, type: "seat", code: "G", pos: 0 },
-  { num: 20, type: "seat", code: "G", pos: 1 },
-  { num: 21, type: "seat", code: "G", pos: 2 },
-  { num: 22, type: "seat", code: "H", pos: 0 },
-  { num: 23, type: "seat", code: "H", pos: 1 },
-  { num: 24, type: "seat", code: "H", pos: 2 },
+  { num: 19, type: "seat", code: "I", pos: 0 },
+  { num: 20, type: "seat", code: "I", pos: 1 },
+  { num: 21, type: "seat", code: "J", pos: 0 },
+  { num: 22, type: "seat", code: "J", pos: 1 },
+  { num: 23, type: "seat", code: "K", pos: 0 },
+  { num: 24, type: "seat", code: "K", pos: 1 },
 
-  { num: 25, type: "seat", code: "I", pos: 0 },
-  { num: 26, type: "seat", code: "I", pos: 1 },
-  { num: 27, type: "seat", code: "I", pos: 2 },
-  { num: 28, type: "thinking", name: "생각의자" },
-  { num: 29, type: "thinking", name: "생각의자" },
-  { num: 30, type: "thinking", name: "생각의자" }
+  { num: 25, type: "seat", code: "다", pos: 1 },
+  { num: 26, type: "seat", code: "L", pos: 0 },
+  { num: 27, type: "seat", code: "L", pos: 1 },
+  { num: 28, type: "seat", code: "M", pos: 0 },
+  { num: 29, type: "seat", code: "M", pos: 1 },
+  { num: 30, type: "thinking", name: "생각의자" },
 ];
 
 const CORNER_SEATS = ["가", "나", "다"];
@@ -775,7 +794,7 @@ const CODE_COLORS: Record<string, string> = {
   M: "bg-green-50 border-green-200 text-green-900 hover:bg-green-100",
   가: "bg-rose-50 border-rose-200 text-rose-900 hover:bg-rose-100",
   나: "bg-teal-50 border-teal-200 text-teal-900 hover:bg-teal-100",
-  다: "bg-sky-50 border-sky-200 text-sky-900 hover:bg-sky-100"
+  다: "bg-sky-50 border-sky-200 text-sky-900 hover:bg-sky-100",
 };
 
 const MY_CODE_COLORS: Record<string, string> = {
@@ -794,5 +813,5 @@ const MY_CODE_COLORS: Record<string, string> = {
   M: "bg-green-600 hover:bg-green-600 text-white hover:text-white border-green-700 ring-3 ring-green-300 shadow-md",
   가: "bg-rose-500 hover:bg-rose-500 text-white hover:text-white border-rose-600 ring-3 ring-rose-300 shadow-md",
   나: "bg-teal-600 hover:bg-teal-600 text-white hover:text-white border-teal-700 ring-3 ring-teal-300 shadow-md",
-  다: "bg-sky-600 hover:bg-sky-600 text-white hover:text-white border-sky-700 ring-3 ring-sky-300 shadow-md"
+  다: "bg-sky-600 hover:bg-sky-600 text-white hover:text-white border-sky-700 ring-3 ring-sky-300 shadow-md",
 };
